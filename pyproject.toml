@@ -12,6 +12,9 @@ dependencies = [
 homeassistant = [
     "appdaemon",
 ]
+unifi = [
+    "asyncssh",
+]
 dev = [
     "pre-commit",
     "pytest",
