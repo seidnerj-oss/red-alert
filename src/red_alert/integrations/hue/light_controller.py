@@ -81,6 +81,7 @@ class HueLightController:
         self._current_color = color
 
     async def _put(self, url: str, payload: dict, label: str):
+        assert self._client is not None
         try:
             resp = await self._client.put(url, json=payload)
             if resp.status_code != 200:

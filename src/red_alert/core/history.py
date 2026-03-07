@@ -21,8 +21,8 @@ class HistoryManager:
         self._city_data = city_data_manager
         self._log = logger
         self._timer_duration_seconds = timer_duration_seconds
-        self._history_list = []
-        self._added_in_current_poll = set()
+        self._history_list: list[dict] = []
+        self._added_in_current_poll: set[tuple] = set()
         self._max_history_events = 2000
 
     def clear_poll_tracker(self):
@@ -136,7 +136,7 @@ class HistoryManager:
     def restructure_alerts(self, alerts_list: list) -> dict:
         """Group alerts by title, then area, including city and time (HH:MM:SS)."""
         _ = self._
-        structured_data = {}
+        structured_data: dict[str, dict] = {}
         if not alerts_list:
             return structured_data
 

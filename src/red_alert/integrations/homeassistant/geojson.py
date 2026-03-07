@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from red_alert.core.constants import ICONS_AND_EMOJIS
 from red_alert.core.i18n import get_translator
@@ -8,9 +9,9 @@ from red_alert.core.utils import parse_datetime_str, standardize_name
 def generate_geojson_data(attributes, duration, city_data_manager, logger, language: str = 'en'):
     """Generate the GeoJSON structure (FeatureCollection)."""
     _ = get_translator(language)
-    geo = {'type': 'FeatureCollection', 'features': []}
+    geo: dict[str, Any] = {'type': 'FeatureCollection', 'features': []}
     attrs = attributes or {}
-    locations = {}
+    locations: dict[str, Any] = {}
     unknown_cities_logged = set()
 
     if duration == 'latest':

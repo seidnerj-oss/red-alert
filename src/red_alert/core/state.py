@@ -33,7 +33,7 @@ class AlertStateTracker:
         """
         self._areas = [standardize_name(a) for a in (areas_of_interest or [])]
         self.state = AlertState.ROUTINE
-        self.alert_data = None
+        self.alert_data: dict | None = None
 
     def update(self, data: dict | None) -> AlertState:
         """Classify alert data and return the new state.

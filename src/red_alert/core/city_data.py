@@ -14,7 +14,7 @@ class CityDataManager:
         self._api_client = api_client
         self._log = logger
         self._city_data = None
-        self._city_details_map = {}
+        self._city_details_map: dict[str, dict] = {}
 
     async def load_data(self, force_download=False):
         """Load city data, preferring local file unless forced or missing/invalid."""

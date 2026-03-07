@@ -151,6 +151,7 @@ class UnifiLedController:
 
     async def _set_device_led(self, mac: str, on: bool, color_hex: str, brightness: int):
         """Set LED state on a single device."""
+        assert self._controller is not None
         device = self._controller.devices.get(mac)
         if device is None:
             logger.warning('Device %s not found, skipping LED update', mac)
@@ -182,6 +183,7 @@ class UnifiLedController:
 
     async def _locate_device(self, mac: str, enable: bool):
         """Enable or disable locate mode on a single device."""
+        assert self._controller is not None
         try:
             request = DeviceLocateRequest.create(mac, locate=enable)
             await self._controller.request(request)
