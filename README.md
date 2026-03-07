@@ -43,7 +43,7 @@ src/red_alert/
       server.py            # AlertMonitor + HTTP endpoints
       __main__.py          # CLI entry point
     unifi/                 # UniFi AP LED control integration
-      led_controller.py    # SSH LED color control via asyncssh
+      led_controller.py    # LED control via aiounifi REST API
       server.py            # UnifiAlertMonitor + poll loop
       __main__.py          # CLI entry point
     hue/                   # Philips Hue light control integration
@@ -72,10 +72,10 @@ See [Homebridge setup guide](docs/integrations/homebridge.md) for full instructi
 
 ### UniFi LED Integration
 
-*   **Controls** the RGB LED bar on UniFi U6/U7 access points based on alert state.
-*   **Three states**: white/green (routine), yellow (pre-alert), red (active alert).
-*   **Supports** area-of-interest filtering - only react to alerts in your configured cities.
-*   **Connects** via SSH using asyncssh for non-blocking parallel updates to all APs.
+*   **Controls** the RGB LED bar on UniFi access points based on alert state.
+*   **Three states** with configurable colors: white (routine), yellow (pre-alert), red (active alert) by default.
+*   **Supports** area-of-interest filtering, TOTP 2FA, per-state brightness/on/off, and blink (locate) mode.
+*   **Connects** via the UniFi Network controller REST API using [aiounifi](https://github.com/Kane610/aiounifi).
 
 See [UniFi setup guide](docs/integrations/unifi.md) for full instructions.
 
@@ -152,6 +152,10 @@ Upon restarting the AppDaemon add-on, Home Assistant will create several entitie
 
 * **`binary_sensor.red_alert`** - Main sensor. ON when there's an active alert of any type in Israel, OFF otherwise. Includes attributes: category, ID, title, data, description, alert count, emojis, and more.
 * **`binary_sensor.red_alert_city`** - Activates only if a configured city is included in the alert.
+* **`binary_sensor.red_alert_pre_alert`** - ON during pre-alert warnings (category 14: "alerts expected soon").
+* **`binary_sensor.red_alert_city_pre_alert`** - Pre-alerts filtered to your configured cities.
+* **`binary_sensor.red_alert_active_alert`** - ON during active alerts (excludes pre-alerts).
+* **`binary_sensor.red_alert_city_active_alert`** - Active alerts filtered to your configured cities.
 * **`input_text.red_alert`** - Records alert data for logbook display (255 char limit).
 * **`input_boolean.red_alert_test`** - Toggle to send test data to the sensor.
 * **`sensor.red_alert_history_cities`** - Cities from recent alerts.
@@ -167,9 +171,13 @@ Upon restarting the AppDaemon add-on, Home Assistant will create several entitie
 - [Homebridge Integration](docs/integrations/homebridge.md)
 - [UniFi LED Integration](docs/integrations/unifi.md)
 - [Philips Hue Integration](docs/integrations/hue.md)
-- [English Documentation](docs/ENGLISH.md)
-- [Hebrew Documentation](docs/HEBREW.md)
 - [City Names Reference](docs/CITIES.md)
+
+---
+
+## Acknowledgements
+
+[Ido Dovrat](https://github.com/idodov) (idodov) - creator of the [original RedAlert](https://github.com/idodov/RedAlert) project, which this repository is forked from and built upon.
 
 ---
 
