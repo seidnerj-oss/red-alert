@@ -1,85 +1,167 @@
 # UniFi LED Integration
 
-RedAlert can control the RGB LEDs on UniFi U6/U7 access points based on alert state. LEDs change color to indicate the current situation:
+RedAlert can control the RGB LEDs on UniFi access points via the UniFi Network controller REST API (using [aiounifi](https://github.com/Kane610/aiounifi)). LEDs change based on alert state:
 
-- **Routine** - white (or green, configurable)
+- **Routine** - white (configurable color, brightness, on/off)
 - **Pre-alert** - yellow (imminent warning, category 14)
 - **Alert** - red (active alert - missiles, hostile aircraft, earthquakes, etc.)
+
+Each state supports independent configuration of color, brightness, on/off, and blink (locate mode).
 
 ## How It Works
 
 1. The RedAlert monitor polls the Home Front Command API every second
 2. It classifies the response into one of three states: ROUTINE, PRE_ALERT, or ALERT
-3. It connects to each configured UniFi AP via SSH and writes the RGB color to `/proc/ubnt_ledbar/custom_color`
+3. It calls the UniFi Network controller REST API to update LED color, brightness, and on/off state on each configured device
 
 ## Prerequisites
 
-- UniFi U6 or U7 access points with LED bar
-- SSH enabled on the APs (UniFi Network > Settings > System > Device SSH Authentication)
-- SSH key-based authentication configured (password auth is not supported)
-- Python 3.11+ with asyncssh installed
+- UniFi Network controller (UDM, UDR, Cloud Key, or self-hosted)
+- A **local controller account** (not cloud/SSO) - 2FA is not supported
+- MAC addresses of the APs to control
+- Python 3.14+
 
 ## Setup
 
 ### 1. Install RedAlert with UniFi Support
 
 ```bash
-git clone https://github.com/idodov/RedAlert.git
+git clone https://github.com/seidnerj/RedAlert.git
 cd RedAlert
-
-# Install with UniFi dependencies
-pip install aiohttp asyncssh
+pip install ".[unifi]"
 ```
 
-### 2. Enable SSH on Your APs
+### 2. Create a Local Controller Account
+
+If you use a Ubiquiti cloud/SSO account with 2FA, create a separate local-only account for API access:
 
 1. Open UniFi Network controller
-2. Go to **Settings > System > Advanced**
-3. Enable **Device SSH Authentication**
-4. Set a username and password (used for initial key setup)
+2. Go to **Settings > Admins & Users > Admins**
+3. Add a new admin with **Local Access Only**
+4. Give it a role with device management permissions
 
-### 3. Set Up SSH Key Authentication
+### 3. Find Your Device MAC Addresses
 
-```bash
-# Generate a key if you don't have one
-ssh-keygen -t ed25519 -f ~/.ssh/unifi_ap -N ""
+Device MAC addresses can be found in the UniFi controller:
 
-# Copy the key to each AP
-ssh-copy-id -i ~/.ssh/unifi_ap admin@192.168.1.10
-ssh-copy-id -i ~/.ssh/unifi_ap admin@192.168.1.11
-```
+1. Navigate to **Devices**
+2. Click on an AP
+3. The MAC address is shown in the device properties
 
 ### 4. Create a Config File
 
 **`config.json`:**
 ```json
 {
-    "devices": [
-        {"host": "192.168.1.10"},
-        {"host": "192.168.1.11", "port": 2222}
+    "host": "192.168.1.1",
+    "username": "redalert",
+    "password": "your-password",
+    "port": 443,
+    "site": "default",
+    "device_macs": [
+        "aa:bb:cc:dd:ee:ff",
+        "11:22:33:44:55:66"
     ],
-    "ssh_username": "admin",
-    "ssh_key_path": "/home/user/.ssh/unifi_ap",
-    "default_color": "white",
     "interval": 1,
     "areas_of_interest": []
 }
 ```
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `devices` | List of APs with `host` (required) and `port` (optional, default 22) | `[]` |
-| `ssh_username` | SSH username for AP login | `admin` |
-| `ssh_key_path` | Path to SSH private key file | `null` (uses default keys) |
-| `known_hosts` | Path to known_hosts file. `null` disables host key checking | `null` |
-| `default_color` | LED color when no alert is active: `white` or `green` | `white` |
-| `interval` | API polling interval in seconds | `1` |
-| `areas_of_interest` | Cities/areas to filter alerts for (empty = all of Israel) | `[]` |
-
 ### 5. Start the Monitor
 
 ```bash
 python -m red_alert.integrations.unifi --config config.json
+```
+
+## Configuration Reference
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `host` | Hostname or IP of the UniFi controller | Required |
+| `username` | Local controller account username | Required |
+| `password` | Controller account password | Required |
+| `port` | Controller port | `443` |
+| `site` | UniFi site name | `default` |
+| `device_macs` | List of AP MAC addresses to control | Required |
+| `interval` | API polling interval in seconds | `1` |
+| `areas_of_interest` | Cities/areas to filter alerts for (empty = all of Israel) | `[]` |
+| `led_states` | Per-state LED configuration (see below) | See defaults |
+
+## LED State Configuration
+
+Each alert state can be individually configured with `on`, `color`, `brightness`, and `blink`:
+
+```json
+{
+    "led_states": {
+        "alert": {
+            "on": true,
+            "color": "red",
+            "brightness": 100,
+            "blink": true
+        },
+        "pre_alert": {
+            "on": true,
+            "color": "yellow",
+            "brightness": 100,
+            "blink": false
+        },
+        "routine": {
+            "on": true,
+            "color": "white",
+            "brightness": 50,
+            "blink": false
+        }
+    }
+}
+```
+
+| Property | Description | Default |
+|----------|-------------|---------|
+| `on` | Whether the LED is on (`true`) or off (`false`) | `true` |
+| `color` | LED color - named color, hex string, or `[R, G, B]` array | Varies per state |
+| `brightness` | Brightness percentage (0-100) | `100` |
+| `blink` | Whether the LED should blink (uses controller locate mode) | `false` |
+
+**Named colors:** `red`, `green`, `blue`, `yellow`, `white`, `warm`
+
+**Color formats:**
+- Named: `"red"`, `"white"`, `"warm"`
+- Hex: `"#FF0000"`, `"#821E1E"`
+- RGB array: `[255, 128, 0]`
+
+**Default states (when `led_states` is not specified):**
+
+| State | On | Color | Brightness | Blink |
+|-------|----|-------|------------|-------|
+| alert | true | red | 100 | false |
+| pre_alert | true | yellow | 100 | false |
+| routine | true | white | 100 | false |
+
+## Examples
+
+### LED off during routine, blinking red on alert
+
+```json
+{
+    "led_states": {
+        "routine": {"on": false},
+        "pre_alert": {"on": true, "color": "yellow", "brightness": 75},
+        "alert": {"on": true, "color": "red", "brightness": 100, "blink": true}
+    }
+}
+```
+
+### Dim white during routine, bright colors on alert
+
+```json
+{
+    "led_states": {
+        "routine": {"color": "warm", "brightness": 20},
+        "pre_alert": {"color": "#FFA500", "brightness": 80},
+        "alert": {"color": "red", "brightness": 100}
+    }
+}
 ```
 
 ## Areas of Interest
@@ -95,16 +177,6 @@ By default, the LEDs react to alerts anywhere in Israel. To only react to alerts
     ]
 }
 ```
-
-When configured, only alerts that include at least one of the listed areas will change the LED color. Other alerts are ignored.
-
-## Alert States
-
-| State | LED Color | Description |
-|-------|-----------|-------------|
-| ROUTINE | White (or green) | No active alerts (or alerts not in areas of interest) |
-| PRE_ALERT | Yellow | Imminent warning - alerts expected in the coming minutes |
-| ALERT | Red | Active alert - take shelter immediately |
 
 ## Running as a Service
 
@@ -133,12 +205,17 @@ sudo systemctl start redalert-unifi
 
 ## Technical Details
 
-The UniFi AP LED is controlled by writing RGB values directly to the kernel interface:
+The integration uses [aiounifi](https://github.com/Kane610/aiounifi) to communicate with the UniFi Network controller. This is the same library used by [Home Assistant's UniFi integration](https://www.home-assistant.io/integrations/unifi/).
 
-```bash
-echo -n 255,0,0 > /proc/ubnt_ledbar/custom_color
-```
+Authentication uses the controller's internal REST API (the same API the web UI uses). It supports both UniFi OS (UDM, UDR, UCG) and legacy controllers automatically.
 
-This works on U6 and U7 firmware. The UniFi REST API `led_override_color` field does NOT control the actual LED color on these models - only the direct proc write works.
+LED control uses three device properties:
+- `led_override`: `"on"` or `"off"`
+- `led_override_color`: hex color string (e.g., `"#FF0000"`)
+- `led_override_color_brightness`: integer 0-100
 
-The controller uses asyncssh for non-blocking SSH connections and updates all configured APs in parallel. If the color hasn't changed since the last update, the SSH commands are skipped.
+Color and brightness are only sent to devices that have an LED ring (`supports_led_ring` hardware capability).
+
+Blink mode uses the controller's native device locate feature (`set-locate`/`unset-locate`), which makes the LED flash.
+
+**Note:** A local controller account is required. Cloud/SSO accounts with 2FA are not supported. Create a dedicated local-only admin account for API access.

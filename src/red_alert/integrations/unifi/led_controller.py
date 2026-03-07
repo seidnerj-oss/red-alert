@@ -1,84 +1,167 @@
 """
-UniFi AP LED controller via SSH.
+UniFi AP LED controller via aiounifi.
 
-Changes the RGB LED color on UniFi U6/U7 access points by writing
-to /proc/ubnt_ledbar/custom_color over SSH.
+Controls LED color, brightness, on/off state, and locate (blink) mode
+on UniFi access points through the UniFi Network controller REST API.
 
-Requires:
-    - SSH key-based auth configured on each AP
-    - Device SSH Authentication enabled in UniFi Network settings
-    - asyncssh package installed
+Uses aiounifi for authentication, session management, and API calls.
+Requires a local controller account (not cloud/SSO). 2FA is not supported.
 """
 
 import asyncio
 import logging
+import re
+import ssl
 
-import asyncssh
+import aiohttp
+
+from aiounifi import Controller
+from aiounifi.models.configuration import Configuration
+from aiounifi.models.device import DeviceLocateRequest, DeviceSetLedStatus
 
 logger = logging.getLogger('red_alert.unifi')
 
-LED_PATH = '/proc/ubnt_ledbar/custom_color'
+HEX_COLOR_PATTERN = re.compile(r'^#(?:[0-9a-fA-F]{3}){1,2}$')
+
+
+def rgb_to_hex(r: int, g: int, b: int) -> str:
+    """Convert RGB values (0-255) to a hex color string like '#FF0000'."""
+    return f'#{r:02X}{g:02X}{b:02X}'
 
 
 class UnifiLedController:
-    """Controls the LED color on one or more UniFi access points via SSH."""
+    """Controls LED color/brightness/state on UniFi APs via aiounifi."""
 
     def __init__(
         self,
-        devices: list[dict],
-        ssh_username: str = 'admin',
-        ssh_key_path: str | None = None,
-        known_hosts: str | None = None,
+        host: str,
+        username: str,
+        password: str,
+        device_macs: list[str],
+        port: int = 443,
+        site: str = 'default',
+        session: aiohttp.ClientSession | None = None,
     ):
         """
         Args:
-            devices: List of dicts with 'host' (required) and optional 'port' (default 22).
-            ssh_username: SSH username for AP login.
-            ssh_key_path: Path to SSH private key file. None uses default keys.
-            known_hosts: Path to known_hosts file. None disables host key checking.
+            host: Hostname or IP of the UniFi controller (e.g., '192.168.1.1').
+            username: Controller login username (local account, not cloud/SSO).
+            password: Controller login password.
+            device_macs: List of device MAC addresses to control.
+            port: Controller port (default: 443 for UniFi OS).
+            site: UniFi site name (default: 'default').
+            session: Optional aiohttp.ClientSession. If not provided, one is created internally.
         """
-        self._devices = devices
-        self._username = ssh_username
-        self._key_path = ssh_key_path
-        self._known_hosts = known_hosts
-        self._current_color: tuple[int, int, int] | None = None
+        self._device_macs = [mac.lower() for mac in device_macs]
+        self._session = session
+        self._owns_session = session is None
+        self._controller: Controller | None = None
+        self._connected = False
+        self._current_state: tuple | None = None
 
-    async def set_color(self, r: int, g: int, b: int):
-        """Set LED color on all configured devices.
+        self._host = host
+        self._username = username
+        self._password = password
+        self._port = port
+        self._site = site
 
-        Skips the update if the color hasn't changed since the last call.
+    async def connect(self):
+        """Authenticate with the controller and load device list."""
+        if self._session is None:
+            self._session = aiohttp.ClientSession()
+
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        config = Configuration(
+            session=self._session,
+            host=self._host,
+            username=self._username,
+            password=self._password,
+            port=self._port,
+            site=self._site,
+            ssl_context=ssl_context,
+        )
+        self._controller = Controller(config)
+        await self._controller.login()
+        await self._controller.devices.update()
+
+        found = [mac for mac in self._device_macs if mac in self._controller.devices]
+        missing = [mac for mac in self._device_macs if mac not in self._controller.devices]
+
+        if missing:
+            logger.warning('Devices not found on controller: %s', ', '.join(missing))
+        logger.info('Connected to UniFi controller, %d/%d device(s) found', len(found), len(self._device_macs))
+        self._connected = True
+
+    async def _ensure_connected(self):
+        if not self._connected:
+            await self.connect()
+
+    async def set_led(self, on: bool = True, color_hex: str = '#FFFFFF', brightness: int = 100):
+        """Set LED state on all configured devices.
+
+        Skips the update if the state hasn't changed since the last call.
+
+        Args:
+            on: Whether the LED should be on.
+            color_hex: Hex color string (e.g., '#FF0000').
+            brightness: Brightness percentage (0-100).
         """
-        color = (r, g, b)
-        if color == self._current_color:
+        state = (on, color_hex, brightness)
+        if state == self._current_state:
             return
 
-        tasks = [self._set_device_color(dev, r, g, b) for dev in self._devices]
+        await self._ensure_connected()
+
+        tasks = [self._set_device_led(mac, on, color_hex, brightness) for mac in self._device_macs]
         await asyncio.gather(*tasks, return_exceptions=True)
-        self._current_color = color
+        self._current_state = state
 
-    async def _set_device_color(self, device: dict, r: int, g: int, b: int):
-        """Set LED color on a single device."""
-        host = device['host']
-        port = device.get('port', 22)
-        cmd = f'echo -n {r},{g},{b} > {LED_PATH}'
-
-        connect_kwargs = {
-            'host': host,
-            'port': port,
-            'username': self._username,
-            'known_hosts': self._known_hosts,
-        }
-        if self._key_path:
-            connect_kwargs['client_keys'] = [self._key_path]
+    async def _set_device_led(self, mac: str, on: bool, color_hex: str, brightness: int):
+        """Set LED state on a single device."""
+        device = self._controller.devices.get(mac)
+        if device is None:
+            logger.warning('Device %s not found, skipping LED update', mac)
+            return
 
         try:
-            async with asyncssh.connect(**connect_kwargs) as conn:
-                result = await conn.run(cmd, check=True)
-                if result.stderr:
-                    logger.warning('LED command stderr on %s: %s', host, result.stderr.strip())
-                else:
-                    logger.debug('LED set to %d,%d,%d on %s', r, g, b, host)
-        except asyncssh.Error as e:
-            logger.error('SSH error setting LED on %s:%d: %s', host, port, e)
-        except OSError as e:
-            logger.error('Connection error to %s:%d: %s', host, port, e)
+            status = 'on' if on else 'off'
+            request = DeviceSetLedStatus.create(
+                device,
+                status=status,
+                brightness=brightness if device.supports_led_ring else None,
+                color=color_hex if device.supports_led_ring else None,
+            )
+            await self._controller.request(request)
+            logger.debug('LED set on %s: on=%s, color=%s, brightness=%d', mac, on, color_hex, brightness)
+        except Exception as e:
+            logger.error('Error setting LED on %s: %s', mac, e)
+
+    async def locate(self, enable: bool = True):
+        """Enable or disable locate mode (blinking) on all configured devices.
+
+        Args:
+            enable: True to start blinking, False to stop.
+        """
+        await self._ensure_connected()
+
+        tasks = [self._locate_device(mac, enable) for mac in self._device_macs]
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _locate_device(self, mac: str, enable: bool):
+        """Enable or disable locate mode on a single device."""
+        try:
+            request = DeviceLocateRequest.create(mac, locate=enable)
+            await self._controller.request(request)
+            logger.debug('Locate %s on %s', 'enabled' if enable else 'disabled', mac)
+        except Exception as e:
+            logger.error('Error setting locate on %s: %s', mac, e)
+
+    async def close(self):
+        """Close the HTTP session if we own it."""
+        if self._owns_session and self._session:
+            await self._session.close()
+            self._session = None
+        self._connected = False
