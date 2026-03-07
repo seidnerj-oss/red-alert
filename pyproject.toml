@@ -1,7 +1,7 @@
 [project]
 name = "red-alert"
 version = "3.0.0"
-description = "Israeli Home Front Command (Pikud HaOref) rocket alert monitor"
+description = "Israeli Home Front Command (Pikud HaOref) alert monitor"
 requires-python = "==3.11.8"
 
 dependencies = [
@@ -15,6 +15,7 @@ homeassistant = [
 dev = [
     "pre-commit",
     "pytest",
+    "pytest-aiohttp",
     "pytest-asyncio",
     "ruff",
 ]
