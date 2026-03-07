@@ -34,13 +34,13 @@
 >     hadashboard:
 
 ## Manual Download
-1. Download the `apps/red_alert/` and `src/red_alert/` directories from [this repository](https://github.com/seidnerj/RedAlert).
+1. Download the `apps/red_alert/` and `src/red_alert/` directories from [this repository](https://github.com/seidnerj/red-alert).
 2. Place them inside the `appdaemon/apps` directory preserving the structure, then proceed to the final step.
 
 ## HACS Download
 1. In Home Assistant: Navigate to `HACS > Automation`
    * If this option is not available, go to `Settings > Integrations > HACS > Configure` and enable `AppDaemon apps discovery & tracking`. After enabling, return to the main HACS screen and select `Automation`
-2. Navigate to the `Custom Repositories` page and add the following repository as `Appdaemon`: `https://github.com/seidnerj/RedAlert/`
+2. Navigate to the `Custom Repositories` page and add the following repository as `Appdaemon`: `https://github.com/seidnerj/red-alert/`
 3. Return to the `HACS Automation` screen, search for `Red Alert`, click on `Download` and proceed to the final step
 
 ## Final Step
@@ -79,7 +79,7 @@ Upon restarting the AppDaemon add-on, Home Assistant will create several entitie
 * The test entity, `input_boolean.red_alert_test`, when toggled on, sends test data to the sensor, which activates it for the period you defined in the `timer` value.
 * History sensors (`sensor.red_alert_history_*`) provide detailed alert history data.
 
-![red-alerts-sensors](https://github.com/idodov/RedAlert/assets/19820046/e0e779fc-ed92-4f4e-8e36-4116324cd089)
+![red-alerts-sensors](https://github.com/seidnerj/red-alert/assets/19820046/e0e779fc-ed92-4f4e-8e36-4116324cd089)
 
 > [!TIP]
 > To ensure the history of sensors is maintained after a restart in Home Assistant, it's advisable to establish input text and boolean helpers. It's best to do this prior to installation. Here's how you can proceed:
@@ -184,7 +184,7 @@ and "nahal oz" in state_attr('binary_sensor.red_alert', 'data').split(', ') }}
 
 You can create a binary sensor for your city via the UI: **Settings > Devices and Services > Helpers > Create Helper > Template > Template binary sensor**
 
-![QQQ](https://github.com/idodov/RedAlert/assets/19820046/3d5e93ab-d698-4ce0-b341-6bee0e641e05)
+![QQQ](https://github.com/seidnerj/red-alert/assets/19820046/3d5e93ab-d698-4ce0-b341-6bee0e641e05)
 
 ## Lovelace Card Examples
 
@@ -192,7 +192,7 @@ You can create a binary sensor for your city via the UI: **Settings > Devices an
 
 Displays whether there is an alert, the number of active alerts, and their locations.
 
-![TILIM](https://github.com/idodov/RedAlert/assets/19820046/f8ad780b-7e64-4c54-ab74-79e7ff56b780)
+![TILIM](https://github.com/seidnerj/red-alert/assets/19820046/f8ad780b-7e64-4c54-ab74-79e7ff56b780)
 
 ```yaml
 type: markdown
@@ -213,7 +213,7 @@ title: Red Alert
 
 ### Alert Card with Styled Elements
 
-![3333](https://github.com/idodov/RedAlert/assets/19820046/438c0870-56e8-461b-a1e5-aa24122a71bc)
+![3333](https://github.com/seidnerj/red-alert/assets/19820046/438c0870-56e8-461b-a1e5-aa24122a71bc)
 
 ```yaml
 type: markdown
@@ -265,7 +265,7 @@ Cycles lights between red and blue for 30 seconds when an alert is active in Tel
 
 *(Change `light.#light-1#` to your entity names)*
 
-![20231013_221552](https://github.com/idodov/RedAlert/assets/19820046/6e60d5ca-12a9-4fd2-9b10-bcb19bf38a6d)
+![20231013_221552](https://github.com/seidnerj/red-alert/assets/19820046/6e60d5ca-12a9-4fd2-9b10-bcb19bf38a6d)
 
 ```yaml
 alias: Alert in TLV
@@ -352,6 +352,6 @@ To ensure the sensor is functioning correctly:
 1. Access the AppDaemon web interface at http://homeassistant.local:5050/aui/index.html#/state?tab=apps (replace `homeassistant.local` with your HA IP if needed)
 2. Within the state page, monitor the sensor to check if it is working as expected
 
-![Untitled-1](https://github.com/idodov/RedAlert/assets/19820046/664ece42-52bb-498b-8b3c-12edf41aaedb)
+![Untitled-1](https://github.com/seidnerj/red-alert/assets/19820046/664ece42-52bb-498b-8b3c-12edf41aaedb)
 
 If the sensor isn't functioning properly, review the AppDaemon logs from its main page.

@@ -1,9 +1,9 @@
-# RedAlert
+# red-alert
 ***Unofficial - Israeli Home Front Command***
 
 > Real-time Israeli Home Front Command alert monitoring library with Home Assistant and Homebridge integrations
 
-RedAlert is a Python library that connects to the official Israeli Home Front Command (Pikud Ha-Oref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon), **Homebridge** (HTTP contact sensor), **UniFi** (AP LED color control), and **Philips Hue** (light color control).
+red-alert is a Python library that connects to the official Israeli Home Front Command (Pikud Ha-Oref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon), **Homebridge** (HTTP contact sensor), **UniFi** (AP LED color control), and **Philips Hue** (light color control).
 
 The library monitors all alert types issued by the Home Front Command, including:
 - Missile and rocket fire
@@ -21,7 +21,7 @@ Upon receiving an alert, the specific threat type is indicated (e.g., "Rocket an
 
 ## Architecture
 
-RedAlert is designed as a **multi-consumer library**:
+red-alert is designed as a **multi-consumer library**:
 
 ```
 src/red_alert/
@@ -103,7 +103,7 @@ See [Hue setup guide](docs/integrations/hue.md) for full instructions.
 ### HACS Download
 1. In Home Assistant: Navigate to `HACS > Automation`
    * If this option is not available, go to `Settings > Integrations > HACS > Configure` and enable `AppDaemon apps discovery & tracking`. After enabling, return to the main HACS screen and select `Automation`
-2. Navigate to the `Custom Repositories` page and add the following repository as `Appdaemon`: `https://github.com/idodov/RedAlert/`
+2. Navigate to the `Custom Repositories` page and add the following repository as `Appdaemon`: `https://github.com/seidnerj/red-alert/`
 3. Return to the `HACS Automation` screen, search for `Red Alert`, click on `Download`
 
 ### Manual Download

@@ -1,4 +1,4 @@
-# Hebrew translations for RedAlert
+# Hebrew translations for red-alert
 msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"

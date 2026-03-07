@@ -1,6 +1,6 @@
 # Philips Hue Integration
 
-RedAlert can control Philips Hue lights based on alert state. Lights change color to indicate the current situation:
+red-alert can control Philips Hue lights based on alert state. Lights change color to indicate the current situation:
 
 - **Routine** - white (or warm white, configurable)
 - **Pre-alert** - yellow (imminent warning, category 14)
@@ -8,7 +8,7 @@ RedAlert can control Philips Hue lights based on alert state. Lights change colo
 
 ## How It Works
 
-1. The RedAlert monitor polls the Home Front Command API every second
+1. The red-alert monitor polls the Home Front Command API every second
 2. It classifies the response into one of three states: ROUTINE, PRE_ALERT, or ALERT
 3. It sends color commands to the Hue Bridge via its local REST API
 4. The bridge updates all configured lights and/or groups
@@ -21,11 +21,11 @@ RedAlert can control Philips Hue lights based on alert state. Lights change colo
 
 ## Setup
 
-### 1. Install RedAlert
+### 1. Install red-alert
 
 ```bash
-git clone https://github.com/idodov/RedAlert.git
-cd RedAlert
+git clone https://github.com/seidnerj/red-alert.git
+cd red-alert
 
 pip install httpx
 ```
@@ -104,13 +104,13 @@ By default, the lights react to alerts anywhere in Israel. To only react to aler
 **systemd example (`/etc/systemd/system/redalert-hue.service`):**
 ```ini
 [Unit]
-Description=RedAlert Hue Light Monitor
+Description=red-alert Hue Light Monitor
 After=network.target
 
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/path/to/RedAlert
+WorkingDirectory=/path/to/red-alert
 ExecStart=/usr/bin/python3 -m red_alert.integrations.hue --config /path/to/config.json
 Restart=always
 RestartSec=5

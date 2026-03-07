@@ -46,7 +46,7 @@ async def register_bridge(bridge_ip: str):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='RedAlert Hue monitor - changes light colors based on alert state',
+        description='red-alert Hue monitor - changes light colors based on alert state',
     )
     parser.add_argument('--config', '-c', type=str, help='Path to JSON config file')
     parser.add_argument('--register', type=str, metavar='BRIDGE_IP', help='Register with Hue Bridge to get an API key')

@@ -1,4 +1,4 @@
-# English translations for RedAlert
+# English translations for red-alert
 # English is the source language, so msgstr is empty (falls through to msgid).
 msgid ""
 msgstr ""

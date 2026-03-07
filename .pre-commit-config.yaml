@@ -1,4 +1,4 @@
-# Pre-commit configuration for RedAlert
+# Pre-commit configuration for red-alert
 # Install with: pip install pre-commit && pre-commit install
 # Run manually with: pre-commit run --all-files
 

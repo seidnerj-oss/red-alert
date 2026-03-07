@@ -1,6 +1,6 @@
 # Installation
 
-RedAlert supports multiple platforms. Choose the integration guide for your setup:
+red-alert supports multiple platforms. Choose the integration guide for your setup:
 
 ## Integrations
 

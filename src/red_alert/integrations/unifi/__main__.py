@@ -11,7 +11,7 @@ from red_alert.integrations.unifi.server import run_monitor
 
 def main():
     parser = argparse.ArgumentParser(
-        description='RedAlert UniFi LED monitor - changes AP LED colors based on alert state',
+        description='red-alert UniFi LED monitor - changes AP LED colors based on alert state',
     )
     parser.add_argument('--config', '-c', type=str, required=True, help='Path to JSON config file')
     args = parser.parse_args()

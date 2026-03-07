@@ -1,22 +1,22 @@
 # Homebridge Integration
 
-RedAlert includes a lightweight HTTP server that exposes alert state for Homebridge. It uses the same core library as the Home Assistant integration but runs as a standalone Python process.
+red-alert includes a lightweight HTTP server that exposes alert state for Homebridge. It uses the same core library as the Home Assistant integration but runs as a standalone Python process.
 
 ## How It Works
 
-1. The RedAlert server polls the Home Front Command API every second
+1. The red-alert server polls the Home Front Command API every second
 2. It exposes simple HTTP endpoints with the current alert state
 3. A generic Homebridge HTTP plugin (e.g. `homebridge-http-contact-sensor`) polls these endpoints
 4. When an alert is active, the HomeKit accessory state changes (contact sensor opens)
 
 ## Setup
 
-### 1. Install RedAlert
+### 1. Install red-alert
 
 ```bash
 # Clone the repository
-git clone https://github.com/idodov/RedAlert.git
-cd RedAlert
+git clone https://github.com/seidnerj/red-alert.git
+cd red-alert
 
 # Install dependencies (using pip or uv)
 pip install aiohttp
@@ -164,13 +164,13 @@ To keep the server running in the background, use systemd (Linux) or launchd (ma
 **systemd example (`/etc/systemd/system/redalert.service`):**
 ```ini
 [Unit]
-Description=RedAlert Homebridge Server
+Description=red-alert Homebridge Server
 After=network.target
 
 [Service]
 Type=simple
 User=homebridge
-WorkingDirectory=/path/to/RedAlert
+WorkingDirectory=/path/to/red-alert
 ExecStart=/usr/bin/python3 -m red_alert.integrations.homebridge --config /path/to/config.json
 Restart=always
 RestartSec=5

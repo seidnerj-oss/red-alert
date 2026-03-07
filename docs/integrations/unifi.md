@@ -1,6 +1,6 @@
 # UniFi LED Integration
 
-RedAlert can control the RGB LEDs on UniFi access points via the UniFi Network controller REST API (using [aiounifi](https://github.com/Kane610/aiounifi)). LEDs change based on alert state:
+red-alert can control the RGB LEDs on UniFi access points via the UniFi Network controller REST API (using [aiounifi](https://github.com/Kane610/aiounifi)). LEDs change based on alert state:
 
 - **Routine** - white (configurable color, brightness, on/off)
 - **Pre-alert** - yellow (imminent warning, category 14)
@@ -10,7 +10,7 @@ Each state supports independent configuration of color, brightness, on/off, and 
 
 ## How It Works
 
-1. The RedAlert monitor polls the Home Front Command API every second
+1. The red-alert monitor polls the Home Front Command API every second
 2. It classifies the response into one of three states: ROUTINE, PRE_ALERT, or ALERT
 3. It calls the UniFi Network controller REST API to update LED color, brightness, and on/off state on each configured device
 
@@ -23,11 +23,11 @@ Each state supports independent configuration of color, brightness, on/off, and 
 
 ## Setup
 
-### 1. Install RedAlert with UniFi Support
+### 1. Install red-alert with UniFi Support
 
 ```bash
-git clone https://github.com/seidnerj/RedAlert.git
-cd RedAlert
+git clone https://github.com/seidnerj/red-alert.git
+cd red-alert
 pip install ".[unifi]"
 ```
 
@@ -183,7 +183,7 @@ By default, the LEDs react to alerts anywhere in Israel. To only react to alerts
 
 ## 2FA Support
 
-If your controller account uses TOTP-based two-factor authentication, you can provide the TOTP secret so that RedAlert generates codes automatically on each login.
+If your controller account uses TOTP-based two-factor authentication, you can provide the TOTP secret so that red-alert generates codes automatically on each login.
 
 ### Finding Your TOTP Secret
 
@@ -210,13 +210,13 @@ When `totp_secret` is set, a fresh TOTP code is generated and included in each l
 **systemd example (`/etc/systemd/system/redalert-unifi.service`):**
 ```ini
 [Unit]
-Description=RedAlert UniFi LED Monitor
+Description=red-alert UniFi LED Monitor
 After=network.target
 
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/path/to/RedAlert
+WorkingDirectory=/path/to/red-alert
 ExecStart=/usr/bin/python3 -m red_alert.integrations.unifi --config /path/to/config.json
 Restart=always
 RestartSec=5

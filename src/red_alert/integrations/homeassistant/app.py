@@ -1,6 +1,6 @@
 """
-RedAlert - AppDaemon App for Home Assistant
-============================================
+red-alert - AppDaemon App for Home Assistant
+=============================================
 
 Monitors the official Israeli Home Front Command API for all alert types
 (missile fire, hostile aircraft intrusion, earthquakes, tsunamis, terrorist
@@ -69,7 +69,7 @@ class RedAlert(Hass):
         self.log('--------------------------------------------------')
         global _IS_RUNNING
         if _IS_RUNNING:
-            self.log('RedAlert is already running - skipping duplicate initialize.', level='WARNING')
+            self.log('red-alert is already running - skipping duplicate initialize.', level='WARNING')
             return
         _IS_RUNNING = True
         atexit.register(self._cleanup_on_exit)
@@ -146,7 +146,7 @@ class RedAlert(Hass):
 
         # --- HTTP Session Setup ---
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36 AppDaemon/RedAlert',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36 AppDaemon/red-alert',
             'Referer': 'https://www.oref.org.il/',
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json',
@@ -161,7 +161,7 @@ class RedAlert(Hass):
         api_urls = {
             'live': 'https://www.oref.org.il/WarningMessages/alert/alerts.json',
             'history': 'https://www.oref.org.il/WarningMessages/alert/History/AlertsHistory.json',
-            'city_data_github': 'https://raw.githubusercontent.com/idodov/RedAlert/main/data/city_data.json',
+            'city_data_github': 'https://raw.githubusercontent.com/seidnerj/red-alert/main/data/city_data.json',
         }
         self.api_client = HomeFrontCommandApiClient(self.session, api_urls, self.log)
 

@@ -28,7 +28,7 @@ API_URLS = {
 }
 
 SESSION_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (compatible; RedAlert/3.0; Hue)',
+    'User-Agent': 'Mozilla/5.0 (compatible; red-alert/4.0; Hue)',
     'Referer': 'https://www.oref.org.il/',
     'X-Requested-With': 'XMLHttpRequest',
     'Accept': 'application/json',

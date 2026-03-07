@@ -12,7 +12,7 @@ from red_alert.integrations.homebridge.server import create_app
 
 def main():
     parser = argparse.ArgumentParser(
-        description='RedAlert Homebridge HTTP server - exposes Home Front Command alert state for Homebridge plugins',
+        description='red-alert Homebridge HTTP server - exposes Home Front Command alert state for Homebridge plugins',
     )
     parser.add_argument('--config', '-c', type=str, help='Path to JSON config file')
     parser.add_argument('--port', '-p', type=int, default=None, help='Server port (default: 8512)')
