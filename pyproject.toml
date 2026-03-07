@@ -1,8 +1,12 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "red-alert"
 version = "3.0.0"
 description = "Israeli Home Front Command (Pikud Ha-Oref) alert monitor"
-requires-python = "==3.11.8"
+requires-python = ">=3.11"
 
 dependencies = [
     "httpx",
@@ -32,6 +36,9 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 pythonpath = ["src"]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.ruff]
 indent-width = 4
 line-length = 150
@@ -43,4 +50,4 @@ indent-style = "space"
 docstring-code-format = true
 
 [tool.uv]
-python = "3.11.8"
+python = "3.11"
