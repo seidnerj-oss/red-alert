@@ -40,8 +40,7 @@ import os
 import random
 import time
 
-import aiohttp
-from aiohttp import ClientTimeout, TCPConnector
+import httpx
 from appdaemon.plugins.hass.hassapi import Hass
 from datetime import datetime
 
@@ -157,9 +156,7 @@ class RedAlert(Hass):
             'Pragma': 'no-cache',
             'Cache-Control': 'no-cache',
         }
-        timeout = ClientTimeout(total=15, connect=5, sock_connect=5, sock_read=10)
-        connector = TCPConnector(limit_per_host=5, keepalive_timeout=30, enable_cleanup_closed=True)
-        self.session = aiohttp.ClientSession(connector=connector, timeout=timeout, headers=headers, trust_env=False)
+        self.session = httpx.AsyncClient(headers=headers, timeout=15.0)
 
         api_urls = {
             'live': 'https://www.oref.org.il/WarningMessages/alert/alerts.json',
@@ -407,12 +404,12 @@ class RedAlert(Hass):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-        session = getattr(self, 'session', None)
-        if session and not session.closed:
+        client = getattr(self, 'session', None)
+        if client and not client.is_closed:
             try:
-                await session.close()
+                await client.aclose()
             except Exception as e:
-                self.log(f'Error closing HTTP session: {e}', level='WARNING')
+                self.log(f'Error closing HTTP client: {e}', level='WARNING')
 
         self.log('Red Alert App shutdown complete.')
         self.log('--------------------------------------------------')

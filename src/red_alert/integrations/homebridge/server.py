@@ -17,7 +17,7 @@ import asyncio
 import datetime
 import logging
 
-import aiohttp
+import httpx
 from aiohttp import web
 
 from red_alert.core.api_client import HomeFrontCommandApiClient
@@ -160,7 +160,7 @@ async def _on_cleanup(app: web.Application):
         await app['poll_task']
     except asyncio.CancelledError:
         pass
-    await app['session'].close()
+    await app['http_client'].aclose()
 
 
 # --- App factory ---
@@ -170,16 +170,14 @@ def create_app(config: dict | None = None) -> web.Application:
     """Create the aiohttp web application."""
     cfg = {**DEFAULT_CONFIG, **(config or {})}
 
-    timeout = aiohttp.ClientTimeout(total=15, connect=5, sock_connect=5, sock_read=10)
-    connector = aiohttp.TCPConnector(limit_per_host=5, keepalive_timeout=30, enable_cleanup_closed=True)
-    session = aiohttp.ClientSession(connector=connector, timeout=timeout, headers=SESSION_HEADERS, trust_env=False)
+    http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
 
-    api_client = HomeFrontCommandApiClient(session, API_URLS, _log_adapter)
+    api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
     monitor = AlertMonitor(api_client, city_names=cfg.get('city_names'))
 
     app = web.Application()
     app['monitor'] = monitor
-    app['session'] = session
+    app['http_client'] = http_client
     app['config'] = cfg
 
     app.router.add_get('/status', handle_status)

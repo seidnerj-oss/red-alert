@@ -5,12 +5,15 @@ description = "Israeli Home Front Command (Pikud HaOref) alert monitor"
 requires-python = "==3.11.8"
 
 dependencies = [
-    "aiohttp",
+    "httpx",
 ]
 
 [project.optional-dependencies]
 homeassistant = [
     "appdaemon",
+]
+homebridge = [
+    "aiohttp",
 ]
 unifi = [
     "asyncssh",
@@ -25,6 +28,7 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 pythonpath = ["src"]
 

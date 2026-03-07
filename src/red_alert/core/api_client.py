@@ -2,7 +2,7 @@ import asyncio
 import json
 import random
 
-import aiohttp
+import httpx
 
 from red_alert.core.utils import check_bom
 
@@ -10,8 +10,8 @@ from red_alert.core.utils import check_bom
 class HomeFrontCommandApiClient:
     """Client for fetching alerts from the Israeli Home Front Command (Pikud HaOref) API."""
 
-    def __init__(self, session: aiohttp.ClientSession, urls: dict, logger):
-        self._session = session
+    def __init__(self, client: httpx.AsyncClient, urls: dict, logger):
+        self._client = client
         self._urls = urls
         self._log = logger
 
@@ -20,7 +20,7 @@ class HomeFrontCommandApiClient:
         for attempt in range(retries + 1):
             try:
                 return await fetch_func()
-            except (aiohttp.ClientError, asyncio.TimeoutError):
+            except httpx.TransportError:
                 if attempt == retries:
                     self._log(f'Network error after {retries + 1} attempts.', level='WARNING')
                     raise
@@ -37,16 +37,16 @@ class HomeFrontCommandApiClient:
         try:
 
             async def _do_fetch():
-                async with self._session.get(url) as resp:
-                    resp.raise_for_status()
-                    if 'application/json' not in resp.headers.get('Content-Type', ''):
-                        self._log(f'Warning: Expected JSON content type, got {resp.headers.get("Content-Type")}', level='WARNING')
-                    raw_data = await resp.read()
-                    try:
-                        return raw_data.decode('utf-8-sig')
-                    except UnicodeDecodeError:
-                        self._log('Failed decoding with utf-8-sig, trying utf-8.', level='DEBUG')
-                        return raw_data.decode('utf-8')
+                resp = await self._client.get(url)
+                resp.raise_for_status()
+                content_type = resp.headers.get('Content-Type', '')
+                if 'application/json' not in content_type:
+                    self._log(f'Warning: Expected JSON content type, got {content_type}', level='WARNING')
+                try:
+                    return resp.content.decode('utf-8-sig')
+                except UnicodeDecodeError:
+                    self._log('Failed decoding with utf-8-sig, trying utf-8.', level='DEBUG')
+                    return resp.content.decode('utf-8')
 
             text = await self._fetch_with_retries(_do_fetch)
 
@@ -62,9 +62,9 @@ class HomeFrontCommandApiClient:
                     self._log(f"Invalid JSON in live alerts: {e}. Raw text preview: '{log_text_preview}...'", level='WARNING')
                 return None
 
-        except aiohttp.ClientResponseError as e:
-            self._log(f'HTTP error fetching live alerts: Status {e.status}, Message: {e.message}', level='WARNING')
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except httpx.HTTPStatusError as e:
+            self._log(f'HTTP error fetching live alerts: Status {e.response.status_code}', level='WARNING')
+        except httpx.TransportError as e:
             self._log(f'Network/Timeout error fetching live alerts: {e}', level='WARNING')
         except Exception as e:
             self._log(f'Unexpected error fetching live alerts: {e.__class__.__name__} - {e}', level='ERROR', exc_info=True)
@@ -80,13 +80,12 @@ class HomeFrontCommandApiClient:
         try:
 
             async def _do_fetch():
-                async with self._session.get(url) as resp:
-                    resp.raise_for_status()
-                    raw_data = await resp.read()
-                    try:
-                        return raw_data.decode('utf-8-sig')
-                    except UnicodeDecodeError:
-                        return raw_data.decode('utf-8')
+                resp = await self._client.get(url)
+                resp.raise_for_status()
+                try:
+                    return resp.content.decode('utf-8-sig')
+                except UnicodeDecodeError:
+                    return resp.content.decode('utf-8')
 
             text = await self._fetch_with_retries(_do_fetch)
             if not text or not text.strip():
@@ -102,9 +101,9 @@ class HomeFrontCommandApiClient:
                 log_text_preview = text[:5500].replace('\n', '\\n').replace('\r', '\\r')
                 self._log(f"Invalid JSON in history alerts: {e}. Raw text preview: '{log_text_preview}...'", level='WARNING')
                 return None
-        except aiohttp.ClientResponseError as e:
-            self._log(f'HTTP error fetching history: Status {e.status}, Message: {e.message}', level='WARNING')
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except httpx.HTTPStatusError as e:
+            self._log(f'HTTP error fetching history: Status {e.response.status_code}', level='WARNING')
+        except httpx.TransportError as e:
             self._log(f'Network/Timeout error fetching history: {e}', level='WARNING')
         except Exception as e:
             self._log(f'Unexpected error fetching history: {e}', level='ERROR', exc_info=True)
@@ -115,20 +114,19 @@ class HomeFrontCommandApiClient:
         try:
 
             async def _do_fetch():
-                async with self._session.get(url) as resp:
-                    resp.raise_for_status()
-                    raw_data = await resp.read()
-                    try:
-                        return raw_data.decode('utf-8-sig')
-                    except UnicodeDecodeError:
-                        return raw_data.decode('utf-8')
+                resp = await self._client.get(url)
+                resp.raise_for_status()
+                try:
+                    return resp.content.decode('utf-8-sig')
+                except UnicodeDecodeError:
+                    return resp.content.decode('utf-8')
 
             text = await self._fetch_with_retries(_do_fetch)
             text = check_bom(text)
             return text
-        except aiohttp.ClientResponseError as e:
-            self._log(f'HTTP error downloading file {url}: Status {e.status}, Message: {e.message}', level='ERROR')
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except httpx.HTTPStatusError as e:
+            self._log(f'HTTP error downloading file {url}: Status {e.response.status_code}', level='ERROR')
+        except httpx.TransportError as e:
             self._log(f'Network/Timeout error downloading file {url}: {e}', level='ERROR')
         except Exception as e:
             self._log(f'Unexpected error downloading file {url}: {e}', level='ERROR', exc_info=True)

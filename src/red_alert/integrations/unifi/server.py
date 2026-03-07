@@ -14,7 +14,7 @@ Usage:
 import asyncio
 import logging
 
-import aiohttp
+import httpx
 
 from red_alert.core.api_client import HomeFrontCommandApiClient
 from red_alert.core.state import AlertState, AlertStateTracker
@@ -107,11 +107,9 @@ async def run_monitor(config: dict):
 
     default_color = DEFAULT_COLORS.get(cfg['default_color'], DEFAULT_COLORS['white'])
 
-    timeout = aiohttp.ClientTimeout(total=15, connect=5, sock_connect=5, sock_read=10)
-    connector = aiohttp.TCPConnector(limit_per_host=5, keepalive_timeout=30, enable_cleanup_closed=True)
-    session = aiohttp.ClientSession(connector=connector, timeout=timeout, headers=SESSION_HEADERS, trust_env=False)
+    http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
 
-    api_client = HomeFrontCommandApiClient(session, API_URLS, _log_adapter)
+    api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
     state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'))
 
     led_controller = UnifiLedController(
@@ -144,4 +142,4 @@ async def run_monitor(config: dict):
                 logger.exception('Error during poll cycle')
             await asyncio.sleep(interval)
     finally:
-        await session.close()
+        await http_client.aclose()
