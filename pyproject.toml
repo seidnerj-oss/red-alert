@@ -24,6 +24,7 @@ unifi = [
     "pyotp",
 ]
 dev = [
+    "mypy",
     "pre-commit",
     "pytest",
     "pytest-aiohttp",
@@ -49,6 +50,12 @@ target-version = "py314"
 quote-style = "single"
 indent-style = "space"
 docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.14"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
 
 [tool.uv]
 python = "3.14"
