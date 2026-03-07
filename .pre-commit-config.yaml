@@ -32,6 +32,11 @@ repos:
         description: Makes sure files end with exactly one newline
         exclude: \.claude/settings\.local\.json$
 
+      - id: mixed-line-ending
+        name: normalize line endings
+        description: Replaces mixed line endings with LF
+        args: [--fix=lf]
+
       - id: check-merge-conflict
         name: check for merge conflicts
         description: Check for files that contain merge conflict strings
