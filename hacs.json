@@ -1,6 +1,6 @@
 {
-    "name": "Red Alerts Israel",
-    "render_readme": "true",
-    "version": "3.0.0",
-    "documentation": "https://github.com/idodov/RedAlert"
+  "name": "Red Alert",
+  "render_readme": "true",
+  "version": "3.0.0",
+  "documentation": "https://github.com/idodov/RedAlert"
 }
