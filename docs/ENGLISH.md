@@ -1,6 +1,6 @@
-# Israeli Red Alert Service for Home Assistant (AppDaemon)
-* ***Not Official Pikud Ha-Oref***
-* Short Hebrew version can be found here: https://github.com/idodov/RedAlert/blob/main/hebrew.md
+# Israeli Home Front Command Alert Service for Home Assistant (AppDaemon)
+* ***Not Official - Pikud HaOref***
+* Short Hebrew version can be found here: https://github.com/idodov/RedAlert/blob/main/docs/HEBREW.md
 ____
 ## Important Notice
 * This installation method **relies** on Supervised Add-ons, which are exclusively accessible if you've employed either the Home Assistant Operating System or the Home Assistant Supervised installation method (You can also opt to install the AppDaemon add-on through Docker. For additional details, please consult the following link: https://appdaemon.readthedocs.io/en/latest/DOCKER_TUTORIAL.html).
@@ -23,7 +23,7 @@ ____
 1. A binary sensor called ***binary_sensor.red_alert*** to store PIKUD HA-OREF data. The sensor can be used in automations or to create sub-sensors/binary sensors from it.
 2. A text input entity named ***input_text.last_alert_in_israel*** for storing the latest alert information, mainly for historical purposes.
 
-The binary sensor provides a warning for all threats that the PIKUD HA-OREF alerts for, including red alerts rocket and missile launches, unauthorized aircraft penetration, earthquakes, tsunami concerns, infiltration of terrorists, hazardous materials incidents, unconventional warfare, and any other threat. When the alert is received, the nature of the threat will appear at the beginning of the alert (e.g., 'ירי רקטות וטילים').
+The binary sensor provides a warning for all threat types that the Home Front Command alerts for, including missile and rocket fire, hostile aircraft intrusion, earthquakes, tsunami warnings, terrorist infiltration, hazardous materials incidents, radiological events, and any other alert type. When the alert is received, the specific threat type will appear at the beginning of the alert (e.g., "Rocket and missile fire", "Hostile aircraft intrusion").
 
 While the binary sensor's state switches to 'on' when there is an active alert in Israel behavior may not suit everyone, the sensor is designed with additional attributes containing data such as cities, types of attacks and more. These attributes make it easy to create customized sub-sensors to meet individual requirements. For example, you can set up specific sensors that activate only when an alarm pertains to a particular city or area.
 
