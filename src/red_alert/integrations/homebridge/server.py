@@ -143,7 +143,7 @@ async def _poll_loop(app: web.Application):
         await asyncio.sleep(interval)
 
 
-async def _on_startup(app: web.Application):
+async def _on_startup(app: web.Application) -> None:
     app['poll_task'] = asyncio.create_task(_poll_loop(app))
     logger.info(
         'Server started on %s:%s (polling every %ss, cities=%s)',
@@ -154,7 +154,7 @@ async def _on_startup(app: web.Application):
     )
 
 
-async def _on_cleanup(app: web.Application):
+async def _on_cleanup(app: web.Application) -> None:
     app['poll_task'].cancel()
     try:
         await app['poll_task']
@@ -186,7 +186,7 @@ def create_app(config: dict | None = None) -> web.Application:
     app.router.add_get('/state', handle_state)
     app.router.add_get('/health', handle_health)
 
-    app.on_startup.append(_on_startup)
-    app.on_cleanup.append(_on_cleanup)
+    app.on_startup.append(_on_startup)  # type: ignore[arg-type]
+    app.on_cleanup.append(_on_cleanup)  # type: ignore[arg-type]
 
     return app

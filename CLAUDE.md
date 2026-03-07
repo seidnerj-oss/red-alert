@@ -15,8 +15,8 @@ red-alert is a Python library for monitoring the Israeli Home Front Command (Pik
 ## Quick Setup
 
 ```bash
-pip install pre-commit
-pre-commit install
+uv sync --group dev --extra homebridge --extra unifi
+uv run pre-commit install
 ```
 
 ## Architecture
@@ -24,7 +24,7 @@ pre-commit install
 ```
 src/red_alert/
   core/              # Pure Python - ZERO framework dependencies
-    api_client.py    # HomeFrontCommandApiClient (aiohttp)
+    api_client.py    # HomeFrontCommandApiClient (httpx)
     alert_processor.py
     city_data.py     # CityDataManager (ICBS geographic data)
     constants.py

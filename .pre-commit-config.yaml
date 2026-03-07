@@ -71,13 +71,13 @@ repos:
         args: [--autofix]
         exclude: \.claude/settings\.local\.json$
 
-  # Type checking (uses project venv so all deps are available)
+  # Type checking (uses uv so all deps are available)
   - repo: local
     hooks:
       - id: type-checking
         name: type checking (mypy)
-        description: Run mypy on the codebase using the project virtualenv
-        entry: bash -c 'PYENV_VERSION=red-alert python -m mypy src/'
+        description: Run mypy on the codebase using uv
+        entry: bash -c 'uv run mypy src/'
         language: system
         types: [python]
         pass_filenames: false
