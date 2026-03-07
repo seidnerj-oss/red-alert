@@ -7,6 +7,7 @@ RedAlert supports multiple platforms. Choose the integration guide for your setu
 - **[Home Assistant (AppDaemon)](integrations/homeassistant.md)** - Full-featured integration with binary sensors, history, GeoJSON maps, MQTT, and events
 - **[Homebridge (HomeKit)](integrations/homebridge.md)** - Lightweight HTTP server exposing alert state as HomeKit contact sensors
 - **[UniFi LED](integrations/unifi.md)** - Control RGB LEDs on UniFi U6/U7 access points based on alert state (white/yellow/red)
+- **[Philips Hue](integrations/hue.md)** - Control Philips Hue lights/groups based on alert state via the Hue Bridge REST API
 
 ## Core Library
 

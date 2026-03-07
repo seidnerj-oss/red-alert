@@ -3,7 +3,7 @@
 
 > Real-time Israeli Home Front Command alert monitoring library with Home Assistant and Homebridge integrations
 
-RedAlert is a Python library that connects to the official Israeli Home Front Command (Pikud HaOref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon), **Homebridge** (HTTP contact sensor), and **UniFi** (AP LED color control).
+RedAlert is a Python library that connects to the official Israeli Home Front Command (Pikud HaOref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon), **Homebridge** (HTTP contact sensor), **UniFi** (AP LED color control), and **Philips Hue** (light color control).
 
 The library monitors all alert types issued by the Home Front Command, including:
 - Missile and rocket fire
@@ -46,6 +46,10 @@ src/red_alert/
       led_controller.py    # SSH LED color control via asyncssh
       server.py            # UnifiAlertMonitor + poll loop
       __main__.py          # CLI entry point
+    hue/                   # Philips Hue light control integration
+      light_controller.py  # Hue Bridge REST API color control
+      server.py            # HueAlertMonitor + poll loop
+      __main__.py          # CLI entry point (with --register)
 ```
 
 The **core** package has zero Home Assistant dependencies and can be used by any Python application. Integrations import from core and adapt it to their specific platform.
@@ -74,6 +78,15 @@ See [Homebridge setup guide](docs/integrations/homebridge.md) for full instructi
 *   **Connects** via SSH using asyncssh for non-blocking parallel updates to all APs.
 
 See [UniFi setup guide](docs/integrations/unifi.md) for full instructions.
+
+### Philips Hue Integration
+
+*   **Controls** Philips Hue lights and groups based on alert state via the Hue Bridge REST API.
+*   **Three states**: white/warm (routine), yellow (pre-alert), red (active alert).
+*   **Supports** both individual lights and groups, with area-of-interest filtering.
+*   **Includes** a `--register` CLI command for easy Hue Bridge API key setup.
+
+See [Hue setup guide](docs/integrations/hue.md) for full instructions.
 
 ### Home Assistant Integration
 
@@ -153,6 +166,7 @@ Upon restarting the AppDaemon add-on, Home Assistant will create several entitie
 - [Home Assistant Integration](docs/integrations/homeassistant.md)
 - [Homebridge Integration](docs/integrations/homebridge.md)
 - [UniFi LED Integration](docs/integrations/unifi.md)
+- [Philips Hue Integration](docs/integrations/hue.md)
 - [English Documentation](docs/ENGLISH.md)
 - [Hebrew Documentation](docs/HEBREW.md)
 - [City Names Reference](docs/CITIES.md)
