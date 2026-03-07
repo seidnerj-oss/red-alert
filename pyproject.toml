@@ -1,0 +1,38 @@
+[project]
+name = "red-alert"
+version = "3.0.0"
+description = "Israeli Home Front Command (Pikud HaOref) rocket alert monitor"
+requires-python = "==3.11.8"
+
+dependencies = [
+    "aiohttp",
+]
+
+[project.optional-dependencies]
+homeassistant = [
+    "appdaemon",
+]
+dev = [
+    "pre-commit",
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+indent-width = 4
+line-length = 150
+target-version = "py311"
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.uv]
+python = "3.11.8"
