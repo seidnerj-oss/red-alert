@@ -72,7 +72,7 @@ The **core** package has zero Home Assistant dependencies and can be used by any
 *   **Exposes** `/contact` (all alerts), `/city` (filtered by configured cities), and `/state` (routine/pre_alert/alert) endpoints.
 *   **Works** with `homebridge-http-contact-sensor` to create HomeKit contact sensor accessories.
 
-See [Homebridge setup guide](docs/integrations/homebridge.md) for full instructions.
+See [Homebridge setup guide](docs/integrations/HOMEBRIDGE.md) for full instructions.
 
 ### UniFi LED Integration
 
@@ -81,7 +81,7 @@ See [Homebridge setup guide](docs/integrations/homebridge.md) for full instructi
 *   **Supports** area-of-interest filtering, TOTP 2FA, per-state brightness/on/off, and blink (locate) mode.
 *   **Connects** via the UniFi Network controller REST API using [aiounifi](https://github.com/Kane610/aiounifi).
 
-See [UniFi setup guide](docs/integrations/unifi.md) for full instructions.
+See [UniFi setup guide](docs/integrations/UNIFI.md) for full instructions.
 
 ### Philips Hue Integration
 
@@ -90,7 +90,7 @@ See [UniFi setup guide](docs/integrations/unifi.md) for full instructions.
 *   **Supports** both individual lights and groups, with area-of-interest filtering.
 *   **Includes** a `--register` CLI command for easy Hue Bridge API key setup.
 
-See [Hue setup guide](docs/integrations/hue.md) for full instructions.
+See [Hue setup guide](docs/integrations/HUE.md) for full instructions.
 
 ### Telegram Integration
 
@@ -99,7 +99,7 @@ See [Hue setup guide](docs/integrations/hue.md) for full instructions.
 *   **Supports** area-of-interest filtering, configurable cooldown, and all alert types with category-specific emojis.
 *   **Zero extra dependencies** - uses httpx (already a core dependency).
 
-See [Telegram setup guide](docs/integrations/telegram.md) for full instructions.
+See [Telegram setup guide](docs/integrations/TELEGRAM.md) for full instructions.
 
 ### Home Assistant Integration
 
@@ -180,11 +180,11 @@ Upon restarting the AppDaemon add-on, Home Assistant will create several entitie
 ## Documentation
 
 - [Installation Overview](docs/INSTALL.md)
-- [Home Assistant Integration](docs/integrations/homeassistant.md)
-- [Homebridge Integration](docs/integrations/homebridge.md)
-- [UniFi LED Integration](docs/integrations/unifi.md)
-- [Philips Hue Integration](docs/integrations/hue.md)
-- [Telegram Integration](docs/integrations/telegram.md)
+- [Home Assistant Integration](docs/integrations/HOMEASSISTANT.md)
+- [Homebridge Integration](docs/integrations/HOMEBRIDGE.md)
+- [UniFi LED Integration](docs/integrations/UNIFI.md)
+- [Philips Hue Integration](docs/integrations/HUE.md)
+- [Telegram Integration](docs/integrations/TELEGRAM.md)
 - [City Names Reference](docs/CITIES.md)
 
 ---
