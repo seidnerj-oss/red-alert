@@ -1,0 +1,75 @@
+# English translations for RedAlert
+# English is the source language, so msgstr is empty (falls through to msgid).
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+msgid "No alerts"
+msgstr ""
+
+msgid "Routine"
+msgstr ""
+
+msgid "Loading..."
+msgstr ""
+
+msgid "Unknown"
+msgstr ""
+
+msgid "Rocket and missile fire (test alert)"
+msgstr ""
+
+msgid "Test alert - enter shelter briefly for testing"
+msgstr ""
+
+msgid "Widespread attack on {count} cities in: {areas}"
+msgstr ""
+
+msgid "Error processing alert"
+msgstr ""
+
+msgid "Active alerts ({count} types)"
+msgstr ""
+
+msgid "Pre-alerts"
+msgstr ""
+
+msgid "Sunday"
+msgstr ""
+
+msgid "Monday"
+msgstr ""
+
+msgid "Tuesday"
+msgstr ""
+
+msgid "Wednesday"
+msgstr ""
+
+msgid "Thursday"
+msgstr ""
+
+msgid "Friday"
+msgstr ""
+
+msgid "Saturday"
+msgstr ""
+
+msgid "Error processing time"
+msgstr ""
+
+msgid "No details"
+msgstr ""
+
+msgid "Alert"
+msgstr ""
+
+msgid "Historical alert"
+msgstr ""
+
+msgid "Last time: {time}"
+msgstr ""
+
+msgid "Total: {count} events"
+msgstr ""

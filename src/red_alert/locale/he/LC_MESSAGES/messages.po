@@ -1,0 +1,74 @@
+# Hebrew translations for RedAlert
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: he\n"
+
+msgid "No alerts"
+msgstr "אין התרעות"
+
+msgid "Routine"
+msgstr "שגרה"
+
+msgid "Loading..."
+msgstr "טוען..."
+
+msgid "Unknown"
+msgstr "לא ידוע"
+
+msgid "Rocket and missile fire (test alert)"
+msgstr "ירי רקטות וטילים (התרעת בדיקה)"
+
+msgid "Test alert - enter shelter briefly for testing"
+msgstr "התרעת בדיקה - כנסו למרחב המוגן לזמן קצר לבדיקה"
+
+msgid "Widespread attack on {count} cities in: {areas}"
+msgstr "מתקפה מורחבת על {count} ערים באזורים: {areas}"
+
+msgid "Error processing alert"
+msgstr "שגיאה בעיבוד ההתרעה"
+
+msgid "Active alerts ({count} types)"
+msgstr "התרעות פעילות ({count} סוגים)"
+
+msgid "Pre-alerts"
+msgstr "התרעות מקדימות"
+
+msgid "Sunday"
+msgstr "יום ראשון"
+
+msgid "Monday"
+msgstr "יום שני"
+
+msgid "Tuesday"
+msgstr "יום שלישי"
+
+msgid "Wednesday"
+msgstr "יום רביעי"
+
+msgid "Thursday"
+msgstr "יום חמישי"
+
+msgid "Friday"
+msgstr "יום שישי"
+
+msgid "Saturday"
+msgstr "יום שבת"
+
+msgid "Error processing time"
+msgstr "שגיאה בעיבוד זמן"
+
+msgid "No details"
+msgstr "אין פרטים"
+
+msgid "Alert"
+msgstr "התרעה"
+
+msgid "Historical alert"
+msgstr "התרעה היסטורית"
+
+msgid "Last time: {time}"
+msgstr "זמן אחרון: {time}"
+
+msgid "Total: {count} events"
+msgstr "סה״כ: {count} אירועים"
