@@ -21,6 +21,7 @@ homebridge = [
 ]
 unifi = [
     "aiounifi",
+    "pyotp",
 ]
 dev = [
     "pre-commit",

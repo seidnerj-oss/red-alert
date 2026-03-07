@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from red_alert.integrations.unifi.led_controller import UnifiLedController, rgb_to_hex
+from red_alert.integrations.unifi.led_controller import UnifiLedController, _wrap_request_with_2fa, rgb_to_hex
 
 DEVICE_MAC = 'aa:bb:cc:dd:ee:ff'
 DEVICE_MAC_2 = '11:22:33:44:55:66'
@@ -230,6 +230,93 @@ class TestLocate:
             await controller.locate(enable=False)
 
             mock_locate_cls.create.assert_called_once_with(DEVICE_MAC, locate=False)
+
+
+class TestWrapRequestWith2fa:
+    @pytest.mark.asyncio
+    async def test_injects_totp_into_login_request(self):
+        original = AsyncMock(return_value=('response', b'data'))
+        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP')
+
+        await wrapped('post', 'https://host/api/auth/login', json={'username': 'admin', 'password': 'pass', 'rememberMe': True})
+
+        call_args = original.call_args
+        assert 'ubic_2fa_token' in call_args.kwargs.get('json', call_args[2] if len(call_args[0]) > 2 else {})
+
+    @pytest.mark.asyncio
+    async def test_generates_valid_6_digit_totp(self):
+        original = AsyncMock(return_value=('response', b'data'))
+        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP')
+
+        await wrapped('post', 'https://host/api/auth/login', json={'username': 'admin', 'password': 'pass'})
+
+        sent_json = original.call_args.kwargs.get('json', original.call_args[0][2] if len(original.call_args[0]) > 2 else None)
+        token = sent_json['ubic_2fa_token']
+        assert len(token) == 6
+        assert token.isdigit()
+
+    @pytest.mark.asyncio
+    async def test_does_not_modify_non_login_requests(self):
+        original = AsyncMock(return_value=('response', b'data'))
+        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP')
+
+        await wrapped('get', 'https://host/api/devices', json=None)
+
+        original.assert_called_once_with('get', 'https://host/api/devices', json=None, allow_redirects=True)
+
+    @pytest.mark.asyncio
+    async def test_does_not_modify_post_without_username(self):
+        original = AsyncMock(return_value=('response', b'data'))
+        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP')
+
+        payload = {'led_override': 'on'}
+        await wrapped('post', 'https://host/api/devices/123', json=payload)
+
+        original.assert_called_once_with('post', 'https://host/api/devices/123', json=payload, allow_redirects=True)
+
+    @pytest.mark.asyncio
+    async def test_preserves_original_auth_fields(self):
+        original = AsyncMock(return_value=('response', b'data'))
+        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP')
+
+        await wrapped('post', 'https://host/api/login', json={'username': 'admin', 'password': 'secret', 'rememberMe': True})
+
+        sent_json = original.call_args.kwargs.get('json', original.call_args[0][2] if len(original.call_args[0]) > 2 else None)
+        assert sent_json['username'] == 'admin'
+        assert sent_json['password'] == 'secret'
+        assert sent_json['rememberMe'] is True
+
+
+class TestConnectWith2fa:
+    @pytest.mark.asyncio
+    async def test_connect_wraps_request_when_totp_secret_set(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl = _mock_controller([device])
+        mock_ctrl.connectivity = MagicMock()
+        mock_ctrl.connectivity._request = AsyncMock()
+
+        with patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], totp_secret='JBSWY3DPEHPK3PXP')
+            controller._session = AsyncMock()
+            await controller.connect()
+
+            # The _request method should have been replaced with our wrapper
+            assert mock_ctrl.connectivity._request is not AsyncMock
+
+    @pytest.mark.asyncio
+    async def test_connect_does_not_wrap_when_no_totp_secret(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl = _mock_controller([device])
+        original_request = AsyncMock()
+        mock_ctrl.connectivity = MagicMock()
+        mock_ctrl.connectivity._request = original_request
+
+        with patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller._session = AsyncMock()
+            await controller.connect()
+
+            assert mock_ctrl.connectivity._request is original_request
 
 
 class TestClose:

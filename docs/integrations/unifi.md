@@ -17,7 +17,7 @@ Each state supports independent configuration of color, brightness, on/off, and 
 ## Prerequisites
 
 - UniFi Network controller (UDM, UDR, Cloud Key, or self-hosted)
-- A **local controller account** (not cloud/SSO) - 2FA is not supported
+- A controller account - local accounts recommended, cloud/SSO accounts with TOTP 2FA supported via `totp_secret`
 - MAC addresses of the APs to control
 - Python 3.14+
 
@@ -31,9 +31,11 @@ cd RedAlert
 pip install ".[unifi]"
 ```
 
-### 2. Create a Local Controller Account
+### 2. Controller Account
 
-If you use a Ubiquiti cloud/SSO account with 2FA, create a separate local-only account for API access:
+A **local controller account** is recommended for simplicity. If your account uses TOTP-based 2FA, add `totp_secret` to your config (see below).
+
+To create a local account:
 
 1. Open UniFi Network controller
 2. Go to **Settings > Admins & Users > Admins**
@@ -85,6 +87,7 @@ python -m red_alert.integrations.unifi --config config.json
 | `device_macs` | List of AP MAC addresses to control | Required |
 | `interval` | API polling interval in seconds | `1` |
 | `areas_of_interest` | Cities/areas to filter alerts for (empty = all of Israel) | `[]` |
+| `totp_secret` | TOTP secret (base32) for 2FA - see [2FA Support](#2fa-support) | `null` |
 | `led_states` | Per-state LED configuration (see below) | See defaults |
 
 ## LED State Configuration
@@ -178,6 +181,30 @@ By default, the LEDs react to alerts anywhere in Israel. To only react to alerts
 }
 ```
 
+## 2FA Support
+
+If your controller account uses TOTP-based two-factor authentication, you can provide the TOTP secret so that RedAlert generates codes automatically on each login.
+
+### Finding Your TOTP Secret
+
+The TOTP secret is the base32 string shown when you first set up 2FA (often displayed as a QR code). It looks like `JBSWY3DPEHPK3PXP`. If you've already set up 2FA and don't have the secret, you'll need to disable and re-enable 2FA to get it.
+
+### Config Example
+
+```json
+{
+    "host": "192.168.1.1",
+    "username": "redalert",
+    "password": "your-password",
+    "totp_secret": "JBSWY3DPEHPK3PXP",
+    "device_macs": ["aa:bb:cc:dd:ee:ff"]
+}
+```
+
+When `totp_secret` is set, a fresh TOTP code is generated and included in each login request as `ubic_2fa_token`. This uses the same mechanism as entering the code manually in the UniFi web UI.
+
+**Note:** If your account does not use 2FA, omit `totp_secret` entirely.
+
 ## Running as a Service
 
 **systemd example (`/etc/systemd/system/redalert-unifi.service`):**
@@ -218,4 +245,4 @@ Color and brightness are only sent to devices that have an LED ring (`supports_l
 
 Blink mode uses the controller's native device locate feature (`set-locate`/`unset-locate`), which makes the LED flash.
 
-**Note:** A local controller account is required. Cloud/SSO accounts with 2FA are not supported. Create a dedicated local-only admin account for API access.
+**Note:** A local controller account is recommended. TOTP-based 2FA is supported via the `totp_secret` config option (requires `pyotp`).

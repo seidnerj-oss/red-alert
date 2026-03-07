@@ -70,6 +70,7 @@ DEFAULT_CONFIG = {
     'site': 'default',
     'device_macs': [],
     'led_states': {},
+    'totp_secret': None,
 }
 
 
@@ -184,6 +185,7 @@ async def run_monitor(config: dict):
         device_macs=cfg['device_macs'],
         port=cfg.get('port', 443),
         site=cfg.get('site', 'default'),
+        totp_secret=cfg.get('totp_secret'),
     )
 
     monitor = UnifiAlertMonitor(api_client, led_controller, state_tracker, led_states)

@@ -5,13 +5,16 @@ Controls LED color, brightness, on/off state, and locate (blink) mode
 on UniFi access points through the UniFi Network controller REST API.
 
 Uses aiounifi for authentication, session management, and API calls.
-Requires a local controller account (not cloud/SSO). 2FA is not supported.
+Supports local controller accounts with optional TOTP-based 2FA.
 """
 
 import asyncio
+import functools
 import logging
 import re
 import ssl
+from collections.abc import Mapping
+from typing import Any
 
 import aiohttp
 
@@ -22,6 +25,24 @@ from aiounifi.models.device import DeviceLocateRequest, DeviceSetLedStatus
 logger = logging.getLogger('red_alert.unifi')
 
 HEX_COLOR_PATTERN = re.compile(r'^#(?:[0-9a-fA-F]{3}){1,2}$')
+
+
+def _wrap_request_with_2fa(original_request, totp_secret: str):
+    """Wrap aiounifi's internal _request to inject TOTP 2FA token into login POST requests."""
+    import pyotp
+
+    @functools.wraps(original_request)
+    async def _request_with_2fa(
+        method: str,
+        url: str,
+        json: Mapping[str, Any] | None = None,
+        allow_redirects: bool = True,
+    ):
+        if method == 'post' and json and 'username' in json:
+            json = {**json, 'ubic_2fa_token': pyotp.TOTP(totp_secret).now()}
+        return await original_request(method, url, json=json, allow_redirects=allow_redirects)
+
+    return _request_with_2fa
 
 
 def rgb_to_hex(r: int, g: int, b: int) -> str:
@@ -41,16 +62,18 @@ class UnifiLedController:
         port: int = 443,
         site: str = 'default',
         session: aiohttp.ClientSession | None = None,
+        totp_secret: str | None = None,
     ):
         """
         Args:
             host: Hostname or IP of the UniFi controller (e.g., '192.168.1.1').
-            username: Controller login username (local account, not cloud/SSO).
+            username: Controller login username.
             password: Controller login password.
             device_macs: List of device MAC addresses to control.
             port: Controller port (default: 443 for UniFi OS).
             site: UniFi site name (default: 'default').
             session: Optional aiohttp.ClientSession. If not provided, one is created internally.
+            totp_secret: Optional TOTP secret (base32) for 2FA. If set, generates a TOTP code on each login.
         """
         self._device_macs = [mac.lower() for mac in device_macs]
         self._session = session
@@ -64,6 +87,7 @@ class UnifiLedController:
         self._password = password
         self._port = port
         self._site = site
+        self._totp_secret = totp_secret
 
     async def connect(self):
         """Authenticate with the controller and load device list."""
@@ -84,6 +108,12 @@ class UnifiLedController:
             ssl_context=ssl_context,
         )
         self._controller = Controller(config)
+
+        if self._totp_secret:
+            self._controller.connectivity._request = _wrap_request_with_2fa(
+                self._controller.connectivity._request, self._totp_secret
+            )
+
         await self._controller.login()
         await self._controller.devices.update()
 
