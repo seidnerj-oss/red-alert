@@ -10,6 +10,7 @@ red-alert is a Python library for monitoring the Israeli Home Front Command (Pik
 - **Homebridge** - HTTP server exposing alert state for HomeKit contact sensors
 - **UniFi** - LED color/brightness control via UniFi Network controller REST API
 - **Philips Hue** - Hue Bridge REST API light color control
+- **Telegram** - Bot API notifications on alert state changes
 - Other consumers can be added under `src/red_alert/integrations/`
 
 ## Quick Setup
@@ -30,7 +31,7 @@ src/red_alert/
     constants.py
     history.py
     i18n.py          # gettext-based translations
-    state.py         # AlertState enum + AlertStateTracker (3-state model)
+    state.py         # AlertState enum + AlertStateTracker (4-state: routine/pre_alert/alert/all_clear)
     utils.py         # standardize_name, check_bom, parse_datetime_str
   locale/            # gettext .po translation files (en, he)
   integrations/
@@ -49,6 +50,10 @@ src/red_alert/
       light_controller.py  # HueLightController - Hue Bridge REST API via httpx
       server.py            # HueAlertMonitor + poll loop
       __main__.py          # python -m red_alert.integrations.hue (--register)
+    telegram/
+      bot.py               # TelegramBot - Bot API via httpx
+      server.py            # TelegramAlertMonitor + poll loop
+      __main__.py          # python -m red_alert.integrations.telegram
 apps/red_alert/      # HACS entry point (imports from src/)
 data/                # city_data.json (ICBS geographic data), cities.json
 ```

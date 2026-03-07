@@ -3,7 +3,7 @@
 
 > Real-time Israeli Home Front Command alert monitoring library with Home Assistant and Homebridge integrations
 
-red-alert is a Python library that connects to the official Israeli Home Front Command (Pikud Ha-Oref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon), **Homebridge** (HTTP contact sensor), **UniFi** (AP LED color control), and **Philips Hue** (light color control).
+red-alert is a Python library that connects to the official Israeli Home Front Command (Pikud Ha-Oref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon), **Homebridge** (HTTP contact sensor), **UniFi** (AP LED color control), **Philips Hue** (light color control), and **Telegram** (alert notifications).
 
 The library monitors all alert types issued by the Home Front Command, including:
 - Missile and rocket fire
@@ -32,7 +32,7 @@ src/red_alert/
     constants.py           # Icons, emojis, defaults
     history.py             # Alert history management
     i18n.py                # Internationalization (en/he)
-    state.py               # AlertState enum + AlertStateTracker
+    state.py               # AlertState enum + AlertStateTracker (4-state model)
     utils.py               # Shared utilities
   integrations/
     homeassistant/         # Home Assistant AppDaemon integration
@@ -50,6 +50,10 @@ src/red_alert/
       light_controller.py  # Hue Bridge REST API color control
       server.py            # HueAlertMonitor + poll loop
       __main__.py          # CLI entry point (with --register)
+    telegram/              # Telegram Bot notification integration
+      bot.py               # Telegram Bot API client (httpx)
+      server.py            # TelegramAlertMonitor + poll loop
+      __main__.py          # CLI entry point
 ```
 
 The **core** package has zero Home Assistant dependencies and can be used by any Python application. Integrations import from core and adapt it to their specific platform.
@@ -87,6 +91,15 @@ See [UniFi setup guide](docs/integrations/unifi.md) for full instructions.
 *   **Includes** a `--register` CLI command for easy Hue Bridge API key setup.
 
 See [Hue setup guide](docs/integrations/hue.md) for full instructions.
+
+### Telegram Integration
+
+*   **Sends** real-time alert notifications to a Telegram chat or channel via the Bot API.
+*   **Notifies** on state transitions: alert start, pre-alert, all-clear, and alert ended.
+*   **Supports** area-of-interest filtering, configurable cooldown, and all alert types with category-specific emojis.
+*   **Zero extra dependencies** - uses httpx (already a core dependency).
+
+See [Telegram setup guide](docs/integrations/telegram.md) for full instructions.
 
 ### Home Assistant Integration
 
@@ -171,6 +184,7 @@ Upon restarting the AppDaemon add-on, Home Assistant will create several entitie
 - [Homebridge Integration](docs/integrations/homebridge.md)
 - [UniFi LED Integration](docs/integrations/unifi.md)
 - [Philips Hue Integration](docs/integrations/hue.md)
+- [Telegram Integration](docs/integrations/telegram.md)
 - [City Names Reference](docs/CITIES.md)
 
 ---
