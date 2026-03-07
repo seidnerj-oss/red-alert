@@ -44,7 +44,7 @@
 3. Return to the `HACS Automation` screen, search for `Red Alert`, click on `Download` and proceed to the final step
 
 ## Final Step
-In the `/appdaemon/apps/apps.yaml` file, add the following code. **Make sure to replace the city_names values as the Home Front Command defines them and save the file:**
+In the `/appdaemon/apps/apps.yaml` file, add the following code. **Make sure to replace the areas_of_interest values as the Home Front Command defines them and save the file:**
 
 ```yaml
 #/appdaemon/apps/apps.yaml
@@ -56,7 +56,7 @@ red_alert:
   sensor_name: "red_alert"
   language: "en"
   save_to_file: True
-  city_names:
+  areas_of_interest:
     - "tel aviv - city center"
     - "kisufim"
 ```
@@ -68,7 +68,7 @@ red_alert:
 | `sensor_name` | The name of the primary binary sensor in Home Assistant (`binary_sensor.#sensor_name#`) | `red_alert` |
 | `language` | Language for user-facing strings: `en` (default) or `he` | `en` |
 | `save_to_file` | An option to save the alerts information to files | `True` |
-| `city_names` | The names of the cities that activate the city-specific binary sensor (`binary_sensor.#sensor_name#_city`). You can add as many cities as you want | see [CITIES.md](../CITIES.md) |
+| `areas_of_interest` | The names of the areas/cities that activate the city-specific binary sensor (`binary_sensor.#sensor_name#_city`). You can add as many areas as you want | see [CITIES.md](../CITIES.md) |
 
 ## You Are All Set!
 Upon restarting the AppDaemon add-on, Home Assistant will create several entities:

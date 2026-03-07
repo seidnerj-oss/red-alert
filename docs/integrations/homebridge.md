@@ -45,7 +45,7 @@ python -m red_alert.integrations.homebridge --config config.json
     "host": "0.0.0.0",
     "port": 8512,
     "interval": 1,
-    "city_names": [
+    "areas_of_interest": [
         "tel aviv - city center",
         "haifa - city center"
     ]
@@ -57,7 +57,7 @@ python -m red_alert.integrations.homebridge --config config.json
 | `host` | Server bind address | `0.0.0.0` |
 | `port` | Server port | `8512` |
 | `interval` | API polling interval in seconds | `1` |
-| `city_names` | Cities to filter for the `/city` endpoint (empty = all) | `[]` |
+| `areas_of_interest` | Areas/cities to filter for the `/city` endpoint (empty = all) | `[]` |
 
 ### 3. Verify the Server
 

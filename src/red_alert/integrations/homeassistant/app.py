@@ -28,7 +28,7 @@ red_alert:
   event: True
 
   # --- Location Specific ---
-  city_names:
+  areas_of_interest:
      - "תל אביב - מרכז העיר"
 ```
 """
@@ -79,8 +79,8 @@ class RedAlert(Hass):
         self.timer_duration = self.args.get('timer', 120)
         self.save_to_file = self.args.get('save_to_file', self.args.get('save_2_file', True))
         self.sensor_name = self.args.get('sensor_name', 'red_alert')
-        self.city_names_config = self.args.get('city_names', [])
-        self.city_names_config.append('ברחבי הארץ')
+        self.areas_of_interest_config = self.args.get('areas_of_interest', [])
+        self.areas_of_interest_config.append('ברחבי הארץ')
         self.hours_to_show = self.args.get('hours_to_show', 1)
         self.mqtt_topic = self.args.get('mqtt', False)
         self.ha_event = self.args.get('event', True)
@@ -102,9 +102,9 @@ class RedAlert(Hass):
         if not isinstance(self.sensor_name, str) or not self.sensor_name.strip():
             self.log("Invalid sensor_name, using default 'red_alert'.", level='WARNING')
             self.sensor_name = 'red_alert'
-        if not isinstance(self.city_names_config, list):
-            self.log(f'Invalid city_names format (should be a list), got {type(self.city_names_config)}. Ignoring.', level='WARNING')
-            self.city_names_config = []
+        if not isinstance(self.areas_of_interest_config, list):
+            self.log(f'Invalid areas_of_interest format (should be a list), got {type(self.areas_of_interest_config)}. Ignoring.', level='WARNING')
+            self.areas_of_interest_config = []
 
         self.log(
             f'Config: Interval={self.interval}s, Timer={self.timer_duration}s, '
@@ -287,17 +287,17 @@ class RedAlert(Hass):
 
     def _validate_configured_cities(self):
         """Validate cities from config against loaded city data."""
-        self.city_names_self_std = set()
-        if not self.city_names_config:
-            self.log('No city_names provided in configuration.', level='INFO')
+        self.areas_of_interest_std = set()
+        if not self.areas_of_interest_config:
+            self.log('No areas_of_interest provided in configuration.', level='INFO')
             return
 
         found_all = True
         processed_count = 0
         invalid_entries = 0
-        for city_config_raw in self.city_names_config:
+        for city_config_raw in self.areas_of_interest_config:
             if not isinstance(city_config_raw, str) or not city_config_raw.strip():
-                self.log(f"Config WARNING: Invalid/empty value found in city_names: '{city_config_raw}'. Skipping.", level='WARNING')
+                self.log(f"Config WARNING: Invalid/empty value found in areas_of_interest: '{city_config_raw}'. Skipping.", level='WARNING')
                 invalid_entries += 1
                 continue
 
@@ -308,7 +308,7 @@ class RedAlert(Hass):
                 invalid_entries += 1
                 continue
 
-            self.city_names_self_std.add(city_config_std)
+            self.areas_of_interest_std.add(city_config_std)
             details = self.city_data_manager.get_city_details(city_config_std)
             if details is None:
                 self.log(
@@ -320,12 +320,12 @@ class RedAlert(Hass):
 
         valid_count = processed_count - invalid_entries
         if valid_count == 0 and processed_count > 0:
-            self.log('No valid city_names found after processing configuration entries.', level='WARNING')
+            self.log('No valid areas_of_interest found after processing configuration entries.', level='WARNING')
         elif found_all and valid_count > 0:
-            self.log(f'All {valid_count} configured city_names validated successfully.', level='INFO')
+            self.log(f'All {valid_count} configured areas_of_interest validated successfully.', level='INFO')
         elif valid_count > 0:
             self.log(
-                f'Configured city_names validation complete. {len(self.city_names_self_std)} unique valid names processed. Some warnings issued.',
+                f'Configured areas_of_interest validation complete. {len(self.areas_of_interest_std)} unique valid names processed. Some warnings issued.',
                 level='WARNING',
             )
 
@@ -475,7 +475,7 @@ class RedAlert(Hass):
             'emoji': '⏳',
             'alerts_count': 0,
             'last_changed': now_iso,
-            'my_cities': sorted(list(set(self.city_names_config))),
+            'my_cities': sorted(list(set(self.areas_of_interest_config))),
             'prev_cat': 0,
             'prev_title': '',
             'prev_desc': '',
@@ -578,7 +578,7 @@ class RedAlert(Hass):
             'emoji': '✅',
             'alerts_count': 0,
             'last_changed': now_iso,
-            'my_cities': sorted(list(set(self.city_names_config))),
+            'my_cities': sorted(list(set(self.areas_of_interest_config))),
             **prev_attrs_formatted,
             'script_status': 'running',
         }
@@ -823,7 +823,7 @@ class RedAlert(Hass):
             'emoji': info.get('icon_emoji', '❗'),
             'alerts_count': self.alert_sequence_count,
             'last_changed': now_iso,
-            'my_cities': sorted(list(set(self.city_names_config))),
+            'my_cities': sorted(list(set(self.areas_of_interest_config))),
             'alert': info.get('text_status', ''),
             'alert_alt': info.get('full_message_str', ''),
             'alert_txt': info.get('alert_txt', ''),
@@ -868,8 +868,8 @@ class RedAlert(Hass):
         self.prev_alert_final_attributes = final_attributes.copy()
 
         # --- 11. Determine City Sensor State ---
-        city_sensor_should_be_on = bool(self.cities_past_window_std.intersection(self.city_names_self_std))
-        if is_test and bool(self.city_names_self_std):
+        city_sensor_should_be_on = bool(self.cities_past_window_std.intersection(self.areas_of_interest_std))
+        if is_test and bool(self.areas_of_interest_std):
             city_sensor_should_be_on = True
         city_state_final = 'on' if city_sensor_should_be_on else 'off'
 
@@ -1085,7 +1085,7 @@ class RedAlert(Hass):
                 'emoji': '✅',
                 'alerts_count': 0,
                 'last_changed': datetime.now().isoformat(timespec='microseconds'),
-                'my_cities': sorted(list(set(self.city_names_config))),
+                'my_cities': sorted(list(set(self.areas_of_interest_config))),
                 **formatted_prev,
                 'alert_wa': last_alert_wa,
                 'alert_tg': last_alert_tg,
@@ -1324,9 +1324,9 @@ class RedAlert(Hass):
         self.log(f'--- {log_prefix} Initiating Test Alert Sequence ---', level='WARNING')
 
         test_cities_orig = []
-        if self.city_names_self_std:
+        if self.areas_of_interest_std:
             found_cities = []
-            for std_name in self.city_names_self_std:
+            for std_name in self.areas_of_interest_std:
                 details = self.city_data_manager.get_city_details(std_name)
                 if details and details.get('original_name'):
                     found_cities.append(details['original_name'])
@@ -1335,7 +1335,7 @@ class RedAlert(Hass):
             test_cities_orig = found_cities
         else:
             default_test_city = 'תל אביב - מרכז העיר'
-            self.log(f"{log_prefix} No valid city_names configured. Using default '{default_test_city}' for test.", level='WARNING')
+            self.log(f"{log_prefix} No valid areas_of_interest configured. Using default '{default_test_city}' for test.", level='WARNING')
             test_cities_orig = [default_test_city]
 
         if not test_cities_orig:

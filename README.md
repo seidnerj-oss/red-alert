@@ -112,7 +112,7 @@ See [Hue setup guide](docs/integrations/hue.md) for full instructions.
 
 ### Configuration
 
-In the `/appdaemon/apps/apps.yaml` file, add the following code. **Make sure to replace the city_names values as the Home Front Command defines them:**
+In the `/appdaemon/apps/apps.yaml` file, add the following code. **Make sure to replace the areas_of_interest values as the Home Front Command defines them:**
 
 ```yaml
 # /appdaemon/apps/apps.yaml
@@ -127,7 +127,7 @@ red_alert:
   hours_to_show: 4
   mqtt: False
   event: True
-  city_names:
+  areas_of_interest:
     - "tel aviv - city center"
     - "kisufim"
 ```
@@ -142,7 +142,7 @@ red_alert:
 | `hours_to_show` | Number of hours of history to display | `4` |
 | `mqtt` | MQTT topic to publish alerts (or `False` to disable) | `False` |
 | `event` | Fire Home Assistant events on new alerts | `True` |
-| `city_names` | Cities that activate the city-specific binary sensor | see [CITIES.md](docs/CITIES.md) |
+| `areas_of_interest` | Areas/cities that activate the city-specific binary sensor | see [CITIES.md](docs/CITIES.md) |
 
 ---
 

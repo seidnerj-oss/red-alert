@@ -46,7 +46,7 @@ DEFAULT_CONFIG = {
     'host': '0.0.0.0',
     'port': 8512,
     'interval': 1,
-    'city_names': [],
+    'areas_of_interest': [],
 }
 
 
@@ -58,9 +58,9 @@ def _log_adapter(msg, level='INFO', **kwargs):
 class AlertMonitor:
     """Polls the Home Front Command API and tracks current alert state."""
 
-    def __init__(self, api_client: HomeFrontCommandApiClient, city_names: list[str] | None = None):
+    def __init__(self, api_client: HomeFrontCommandApiClient, areas_of_interest: list[str] | None = None):
         self._api_client = api_client
-        self._state = AlertStateTracker(areas_of_interest=city_names)
+        self._state = AlertStateTracker(areas_of_interest=areas_of_interest)
         self.last_update = None
 
     @property
@@ -150,7 +150,7 @@ async def _on_startup(app: web.Application):
         app['config']['host'],
         app['config']['port'],
         app['config']['interval'],
-        app['config'].get('city_names', []) or 'all',
+        app['config'].get('areas_of_interest', []) or 'all',
     )
 
 
@@ -173,7 +173,7 @@ def create_app(config: dict | None = None) -> web.Application:
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
 
     api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
-    monitor = AlertMonitor(api_client, city_names=cfg.get('city_names'))
+    monitor = AlertMonitor(api_client, areas_of_interest=cfg.get('areas_of_interest'))
 
     app = web.Application()
     app['monitor'] = monitor

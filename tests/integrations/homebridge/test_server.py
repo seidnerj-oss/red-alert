@@ -18,7 +18,7 @@ def monitor(mock_api_client):
 
 @pytest.fixture
 def monitor_with_cities(mock_api_client):
-    return AlertMonitor(mock_api_client, city_names=['תל אביב - מרכז העיר', 'חיפה'])
+    return AlertMonitor(mock_api_client, areas_of_interest=['תל אביב - מרכז העיר', 'חיפה'])
 
 
 SAMPLE_ALERT = {
