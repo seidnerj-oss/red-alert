@@ -69,23 +69,30 @@ data/                # city_data.json (ICBS geographic data), cities.json
 - **NEVER use em dashes anywhere** - not in console output, code, commit messages, PR descriptions, comments, user messages, API calls, or any other output
 - **ALWAYS use regular hyphens/dashes (-) instead of em dashes**
 
-## Testing Requirements
+## CRITICAL: TESTING REQUIREMENTS
 
 **MANDATORY**: Every feature addition or code change MUST include corresponding tests:
-- When adding a new feature, add tests that cover the new functionality
-- When modifying existing code, update any affected tests to reflect the changes
+- **ALWAYS add tests for new features** - every new feature must include corresponding test coverage
+- **ALWAYS update existing tests** when modifying behavior - if a change breaks or alters existing functionality, update the relevant tests to match
 - When fixing a bug, add a test that reproduces the bug and verifies the fix
+- **Test coverage is not optional** - do not consider a feature or change complete until tests are in place
+- **Match existing test patterns** - follow the conventions and frameworks already used in the codebase
+- **Include edge cases** - tests should cover happy paths, error cases, and boundary conditions where relevant
 - Tests should be placed in the appropriate `tests/` directory mirroring the source structure
-- Do NOT consider a change complete until relevant tests are added or updated
 
 ## CRITICAL: COMMIT AND PUSH RULES
 
 **When creating git commits, Claude MUST follow these rules without exception:**
+- **NEVER COMMIT WITHOUT EXPLICIT USER CONSENT** - user must explicitly say "commit" or "commit this" or similar
+- **NEVER note Claude as a user on any commit** - no author, co-author, or attribution to Claude
 - NEVER include "Generated with [Claude Code]" or "Co-Authored-By: Claude" in commit messages
+- NEVER execute `git add` without explicit user permission
 - NEVER execute `git commit` without explicit user permission (e.g. "commit this", "commit and push")
 - NEVER execute `git push` unless explicitly instructed by the user
+- NEVER use `git commit --no-verify` or `git commit -n` to bypass pre-commit hooks without EXPLICIT user confirmation
 - ALWAYS show the complete commit message to user and ask for confirmation before executing `git commit`
 - ALWAYS ask for explicit permission before pushing changes to remote repository
+- ALWAYS let pre-commit hooks run - if they fail, fix the issues rather than bypassing
 - Keep commit messages clean and professional without AI-generated footers
 - Do NOT auto-commit after making code changes - wait for explicit user instruction
 
