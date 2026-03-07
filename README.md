@@ -1,7 +1,7 @@
 # red-alert
 ***Unofficial - Israeli Home Front Command***
 
-> Real-time Israeli Home Front Command alert monitoring library with Home Assistant and Homebridge integrations
+> Real-time Israeli Home Front Command alert monitoring library with multiple platform integrations
 
 red-alert is a Python library that connects to the official Israeli Home Front Command (Pikud Ha-Oref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon), **Homebridge** (HTTP contact sensor), **UniFi** (AP LED color control), **Philips Hue** (light color control), and **Telegram** (alert notifications).
 
