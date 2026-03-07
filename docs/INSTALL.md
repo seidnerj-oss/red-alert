@@ -39,5 +39,3 @@ asyncio.run(main())
 ## Other Resources
 
 - [City Names Reference](CITIES.md)
-- [English Documentation](ENGLISH.md)
-- [Hebrew Documentation](HEBREW.md)

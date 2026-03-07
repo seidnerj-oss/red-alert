@@ -1,22 +1,18 @@
-In the `appdaemon/apps/apps.yaml` file - add the following code. 
+# City Names Reference
 
-**Make sure to replace the `city_names` values as PIKUD HA-OREF defines them. For example don’t write `תל אביב`  - instead write: `תל אביב - מרכז העיר`.**
+Use these exact city names in your `city_names` configuration. Write them exactly as the Home Front Command defines them - for example, don’t write `תל אביב`, instead write `תל אביב - מרכז העיר`.
+
 ```yaml
 #/appdaemon/apps/apps.yaml
-red_alerts_israel:
-  module: red_alerts_israel
-  class: Red_Alerts_Israel
-  interval: 2
-  timer: 120
-  sensor_name: "red_alert"
-  save_2_file: True
+red_alert:
+  module: red_alert
+  class: RedAlert
   city_names:
-    - תל אביב - מרכז העיר
-    - כיסופים
-    - אשדוד א,ב,ד,ה
-    - נתיב הל''ה
+    - "tel aviv - city center"
+    - "kisufim"
 ```
-# List of Cities
+
+## List of Cities
 `אבו גוש`  ★ 
 `אבו נוור`  ★ 
 `אבו סנאן`  ★ 
