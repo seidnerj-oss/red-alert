@@ -8,6 +8,7 @@ RedAlert is a Python library for monitoring the Israeli Home Front Command (Piku
 
 - **Home Assistant** (AppDaemon) - the primary integration
 - **Homebridge** - HTTP server exposing alert state for HomeKit contact sensors
+- **UniFi** - SSH-based LED color control on U6/U7 access points
 - Other consumers can be added under `src/red_alert/integrations/`
 
 ## Quick Setup
@@ -28,6 +29,7 @@ src/red_alert/
     constants.py
     history.py
     i18n.py          # gettext-based translations
+    state.py         # AlertState enum + AlertStateTracker (3-state model)
     utils.py         # standardize_name, check_bom, parse_datetime_str
   locale/            # gettext .po translation files (en, he)
   integrations/
@@ -36,8 +38,12 @@ src/red_alert/
       file_manager.py
       geojson.py
     homebridge/
-      server.py      # AlertMonitor + HTTP endpoints
+      server.py      # AlertMonitor + HTTP endpoints (uses AlertStateTracker)
       __main__.py    # python -m red_alert.integrations.homebridge
+    unifi/
+      led_controller.py  # UnifiLedController - SSH LED color control via asyncssh
+      server.py          # UnifiAlertMonitor + poll loop
+      __main__.py        # python -m red_alert.integrations.unifi
 apps/red_alert/      # HACS entry point (imports from src/)
 data/                # city_data.json (ICBS geographic data), cities.json
 ```

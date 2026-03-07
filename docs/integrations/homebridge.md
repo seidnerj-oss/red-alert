@@ -68,7 +68,7 @@ curl http://localhost:8512/health
 
 # Full status
 curl http://localhost:8512/status
-# {"active": false, "city_active": false, "alert": null, "last_update": "2024-01-01T00:00:00+00:00"}
+# {"active": false, "city_active": false, "state": "routine", "alert": null, "last_update": "..."}
 
 # Simple contact sensor value (0 = no alert, 1 = alert active)
 curl http://localhost:8512/contact
@@ -77,6 +77,10 @@ curl http://localhost:8512/contact
 # City-filtered contact sensor value
 curl http://localhost:8512/city
 # 0
+
+# Alert state as text (routine / pre_alert / alert)
+curl http://localhost:8512/state
+# routine
 ```
 
 ### 4. Install the Homebridge Plugin
@@ -147,9 +151,10 @@ Add the accessory to your Homebridge `config.json`:
 
 | Endpoint | Response | Description |
 |----------|----------|-------------|
-| `GET /contact` | `0` or `1` | All alerts: `1` when any alert is active |
+| `GET /contact` | `0` or `1` | All alerts: `1` when any alert or pre-alert is active |
 | `GET /city` | `0` or `1` | Filtered: `1` only when a configured city is in the alert |
-| `GET /status` | JSON | Full status with alert details (id, category, title, cities) |
+| `GET /state` | text | Alert state: `routine`, `pre_alert`, or `alert` |
+| `GET /status` | JSON | Full status with alert details, state, and timestamp |
 | `GET /health` | JSON | Health check (`{"status": "ok"}`) |
 
 ## Running as a Service

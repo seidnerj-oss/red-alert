@@ -3,7 +3,7 @@
 
 > Real-time Israeli Home Front Command alert monitoring library with Home Assistant and Homebridge integrations
 
-RedAlert is a Python library that connects to the official Israeli Home Front Command (Pikud HaOref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon) and **Homebridge** (HTTP contact sensor).
+RedAlert is a Python library that connects to the official Israeli Home Front Command (Pikud HaOref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon), **Homebridge** (HTTP contact sensor), and **UniFi** (AP LED color control).
 
 The library monitors all alert types issued by the Home Front Command, including:
 - Missile and rocket fire
@@ -32,6 +32,7 @@ src/red_alert/
     constants.py           # Icons, emojis, defaults
     history.py             # Alert history management
     i18n.py                # Internationalization (en/he)
+    state.py               # AlertState enum + AlertStateTracker
     utils.py               # Shared utilities
   integrations/
     homeassistant/         # Home Assistant AppDaemon integration
@@ -40,6 +41,10 @@ src/red_alert/
       geojson.py           # GeoJSON map data generation
     homebridge/            # Homebridge HTTP server integration
       server.py            # AlertMonitor + HTTP endpoints
+      __main__.py          # CLI entry point
+    unifi/                 # UniFi AP LED control integration
+      led_controller.py    # SSH LED color control via asyncssh
+      server.py            # UnifiAlertMonitor + poll loop
       __main__.py          # CLI entry point
 ```
 
@@ -56,10 +61,19 @@ The **core** package has zero Home Assistant dependencies and can be used by any
 ### Homebridge Integration
 
 *   **Runs** as a standalone HTTP server exposing alert state for Homebridge HTTP plugins.
-*   **Exposes** `/contact` (all alerts) and `/city` (filtered by configured cities) endpoints returning `0` or `1`.
+*   **Exposes** `/contact` (all alerts), `/city` (filtered by configured cities), and `/state` (routine/pre_alert/alert) endpoints.
 *   **Works** with `homebridge-http-contact-sensor` to create HomeKit contact sensor accessories.
 
 See [Homebridge setup guide](docs/integrations/homebridge.md) for full instructions.
+
+### UniFi LED Integration
+
+*   **Controls** the RGB LED bar on UniFi U6/U7 access points based on alert state.
+*   **Three states**: white/green (routine), yellow (pre-alert), red (active alert).
+*   **Supports** area-of-interest filtering - only react to alerts in your configured cities.
+*   **Connects** via SSH using asyncssh for non-blocking parallel updates to all APs.
+
+See [UniFi setup guide](docs/integrations/unifi.md) for full instructions.
 
 ### Home Assistant Integration
 
@@ -138,6 +152,7 @@ Upon restarting the AppDaemon add-on, Home Assistant will create several entitie
 - [Installation Overview](docs/INSTALL.md)
 - [Home Assistant Integration](docs/integrations/homeassistant.md)
 - [Homebridge Integration](docs/integrations/homebridge.md)
+- [UniFi LED Integration](docs/integrations/unifi.md)
 - [English Documentation](docs/ENGLISH.md)
 - [Hebrew Documentation](docs/HEBREW.md)
 - [City Names Reference](docs/CITIES.md)

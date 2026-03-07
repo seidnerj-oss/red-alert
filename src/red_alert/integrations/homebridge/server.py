@@ -21,7 +21,7 @@ import aiohttp
 from aiohttp import web
 
 from red_alert.core.api_client import HomeFrontCommandApiClient
-from red_alert.core.utils import standardize_name
+from red_alert.core.state import AlertState, AlertStateTracker
 
 logger = logging.getLogger('red_alert.homebridge')
 
@@ -60,17 +60,32 @@ class AlertMonitor:
 
     def __init__(self, api_client: HomeFrontCommandApiClient, city_names: list[str] | None = None):
         self._api_client = api_client
-        self._city_names = [standardize_name(c) for c in (city_names or [])]
-        self.active = False
-        self.city_active = False
-        self.alert_data = None
+        self._state = AlertStateTracker(areas_of_interest=city_names)
         self.last_update = None
+
+    @property
+    def active(self) -> bool:
+        return self._state.state in (AlertState.ALERT, AlertState.PRE_ALERT)
+
+    @property
+    def city_active(self) -> bool:
+        """True when an alert/pre-alert matches configured areas (or any area if none configured)."""
+        return self.active
+
+    @property
+    def alert_state(self) -> AlertState:
+        return self._state.state
+
+    @property
+    def alert_data(self) -> dict | None:
+        return self._state.alert_data
 
     @property
     def status(self) -> dict:
         return {
             'active': self.active,
             'city_active': self.city_active,
+            'state': self._state.state.value,
             'alert': self.alert_data,
             'last_update': self.last_update,
         }
@@ -79,25 +94,7 @@ class AlertMonitor:
         """Poll the API once and update state."""
         data = await self._api_client.get_live_alerts()
         self.last_update = datetime.datetime.now(datetime.timezone.utc).isoformat()
-
-        if data and isinstance(data, dict) and data.get('data'):
-            self.active = True
-            self.alert_data = {
-                'id': data.get('id'),
-                'cat': data.get('cat'),
-                'title': data.get('title'),
-                'cities': data.get('data', []),
-                'desc': data.get('desc'),
-            }
-            if self._city_names:
-                alert_cities = [standardize_name(c) for c in data.get('data', [])]
-                self.city_active = any(c in alert_cities for c in self._city_names)
-            else:
-                self.city_active = self.active
-        else:
-            self.active = False
-            self.alert_data = None
-            self.city_active = False
+        self._state.update(data)
 
 
 # --- HTTP Handlers ---
@@ -119,6 +116,12 @@ async def handle_city_contact(request: web.Request) -> web.Response:
     """0/1 filtered by configured cities."""
     monitor: AlertMonitor = request.app['monitor']
     return web.Response(text='1' if monitor.city_active else '0')
+
+
+async def handle_state(request: web.Request) -> web.Response:
+    """Alert state as text: 'routine', 'pre_alert', or 'alert'."""
+    monitor: AlertMonitor = request.app['monitor']
+    return web.Response(text=monitor.alert_state.value)
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -182,6 +185,7 @@ def create_app(config: dict | None = None) -> web.Application:
     app.router.add_get('/status', handle_status)
     app.router.add_get('/contact', handle_contact)
     app.router.add_get('/city', handle_city_contact)
+    app.router.add_get('/state', handle_state)
     app.router.add_get('/health', handle_health)
 
     app.on_startup.append(_on_startup)
