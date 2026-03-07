@@ -110,9 +110,7 @@ class UnifiLedController:
         self._controller = Controller(config)
 
         if self._totp_secret:
-            self._controller.connectivity._request = _wrap_request_with_2fa(
-                self._controller.connectivity._request, self._totp_secret
-            )
+            self._controller.connectivity._request = _wrap_request_with_2fa(self._controller.connectivity._request, self._totp_secret)
 
         await self._controller.login()
         await self._controller.devices.update()

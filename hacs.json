@@ -1,6 +1,6 @@
 {
+  "documentation": "https://github.com/seidnerj/RedAlert",
   "name": "Red Alert",
   "render_readme": "true",
-  "version": "4.0.0",
-  "documentation": "https://github.com/seidnerj/RedAlert"
+  "version": "4.0.0"
 }

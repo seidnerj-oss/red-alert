@@ -44,7 +44,8 @@ where = ["src"]
 [tool.ruff]
 indent-width = 4
 line-length = 150
-target-version = "py314"
+# ruff does not yet support py314; using py313 as the closest available target
+target-version = "py313"
 
 [tool.ruff.format]
 quote-style = "single"
