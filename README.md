@@ -1,9 +1,9 @@
 # RedAlert
 ***Not Official - Israeli Home Front Command***
 
-> Real-time Israeli Home Front Command alert monitoring library with Home Assistant integration
+> Real-time Israeli Home Front Command alert monitoring library with Home Assistant and Homebridge integrations
 
-RedAlert is a Python library that connects to the official Israeli Home Front Command (Pikud HaOref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently, the primary integration is with **Home Assistant** via **AppDaemon**.
+RedAlert is a Python library that connects to the official Israeli Home Front Command (Pikud HaOref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon) and **Homebridge** (HTTP contact sensor).
 
 The library monitors all alert types issued by the Home Front Command, including:
 - Missile and rocket fire
@@ -38,6 +38,9 @@ src/red_alert/
       app.py               # RedAlert(Hass) main class
       file_manager.py      # CSV, TXT, JSON file management
       geojson.py           # GeoJSON map data generation
+    homebridge/            # Homebridge HTTP server integration
+      server.py            # AlertMonitor + HTTP endpoints
+      __main__.py          # CLI entry point
 ```
 
 The **core** package has zero Home Assistant dependencies and can be used by any Python application. Integrations import from core and adapt it to their specific platform.
@@ -49,6 +52,14 @@ The **core** package has zero Home Assistant dependencies and can be used by any
 *   **Polls** the official Israeli Home Front Command API every few seconds for all alert types.
 *   **Multi-language support**: English (default) and Hebrew via standard Python gettext i18n.
 *   **Framework-agnostic core**: Use the alert monitoring library in any Python project.
+
+### Homebridge Integration
+
+*   **Runs** as a standalone HTTP server exposing alert state for Homebridge HTTP plugins.
+*   **Exposes** `/contact` (all alerts) and `/city` (filtered by configured cities) endpoints returning `0` or `1`.
+*   **Works** with `homebridge-http-contact-sensor` to create HomeKit contact sensor accessories.
+
+See [Homebridge setup guide](docs/integrations/homebridge.md) for full instructions.
 
 ### Home Assistant Integration
 
@@ -124,7 +135,9 @@ Upon restarting the AppDaemon add-on, Home Assistant will create several entitie
 
 ## Documentation
 
-- [Installation Guide](docs/INSTALL.md)
+- [Installation Overview](docs/INSTALL.md)
+- [Home Assistant Integration](docs/integrations/homeassistant.md)
+- [Homebridge Integration](docs/integrations/homebridge.md)
 - [English Documentation](docs/ENGLISH.md)
 - [Hebrew Documentation](docs/HEBREW.md)
 - [City Names Reference](docs/CITIES.md)
