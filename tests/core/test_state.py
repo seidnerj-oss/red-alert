@@ -106,3 +106,42 @@ class TestAreasOfInterest:
         tracker = AlertStateTracker(areas_of_interest=['תל אביב - מרכז העיר'])
         result = tracker.update({'cat': '1', 'data': ['תל אביב - מרכז העיר']})
         assert result == AlertState.ALERT
+
+
+class TestPreAlertTitleDetection:
+    """Pre-alert detected by Hebrew title phrases, regardless of category code."""
+
+    def test_pre_alert_by_title_bdakot(self):
+        tracker = AlertStateTracker()
+        result = tracker.update({'cat': '1', 'data': ['City A'], 'title': 'בדקות הקרובות צפויות להתקבל התרעות באזורך'})
+        assert result == AlertState.PRE_ALERT
+
+    def test_pre_alert_by_title_update(self):
+        tracker = AlertStateTracker()
+        result = tracker.update({'cat': '1', 'data': ['City A'], 'title': 'עדכון מיוחד'})
+        assert result == AlertState.PRE_ALERT
+
+    def test_pre_alert_by_title_shelter(self):
+        tracker = AlertStateTracker()
+        result = tracker.update({'cat': '1', 'data': ['City A'], 'title': 'שהייה בסמיכות למרחב מוגן'})
+        assert result == AlertState.PRE_ALERT
+
+    def test_non_pre_alert_title_stays_alert(self):
+        tracker = AlertStateTracker()
+        result = tracker.update({'cat': '1', 'data': ['City A'], 'title': 'ירי רקטות וטילים'})
+        assert result == AlertState.ALERT
+
+    def test_pre_alert_title_with_non_alert_category(self):
+        tracker = AlertStateTracker()
+        result = tracker.update({'cat': '999', 'data': ['City A'], 'title': 'בדקות הקרובות צפויות התרעות'})
+        assert result == AlertState.PRE_ALERT
+
+    def test_no_title_field_uses_category_only(self):
+        tracker = AlertStateTracker()
+        result = tracker.update({'cat': '14', 'data': ['City A']})
+        assert result == AlertState.PRE_ALERT
+
+    def test_empty_title_uses_category_only(self):
+        tracker = AlertStateTracker()
+        result = tracker.update({'cat': '1', 'data': ['City A'], 'title': ''})
+        assert result == AlertState.ALERT

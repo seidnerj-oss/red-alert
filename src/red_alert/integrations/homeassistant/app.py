@@ -47,6 +47,7 @@ from datetime import datetime
 from red_alert.core.alert_processor import AlertProcessor
 from red_alert.core.api_client import HomeFrontCommandApiClient
 from red_alert.core.constants import DAY_NAMES, DEFAULT_UNKNOWN_AREA, ICONS_AND_EMOJIS
+from red_alert.core.state import PRE_ALERT_CATEGORY, PRE_ALERT_TITLE_PHRASES
 from red_alert.core.history import HistoryManager
 from red_alert.core.i18n import get_translator
 from red_alert.core.city_data import CityDataManager
@@ -805,7 +806,7 @@ class RedAlert(Hass):
             prev_state_attrs.setdefault(k, v)
 
         # --- 8. Construct Final Attributes ---
-        special_update = any(phrase in title for phrase in ['בדקות הקרובות', 'עדכון', 'שהייה בסמיכות'])
+        special_update = cat == PRE_ALERT_CATEGORY or any(phrase in title for phrase in PRE_ALERT_TITLE_PHRASES)
 
         final_attributes = {
             'active_now': True,
@@ -1159,8 +1160,9 @@ class RedAlert(Hass):
         attributes['last_changed'] = datetime.now().isoformat(timespec='microseconds')
         attributes['script_status'] = 'running'
 
+        cat_value = attributes.get('cat', 0)
         title_alert = attributes.get('title', '')
-        pre_alert = 'שהייה בסמיכות למרחב מוגן' == title_alert or any(phrase in title_alert for phrase in ['בדקות הקרובות', 'עדכון'])
+        pre_alert = cat_value == PRE_ALERT_CATEGORY or any(phrase in title_alert for phrase in PRE_ALERT_TITLE_PHRASES)
 
         update_tasks = []
 
