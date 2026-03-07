@@ -36,6 +36,7 @@ repos:
         name: normalize line endings
         description: Replaces mixed line endings with LF
         args: [--fix=lf]
+        exclude: \.claude/settings\.local\.json$
 
       - id: check-merge-conflict
         name: check for merge conflicts
