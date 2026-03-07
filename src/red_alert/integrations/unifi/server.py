@@ -51,17 +51,20 @@ NAMED_COLORS = {
 DEFAULT_LED_STATES = {
     'alert': {'on': True, 'color': 'red', 'brightness': 100, 'blink': False},
     'pre_alert': {'on': True, 'color': 'yellow', 'brightness': 100, 'blink': False},
+    'all_clear': {'on': True, 'color': 'green', 'brightness': 100, 'blink': False},
     'routine': {'on': True, 'color': 'white', 'brightness': 100, 'blink': False},
 }
 
 STATE_KEY_MAP = {
     'alert': AlertState.ALERT,
     'pre_alert': AlertState.PRE_ALERT,
+    'all_clear': AlertState.ALL_CLEAR,
     'routine': AlertState.ROUTINE,
 }
 
-DEFAULT_CONFIG = {
+DEFAULT_CONFIG: dict = {
     'interval': 1,
+    'cooldown': None,
     'areas_of_interest': [],
     'host': None,
     'username': None,
@@ -176,7 +179,7 @@ async def run_monitor(config: dict):
 
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
     api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
-    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'))
+    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'), cooldown_seconds=cfg.get('cooldown'))
 
     led_controller = UnifiLedController(
         host=cfg['host'],

@@ -47,7 +47,7 @@ from datetime import datetime
 from red_alert.core.alert_processor import AlertProcessor
 from red_alert.core.api_client import HomeFrontCommandApiClient
 from red_alert.core.constants import DAY_NAMES, DEFAULT_UNKNOWN_AREA, ICONS_AND_EMOJIS
-from red_alert.core.state import PRE_ALERT_CATEGORY, PRE_ALERT_TITLE_PHRASES
+from red_alert.core.state import ALL_CLEAR_CATEGORY, PRE_ALERT_CATEGORY, PRE_ALERT_TITLE_PHRASES
 from red_alert.core.history import HistoryManager
 from red_alert.core.i18n import get_translator
 from red_alert.core.city_data import CityDataManager
@@ -1225,6 +1225,21 @@ class RedAlert(Hass):
 
         try:
             is_alert_active = isinstance(live_data, dict) and live_data.get('data')
+
+            # Check for explicit all-clear signal (category 13) before processing as alert
+            if is_alert_active:
+                cat_raw = live_data.get('cat', '0') if isinstance(live_data, dict) else '0'
+                try:
+                    incoming_cat = int(cat_raw) if str(cat_raw).isdigit() else 0
+                except (TypeError, ValueError):
+                    incoming_cat = 0
+
+                if incoming_cat == ALL_CLEAR_CATEGORY:
+                    self.log(f'{log_prefix} All-clear signal received (category 13). Triggering immediate sensor reset.')
+                    self.no_active_alerts_polls = 1
+                    if self.last_alert_time is not None:
+                        self.last_alert_time = time.time() - self.timer_duration - 1
+                    is_alert_active = False
 
             if is_alert_active:
                 self.no_active_alerts_polls = 0

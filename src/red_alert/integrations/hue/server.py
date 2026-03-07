@@ -42,6 +42,7 @@ SESSION_HEADERS = {
 LED_COLORS = {
     AlertState.ALERT: (255, 0, 0),
     AlertState.PRE_ALERT: (255, 255, 0),
+    AlertState.ALL_CLEAR: (0, 255, 0),
 }
 
 DEFAULT_COLORS = {
@@ -49,8 +50,9 @@ DEFAULT_COLORS = {
     'warm': (255, 180, 100),
 }
 
-DEFAULT_CONFIG = {
+DEFAULT_CONFIG: dict = {
     'interval': 1,
+    'cooldown': None,
     'default_color': 'white',
     'areas_of_interest': [],
     'bridge_ip': None,
@@ -111,7 +113,7 @@ async def run_monitor(config: dict):
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
 
     api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
-    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'))
+    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'), cooldown_seconds=cfg.get('cooldown'))
 
     light_controller = HueLightController(
         bridge_ip=cfg['bridge_ip'],
