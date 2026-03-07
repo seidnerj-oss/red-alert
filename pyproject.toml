@@ -1,7 +1,7 @@
 [project]
 name = "red-alert"
 version = "3.0.0"
-description = "Israeli Home Front Command (Pikud HaOref) alert monitor"
+description = "Israeli Home Front Command (Pikud Ha-Oref) alert monitor"
 requires-python = "==3.11.8"
 
 dependencies = [

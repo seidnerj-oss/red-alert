@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-RedAlert is a Python library for monitoring the Israeli Home Front Command (Pikud HaOref) alert API. It covers all alert types: missile/rocket fire, hostile aircraft intrusion, earthquakes, tsunamis, terrorist infiltration, hazardous materials, radiological events, and more. The core library is framework-agnostic and can be integrated into any consumer platform. Currently supported integrations:
+RedAlert is a Python library for monitoring the Israeli Home Front Command (Pikud Ha-Oref) alert API. It covers all alert types: missile/rocket fire, hostile aircraft intrusion, earthquakes, tsunamis, terrorist infiltration, hazardous materials, radiological events, and more. The core library is framework-agnostic and can be integrated into any consumer platform. Currently supported integrations:
 
 - **Home Assistant** (AppDaemon) - the primary integration
 - **Homebridge** - HTTP server exposing alert state for HomeKit contact sensors
@@ -63,9 +63,6 @@ data/                # city_data.json (ICBS geographic data), cities.json
 - **Core vs Integration**: Core modules (`src/red_alert/core/`) must have ZERO Home Assistant dependencies. They accept a `logger` callable, not a framework-specific logger
 - **Type hints**: Use for function parameters and return values
 - **Deduplication**: Extract shared logic into helper functions. Single source of truth (e.g., one `parse_datetime_str`, not three copies)
-- **Terminology**: Use English names for Israeli institutions in code:
-  - ICBS (Israel Central Bureau of Statistics) not LAMAS
-  - Home Front Command not Oref/HaOref (except in actual URLs)
 
 ## CRITICAL: FORMATTING RULES
 

@@ -1,5 +1,5 @@
 # Israeli Home Front Command Alert Service for Home Assistant (AppDaemon)
-* ***Not Official - Pikud HaOref***
+* ***Unofficial - Israeli Home Front Command***
 * Short Hebrew version can be found here: https://github.com/idodov/RedAlert/blob/main/docs/HEBREW.md
 ____
 ## Important Notice

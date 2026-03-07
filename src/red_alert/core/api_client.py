@@ -8,7 +8,7 @@ from red_alert.core.utils import check_bom
 
 
 class HomeFrontCommandApiClient:
-    """Client for fetching alerts from the Israeli Home Front Command (Pikud HaOref) API."""
+    """Client for fetching alerts from the Israeli Home Front Command (Pikud Ha-Oref) API."""
 
     def __init__(self, client: httpx.AsyncClient, urls: dict, logger):
         self._client = client
