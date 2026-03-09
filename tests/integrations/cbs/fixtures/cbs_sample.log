@@ -1,0 +1,1064 @@
+[/dev/cdc-wdm0] WMS event reporting enabled, monitoring for messages (Ctrl+C to stop)...
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 1f 05 d1 05 d3 05 e7 05 d5 05 ea
+      00 20 05 d4 05 e7 05 e8 05 d5 05 d1 05 d5 05 ea
+      00 20 05 e6 05 e4 05 d5 05 d9 05 d5 05 ea 00 20
+      05 dc 05 d4 05 ea 05 e7 05 d1 05 dc 00 20 05 d4
+      05 ea 05 e8 05 e2 05 d5 05 ea 00 20 05 d1 05 d0
+      05 d6 05 d5 05 e8 05 da
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          1 of 15
+      Content (raw, hex): 05d105d305e705d505ea002005d405e705e805d505d105d505ea002005e605e405d505d905d505ea002005dc05d405ea05e705d105dc002005d405ea05e805e205d505ea002005d105d005d605d505e805da
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 2f 00 0a 05 d9 05 e9 00 20 05 dc
+      05 e9 05 e4 05 e8 00 20 05 d0 05 ea 00 20 05 de
+      05 d9 05 e7 05 d5 05 de 05 da 00 20 05 dc 05 de
+      05 d9 05 d2 05 d5 05 df 00 20 05 d4 05 de 05 d9
+      05 d8 05 d1 05 d9 00 20 05 d1 05 e7 05 e8 05 d1
+      05 ea 05 da 00 2e 00 0a
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          2 of 15
+      Content (raw, hex): 000a05d905e9002005dc05e905e405e8002005d005ea002005de05d905e705d505de05da002005dc05de05d905d205d505df002005d405de05d905d805d105d9002005d105e705e805d105ea05da002e000a
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 3f 05 d1 05 e2 05 ea 00 20 05 e7
+      05 d1 05 dc 05 ea 00 20 05 d4 05 ea 05 e8 05 e2
+      05 d4 00 2c 00 20 05 d9 05 e9 00 20 05 dc 05 d4
+      05 d9 05 db 05 e0 05 e1 00 20 05 dc 05 de 05 e8
+      05 d7 05 d1 00 20 05 d4 05 de 05 d5 05 d2 05 df
+      00 20 05 d5 05 dc 05 e9
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          3 of 15
+      Content (raw, hex): 05d105e205ea002005e705d105dc05ea002005d405ea05e805e205d4002c002005d905e9002005dc05d405d905db05e005e1002005dc05de05e805d705d1002005d405de05d505d205df002005d505dc05e9
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 4f 05 d4 05 d5 05 ea 00 20 05 d1
+      05 d5 00 20 05 e2 05 d3 00 20 05 dc 05 e7 05 d1
+      05 dc 05 ea 00 20 05 d4 05 d5 05 d3 05 e2 05 d4
+      00 20 05 d7 05 d3 05 e9 05 d4 00 2e 00 0a 00 0a
+      00 41 00 6c 00 65 00 72 00 74 00 73 00 20 00 61
+      00 72 00 65 00 20 00 65
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          4 of 15
+      Content (raw, hex): 05d405d505ea002005d105d5002005e205d3002005dc05e705d105dc05ea002005d405d505d305e205d4002005d705d305e905d4002e000a000a0041006c0065007200740073002000610072006500200065
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 5f 00 78 00 70 00 65 00 63 00 74
+      00 65 00 64 00 20 00 69 00 6e 00 20 00 61 00 20
+      00 66 00 65 00 77 00 20 00 6d 00 69 00 6e 00 75
+      00 74 00 65 00 73 00 0a 00 46 00 69 00 6e 00 64
+      00 20 00 74 00 68 00 65 00 20 00 62 00 65 00 73
+      00 74 00 20 00 70 00 72
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          5 of 15
+      Content (raw, hex): 007800700065006300740065006400200069006e0020006100200066006500770020006d0069006e0075007400650073000a00460069006e0064002000740068006500200062006500730074002000700072
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 6f 00 6f 00 74 00 65 00 63 00 74
+      00 69 00 6f 00 6e 00 20 00 61 00 72 00 6f 00 75
+      00 6e 00 64 00 2e 00 0a 00 57 00 68 00 65 00 6e
+      00 20 00 72 00 65 00 63 00 65 00 69 00 76 00 69
+      00 6e 00 67 00 20 00 61 00 6e 00 20 00 61 00 6c
+      00 65 00 72 00 74 00 2c
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          6 of 15
+      Content (raw, hex): 006f00740065006300740069006f006e002000610072006f0075006e0064002e000a005700680065006e00200072006500630065006900760069006e006700200061006e00200061006c006500720074002c
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 7f 00 20 00 65 00 6e 00 74 00 65
+      00 72 00 20 00 74 00 68 00 65 00 20 00 70 00 72
+      00 6f 00 74 00 65 00 63 00 74 00 65 00 64 00 20
+      00 73 00 70 00 61 00 63 00 65 00 20 00 75 00 6e
+      00 74 00 69 00 6c 00 20 00 66 00 75 00 72 00 74
+      00 68 00 65 00 72 00 20
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          7 of 15
+      Content (raw, hex): 00200065006e0074006500720020007400680065002000700072006f00740065006300740065006400200073007000610063006500200075006e00740069006c002000660075007200740068006500720020
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 8f 00 6e 00 6f 00 74 00 69 00 63
+      00 65 00 2e 00 0a 00 0a 06 41 06 4a 00 20 06 27
+      06 44 06 2f 06 42 06 27 06 26 06 42 00 20 06 27
+      06 44 06 42 06 31 06 4a 06 28 06 29 00 20 06 45
+      06 2a 06 48 06 42 06 39 00 20 06 2a 06 44 06 42
+      06 4a 00 20 06 2a 06 46
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          8 of 15
+      Content (raw, hex): 006e006f0074006900630065002e000a000a0641064a002006270644062f064206270626064200200627064406420631064a0628062900200645062a0648064206390020062a06440642064a0020062a0646
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 9f 06 28 06 4a 06 47 06 27 00 20
+      06 41 06 4a 00 20 06 45 06 46 06 37 06 42 06 2a
+      06 43 00 0a 06 39 06 44 06 4a 06 43 00 20 06 2a
+      06 2d 06 33 06 4a 06 46 00 20 06 45 06 43 06 27
+      06 46 00 20 06 27 06 44 06 27 06 2d 06 2a 06 45
+      06 27 06 21 00 20 06 44
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          9 of 15
+      Content (raw, hex): 0628064a0647062700200641064a00200645064606370642062a0643000a06390644064a06430020062a062d0633064a0646002006450643062706460020062706440627062d062a06450627062100200644
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 af 06 23 06 41 06 36 06 44 00 20
+      06 45 06 43 06 27 06 46 00 20 06 28 06 27 06 44
+      06 42 06 31 06 28 00 20 06 45 06 46 06 43 00 2e
+      00 0a 06 39 06 46 06 2f 00 20 06 2a 06 44 06 42
+      06 4a 00 20 06 2a 06 46 06 28 06 4a 06 47 06 27
+      06 0c 00 20 06 27 06 2f
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          10 of 15
+      Content (raw, hex): 06230641063606440020064506430627064600200628062706440642063106280020064506460643002e000a06390646062f0020062a06440642064a0020062a06460628064a06470627060c00200627062f
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 bf 06 2e 06 44 06 48 06 27 00 20
+      06 27 06 44 06 2d 06 4a 06 51 06 32 00 20 06 27
+      06 44 06 45 06 2d 06 45 06 4a 00 20 06 48 06 27
+      06 44 06 28 06 42 06 27 06 21 00 20 06 41 06 4a
+      06 47 00 20 06 2d 06 2a 06 49 00 20 06 25 06 34
+      06 39 06 27 06 31 00 20
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          11 of 15
+      Content (raw, hex): 062e064406480627002006270644062d064a065106320020062706440645062d0645064a0020064806270644062806420627062100200641064a06470020062d062a06490020062506340639062706310020
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 cf 06 2c 06 2f 06 4a 06 2f 00 2e
+      00 0a 00 0a 04 12 00 20 04 31 04 3b 04 38 04 36
+      04 30 04 39 04 48 04 38 04 35 00 20 04 3c 04 38
+      04 3d 04 43 04 42 04 4b 00 20 04 3e 04 36 04 38
+      04 34 04 30 04 35 04 42 04 41 04 4f 00 20 04 41
+      04 38 04 33 04 3d 04 30
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          12 of 15
+      Content (raw, hex): 062c062f064a062f002e000a000a041200200431043b04380436043004390448043804350020043c0438043d04430442044b0020043e0436043804340430043504420441044f0020044104380433043d0430
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 df 04 3b 00 20 04 41 04 38 04 40
+      04 35 04 3d 04 4b 00 0a 04 1f 04 35 04 40 04 35
+      04 39 04 34 04 38 04 42 04 35 00 20 04 3a 00 20
+      04 43 04 31 04 35 04 36 04 38 04 49 04 43 00 2e
+      00 0a 04 1f 04 3e 04 41 04 3b 04 35 00 20 04 41
+      04 38 04 33 04 3d 04 30
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          13 of 15
+      Content (raw, hex): 043b00200441043804400435043d044b000a041f043504400435043904340438044204350020043a00200443043104350436043804490443002e000a041f043e0441043b04350020044104380433043d0430
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 c0 11 12 59 ef 04 3b 04 30 00 2c 00 20 04 32
+      04 3e 04 39 04 34 04 38 04 42 04 35 00 20 04 32
+      04 3d 04 43 04 42 04 40 04 4c 00 20 04 38 00 20
+      04 3e 04 41 04 42 04 30 04 32 04 30 04 39 04 42
+      04 35 04 41 04 4c 00 20 04 42 04 30 04 3c 00 20
+      04 34 04 3e 00 20 04 34
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          14 of 15
+      Content (raw, hex): 043b0430002c00200432043e0439043404380442043500200432043d044304420440044c002004380020043e044104420430043204300439044204350441044c002004420430043c00200434043e00200434
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (87 bytes):
+      59 c0 11 12 59 ff 04 30 04 3b 04 4c 04 3d 04 35
+      04 39 04 48 04 38 04 45 00 20 04 43 04 3a 04 30
+      04 37 04 30 04 3d 04 38 04 39 00 2e 00 0d 00 0d
+      00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00
+    CBS Header:
+      Serial Number: 0x59c0 (GS: 1, Message Code: 412, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          15 of 15
+      Content (raw, hex): 0430043b044c043d0435043904480438044500200443043a043004370430043d04380439002e000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d00
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 1d 05 d4 05 d0 05 d9 05 e8 05 d5
+      05 e2 00 20 05 d4 05 e1 05 ea 05 d9 05 d9 05 dd
+      00 0a 00 0a 05 d4 05 e9 05 d5 05 d4 05 d9 05 dd
+      00 20 05 d1 05 de 05 e8 05 d7 05 d1 00 20 05 d4
+      05 de 05 d5 05 d2 05 df 00 20 05 d9 05 db 05 d5
+      05 dc 05 d9 05 dd 00 20
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          1 of 13
+      Content (raw, hex): 05d405d005d905e805d505e2002005d405e105ea05d905d905dd000a000a05d405e905d505d405d905dd002005d105de05e805d705d1002005d405de05d505d205df002005d905db05d505dc05d905dd0020
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 2d 05 dc 05 e6 05 d0 05 ea 00 2e
+      00 0a 05 d1 05 e2 05 ea 00 20 05 e7 05 d1 05 dc
+      05 ea 00 20 05 d4 05 e0 05 d7 05 d9 05 d4 00 20
+      05 d0 05 d5 00 20 05 d4 05 ea 05 e8 05 e2 05 d4
+      00 2c 00 20 05 d9 05 e9 00 20 05 dc 05 e4 05 e2
+      05 d5 05 dc 00 20 05 d1
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          2 of 13
+      Content (raw, hex): 05dc05e605d005ea002e000a05d105e205ea002005e705d105dc05ea002005d405e005d705d905d4002005d005d5002005d405ea05e805e205d4002c002005d905e9002005dc05e405e205d505dc002005d1
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 3d 05 d4 05 ea 05 d0 05 dd 00 20
+      05 dc 05 d4 05 e0 05 d7 05 d9 05 d5 05 ea 00 20
+      05 e4 05 d9 05 e7 05 d5 05 d3 00 20 05 d4 05 e2
+      05 d5 05 e8 05 e3 00 2e 00 0a 00 0a 05 e4 05 d9
+      05 e7 05 d5 05 d3 00 20 05 d4 05 e2 05 d5 05 e8
+      05 e3 00 20 00 2d 00 20
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          3 of 13
+      Content (raw, hex): 05d405ea05d005dd002005dc05d405e005d705d905d505ea002005e405d905e705d505d3002005d405e205d505e805e3002e000a000a05e405d905e705d505d3002005d405e205d505e805e30020002d0020
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 4d 05 d4 05 e0 05 d7 05 d9 05 d5
+      05 ea 00 20 05 de 05 e6 05 d9 05 dc 05 d5 05 ea
+      00 20 05 d7 05 d9 05 d9 05 dd 00 2e 00 0a 00 0a
+      00 54 00 68 00 65 00 20 00 65 00 76 00 65 00 6e
+      00 74 00 20 00 68 00 61 00 73 00 20 00 65 00 6e
+      00 64 00 65 00 64 00 0a
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          4 of 13
+      Content (raw, hex): 05d405e005d705d905d505ea002005de05e605d905dc05d505ea002005d705d905d905dd002e000a000a0054006800650020006500760065006e0074002000680061007300200065006e006400650064000a
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 5d 00 79 00 6f 00 75 00 20 00 63
+      00 61 00 6e 00 20 00 6c 00 65 00 61 00 76 00 65
+      00 20 00 74 00 68 00 65 00 20 00 70 00 72 00 6f
+      00 74 00 65 00 63 00 74 00 65 00 64 00 20 00 73
+      00 70 00 61 00 63 00 65 00 0a 00 49 00 74 00 20
+      00 69 00 73 00 20 00 72
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          5 of 13
+      Content (raw, hex): 0079006f0075002000630061006e0020006c00650061007600650020007400680065002000700072006f007400650063007400650064002000730070006100630065000a0049007400200069007300200072
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 6d 00 65 00 71 00 75 00 69 00 72
+      00 65 00 64 00 20 00 74 00 6f 00 20 00 61 00 64
+      00 68 00 65 00 72 00 65 00 20 00 74 00 6f 00 20
+      00 74 00 68 00 65 00 20 00 48 00 6f 00 6d 00 65
+      00 20 00 46 00 72 00 6f 00 6e 00 74 00 20 00 43
+      00 6f 00 6d 00 6d 00 61
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          6 of 13
+      Content (raw, hex): 006500710075006900720065006400200074006f002000610064006800650072006500200074006f002000740068006500200048006f006d0065002000460072006f006e007400200043006f006d006d0061
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 7d 00 6e 00 64 00 20 00 67 00 75
+      00 69 00 64 00 65 00 6c 00 69 00 6e 00 65 00 73
+      00 0a 00 0a 04 38 04 3d 04 46 04 38 04 34 04 35
+      04 3d 04 42 00 20 04 37 04 30 04 32 04 35 04 40
+      04 48 04 35 04 3d 00 0a 04 20 04 30 04 37 04 40
+      04 35 04 48 04 35 04 3d
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          7 of 13
+      Content (raw, hex): 006e0064002000670075006900640065006c0069006e00650073000a000a0438043d0446043804340435043d044200200437043004320435044004480435043d000a0420043004370440043504480435043d
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 8d 04 3e 00 20 04 3f 04 3e 04 3a
+      04 38 04 3d 04 43 04 42 04 4c 00 20 04 31 04 35
+      04 37 04 3e 04 3f 04 30 04 41 04 3d 04 3e 04 35
+      00 20 04 3f 04 3e 04 3c 04 35 04 49 04 35 04 3d
+      04 38 04 35 00 0a 04 1f 04 40 04 38 00 20 04 41
+      04 38 04 33 04 3d 04 30
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          8 of 13
+      Content (raw, hex): 043e0020043f043e043a0438043d04430442044c0020043104350437043e043f04300441043d043e04350020043f043e043c043504490435043d04380435000a041f044004380020044104380433043d0430
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 9d 04 3b 04 35 00 20 04 42 04 40
+      04 35 04 32 04 3e 04 33 04 38 00 20 04 3f 04 40
+      04 3e 04 34 04 3e 04 3b 04 36 04 30 04 39 04 42
+      04 35 00 20 04 41 04 3b 04 35 04 34 04 3e 04 32
+      04 30 04 42 04 4c 00 20 04 43 04 3a 04 30 04 37
+      04 30 04 3d 04 38 04 4f
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          9 of 13
+      Content (raw, hex): 043b043500200442044004350432043e043304380020043f0440043e0434043e043b0436043004390442043500200441043b04350434043e043204300442044c00200443043a043004370430043d0438044f
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 ad 04 3c 00 20 04 1a 04 3e 04 3c
+      04 30 04 3d 04 34 04 3e 04 32 04 30 04 3d 04 38
+      04 4f 00 20 04 42 04 4b 04 3b 04 30 00 0a 00 0a
+      06 27 06 46 06 2a 06 47 06 49 00 20 06 27 06 44
+      06 2d 06 2f 06 2b 00 0a 06 4a 06 45 06 43 06 46
+      00 20 06 45 06 3a 06 27
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          10 of 13
+      Content (raw, hex): 043c0020041a043e043c0430043d0434043e04320430043d0438044f00200442044b043b0430000a000a06270646062a06470649002006270644062d062f062b000a064a06450643064600200645063a0627
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 bd 06 2f 06 31 06 29 00 20 06 27
+      06 44 06 2d 06 4a 06 51 06 32 00 20 06 27 06 44
+      06 45 06 2d 06 45 06 4a 00 0a 06 39 06 46 06 2f
+      00 20 06 2a 06 44 06 42 06 4a 00 20 06 2a 06 48
+      06 2c 06 4a 06 47 06 27 00 20 06 23 06 48 00 20
+      06 2a 06 46 06 28 06 4a
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          11 of 13
+      Content (raw, hex): 062f06310629002006270644062d064a065106320020062706440645062d0645064a000a06390646062f0020062a06440642064a0020062a0648062c064a064706270020062306480020062a06460628064a
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      57 e0 11 15 59 cd 06 47 06 27 06 0c 00 20 06 39
+      06 44 06 4a 06 43 06 45 00 20 06 27 06 44 06 2a
+      06 35 06 31 06 41 00 20 06 2d 06 33 06 28 00 20
+      06 2a 06 39 06 44 06 4a 06 45 06 27 06 2a 00 20
+      06 42 06 4a 06 27 06 2f 06 29 00 20 06 27 06 44
+      06 2c 06 28 06 47 06 29
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          12 of 13
+      Content (raw, hex): 06470627060c002006390644064a06430645002006270644062a0635063106410020062d063306280020062a06390644064a06450627062a00200642064a0627062f0629002006270644062c062806470629
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (87 bytes):
+      57 e0 11 15 59 dd 00 20 06 27 06 44 06 2f 06 27
+      06 2e 06 44 06 4a 06 29 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00
+    CBS Header:
+      Serial Number: 0x57e0 (GS: 1, Message Code: 382, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          13 of 13
+      Content (raw, hex): 002006270644062f0627062e0644064a0629000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d00
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 1f 05 d1 05 d3 05 e7 05 d5 05 ea
+      00 20 05 d4 05 e7 05 e8 05 d5 05 d1 05 d5 05 ea
+      00 20 05 e6 05 e4 05 d5 05 d9 05 d5 05 ea 00 20
+      05 dc 05 d4 05 ea 05 e7 05 d1 05 dc 00 20 05 d4
+      05 ea 05 e8 05 e2 05 d5 05 ea 00 20 05 d1 05 d0
+      05 d6 05 d5 05 e8 05 da
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          1 of 15
+      Content (raw, hex): 05d105d305e705d505ea002005d405e705e805d505d105d505ea002005e605e405d505d905d505ea002005dc05d405ea05e705d105dc002005d405ea05e805e205d505ea002005d105d005d605d505e805da
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 2f 00 0a 05 d9 05 e9 00 20 05 dc
+      05 e9 05 e4 05 e8 00 20 05 d0 05 ea 00 20 05 de
+      05 d9 05 e7 05 d5 05 de 05 da 00 20 05 dc 05 de
+      05 d9 05 d2 05 d5 05 df 00 20 05 d4 05 de 05 d9
+      05 d8 05 d1 05 d9 00 20 05 d1 05 e7 05 e8 05 d1
+      05 ea 05 da 00 2e 00 0a
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          2 of 15
+      Content (raw, hex): 000a05d905e9002005dc05e905e405e8002005d005ea002005de05d905e705d505de05da002005dc05de05d905d205d505df002005d405de05d905d805d105d9002005d105e705e805d105ea05da002e000a
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 3f 05 d1 05 e2 05 ea 00 20 05 e7
+      05 d1 05 dc 05 ea 00 20 05 d4 05 ea 05 e8 05 e2
+      05 d4 00 2c 00 20 05 d9 05 e9 00 20 05 dc 05 d4
+      05 d9 05 db 05 e0 05 e1 00 20 05 dc 05 de 05 e8
+      05 d7 05 d1 00 20 05 d4 05 de 05 d5 05 d2 05 df
+      00 20 05 d5 05 dc 05 e9
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          3 of 15
+      Content (raw, hex): 05d105e205ea002005e705d105dc05ea002005d405ea05e805e205d4002c002005d905e9002005dc05d405d905db05e005e1002005dc05de05e805d705d1002005d405de05d505d205df002005d505dc05e9
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 4f 05 d4 05 d5 05 ea 00 20 05 d1
+      05 d5 00 20 05 e2 05 d3 00 20 05 dc 05 e7 05 d1
+      05 dc 05 ea 00 20 05 d4 05 d5 05 d3 05 e2 05 d4
+      00 20 05 d7 05 d3 05 e9 05 d4 00 2e 00 0a 00 0a
+      00 41 00 6c 00 65 00 72 00 74 00 73 00 20 00 61
+      00 72 00 65 00 20 00 65
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          4 of 15
+      Content (raw, hex): 05d405d505ea002005d105d5002005e205d3002005dc05e705d105dc05ea002005d405d505d305e205d4002005d705d305e905d4002e000a000a0041006c0065007200740073002000610072006500200065
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 5f 00 78 00 70 00 65 00 63 00 74
+      00 65 00 64 00 20 00 69 00 6e 00 20 00 61 00 20
+      00 66 00 65 00 77 00 20 00 6d 00 69 00 6e 00 75
+      00 74 00 65 00 73 00 0a 00 46 00 69 00 6e 00 64
+      00 20 00 74 00 68 00 65 00 20 00 62 00 65 00 73
+      00 74 00 20 00 70 00 72
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          5 of 15
+      Content (raw, hex): 007800700065006300740065006400200069006e0020006100200066006500770020006d0069006e0075007400650073000a00460069006e0064002000740068006500200062006500730074002000700072
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 6f 00 6f 00 74 00 65 00 63 00 74
+      00 69 00 6f 00 6e 00 20 00 61 00 72 00 6f 00 75
+      00 6e 00 64 00 2e 00 0a 00 57 00 68 00 65 00 6e
+      00 20 00 72 00 65 00 63 00 65 00 69 00 76 00 69
+      00 6e 00 67 00 20 00 61 00 6e 00 20 00 61 00 6c
+      00 65 00 72 00 74 00 2c
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          6 of 15
+      Content (raw, hex): 006f00740065006300740069006f006e002000610072006f0075006e0064002e000a005700680065006e00200072006500630065006900760069006e006700200061006e00200061006c006500720074002c
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 7f 00 20 00 65 00 6e 00 74 00 65
+      00 72 00 20 00 74 00 68 00 65 00 20 00 70 00 72
+      00 6f 00 74 00 65 00 63 00 74 00 65 00 64 00 20
+      00 73 00 70 00 61 00 63 00 65 00 20 00 75 00 6e
+      00 74 00 69 00 6c 00 20 00 66 00 75 00 72 00 74
+      00 68 00 65 00 72 00 20
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          7 of 15
+      Content (raw, hex): 00200065006e0074006500720020007400680065002000700072006f00740065006300740065006400200073007000610063006500200075006e00740069006c002000660075007200740068006500720020
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 8f 00 6e 00 6f 00 74 00 69 00 63
+      00 65 00 2e 00 0a 00 0a 06 41 06 4a 00 20 06 27
+      06 44 06 2f 06 42 06 27 06 26 06 42 00 20 06 27
+      06 44 06 42 06 31 06 4a 06 28 06 29 00 20 06 45
+      06 2a 06 48 06 42 06 39 00 20 06 2a 06 44 06 42
+      06 4a 00 20 06 2a 06 46
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          8 of 15
+      Content (raw, hex): 006e006f0074006900630065002e000a000a0641064a002006270644062f064206270626064200200627064406420631064a0628062900200645062a0648064206390020062a06440642064a0020062a0646
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 9f 06 28 06 4a 06 47 06 27 00 20
+      06 41 06 4a 00 20 06 45 06 46 06 37 06 42 06 2a
+      06 43 00 0a 06 39 06 44 06 4a 06 43 00 20 06 2a
+      06 2d 06 33 06 4a 06 46 00 20 06 45 06 43 06 27
+      06 46 00 20 06 27 06 44 06 27 06 2d 06 2a 06 45
+      06 27 06 21 00 20 06 44
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          9 of 15
+      Content (raw, hex): 0628064a0647062700200641064a00200645064606370642062a0643000a06390644064a06430020062a062d0633064a0646002006450643062706460020062706440627062d062a06450627062100200644
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 af 06 23 06 41 06 36 06 44 00 20
+      06 45 06 43 06 27 06 46 00 20 06 28 06 27 06 44
+      06 42 06 31 06 28 00 20 06 45 06 46 06 43 00 2e
+      00 0a 06 39 06 46 06 2f 00 20 06 2a 06 44 06 42
+      06 4a 00 20 06 2a 06 46 06 28 06 4a 06 47 06 27
+      06 0c 00 20 06 27 06 2f
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          10 of 15
+      Content (raw, hex): 06230641063606440020064506430627064600200628062706440642063106280020064506460643002e000a06390646062f0020062a06440642064a0020062a06460628064a06470627060c00200627062f
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 bf 06 2e 06 44 06 48 06 27 00 20
+      06 27 06 44 06 2d 06 4a 06 51 06 32 00 20 06 27
+      06 44 06 45 06 2d 06 45 06 4a 00 20 06 48 06 27
+      06 44 06 28 06 42 06 27 06 21 00 20 06 41 06 4a
+      06 47 00 20 06 2d 06 2a 06 49 00 20 06 25 06 34
+      06 39 06 27 06 31 00 20
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          11 of 15
+      Content (raw, hex): 062e064406480627002006270644062d064a065106320020062706440645062d0645064a0020064806270644062806420627062100200641064a06470020062d062a06490020062506340639062706310020
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 cf 06 2c 06 2f 06 4a 06 2f 00 2e
+      00 0a 00 0a 04 12 00 20 04 31 04 3b 04 38 04 36
+      04 30 04 39 04 48 04 38 04 35 00 20 04 3c 04 38
+      04 3d 04 43 04 42 04 4b 00 20 04 3e 04 36 04 38
+      04 34 04 30 04 35 04 42 04 41 04 4f 00 20 04 41
+      04 38 04 33 04 3d 04 30
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          12 of 15
+      Content (raw, hex): 062c062f064a062f002e000a000a041200200431043b04380436043004390448043804350020043c0438043d04430442044b0020043e0436043804340430043504420441044f0020044104380433043d0430
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 df 04 3b 00 20 04 41 04 38 04 40
+      04 35 04 3d 04 4b 00 0a 04 1f 04 35 04 40 04 35
+      04 39 04 34 04 38 04 42 04 35 00 20 04 3a 00 20
+      04 43 04 31 04 35 04 36 04 38 04 49 04 43 00 2e
+      00 0a 04 1f 04 3e 04 41 04 3b 04 35 00 20 04 41
+      04 38 04 33 04 3d 04 30
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          13 of 15
+      Content (raw, hex): 043b00200441043804400435043d044b000a041f043504400435043904340438044204350020043a00200443043104350436043804490443002e000a041f043e0441043b04350020044104380433043d0430
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      5a 20 11 12 59 ef 04 3b 04 30 00 2c 00 20 04 32
+      04 3e 04 39 04 34 04 38 04 42 04 35 00 20 04 32
+      04 3d 04 43 04 42 04 40 04 4c 00 20 04 38 00 20
+      04 3e 04 41 04 42 04 30 04 32 04 30 04 39 04 42
+      04 35 04 41 04 4c 00 20 04 42 04 30 04 3c 00 20
+      04 34 04 3e 00 20 04 34
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          14 of 15
+      Content (raw, hex): 043b0430002c00200432043e0439043404380442043500200432043d044304420440044c002004380020043e044104420430043204300439044204350441044c002004420430043c00200434043e00200434
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (87 bytes):
+      5a 20 11 12 59 ff 04 30 04 3b 04 4c 04 3d 04 35
+      04 39 04 48 04 38 04 45 00 20 04 43 04 3a 04 30
+      04 37 04 30 04 3d 04 38 04 39 00 2e 00 0d 00 0d
+      00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00
+    CBS Header:
+      Serial Number: 0x5a20 (GS: 1, Message Code: 418, Update: 0)
+      Message ID:    4370 (0x1112)
+      DCS:           0x59
+      Page:          15 of 15
+      Content (raw, hex): 0430043b044c043d0435043904480438044500200443043a043004370430043d04380439002e000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d00
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 1d 05 d4 05 d0 05 d9 05 e8 05 d5
+      05 e2 00 20 05 d4 05 e1 05 ea 05 d9 05 d9 05 dd
+      00 0a 00 0a 05 d4 05 e9 05 d5 05 d4 05 d9 05 dd
+      00 20 05 d1 05 de 05 e8 05 d7 05 d1 00 20 05 d4
+      05 de 05 d5 05 d2 05 df 00 20 05 d9 05 db 05 d5
+      05 dc 05 d9 05 dd 00 20
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          1 of 13
+      Content (raw, hex): 05d405d005d905e805d505e2002005d405e105ea05d905d905dd000a000a05d405e905d505d405d905dd002005d105de05e805d705d1002005d405de05d505d205df002005d905db05d505dc05d905dd0020
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 2d 05 dc 05 e6 05 d0 05 ea 00 2e
+      00 0a 05 d1 05 e2 05 ea 00 20 05 e7 05 d1 05 dc
+      05 ea 00 20 05 d4 05 e0 05 d7 05 d9 05 d4 00 20
+      05 d0 05 d5 00 20 05 d4 05 ea 05 e8 05 e2 05 d4
+      00 2c 00 20 05 d9 05 e9 00 20 05 dc 05 e4 05 e2
+      05 d5 05 dc 00 20 05 d1
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          2 of 13
+      Content (raw, hex): 05dc05e605d005ea002e000a05d105e205ea002005e705d105dc05ea002005d405e005d705d905d4002005d005d5002005d405ea05e805e205d4002c002005d905e9002005dc05e405e205d505dc002005d1
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 3d 05 d4 05 ea 05 d0 05 dd 00 20
+      05 dc 05 d4 05 e0 05 d7 05 d9 05 d5 05 ea 00 20
+      05 e4 05 d9 05 e7 05 d5 05 d3 00 20 05 d4 05 e2
+      05 d5 05 e8 05 e3 00 2e 00 0a 00 0a 05 e4 05 d9
+      05 e7 05 d5 05 d3 00 20 05 d4 05 e2 05 d5 05 e8
+      05 e3 00 20 00 2d 00 20
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          3 of 13
+      Content (raw, hex): 05d405ea05d005dd002005dc05d405e005d705d905d505ea002005e405d905e705d505d3002005d405e205d505e805e3002e000a000a05e405d905e705d505d3002005d405e205d505e805e30020002d0020
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 4d 05 d4 05 e0 05 d7 05 d9 05 d5
+      05 ea 00 20 05 de 05 e6 05 d9 05 dc 05 d5 05 ea
+      00 20 05 d7 05 d9 05 d9 05 dd 00 2e 00 0a 00 0a
+      00 54 00 68 00 65 00 20 00 65 00 76 00 65 00 6e
+      00 74 00 20 00 68 00 61 00 73 00 20 00 65 00 6e
+      00 64 00 65 00 64 00 0a
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          4 of 13
+      Content (raw, hex): 05d405e005d705d905d505ea002005de05e605d905dc05d505ea002005d705d905d905dd002e000a000a0054006800650020006500760065006e0074002000680061007300200065006e006400650064000a
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 5d 00 79 00 6f 00 75 00 20 00 63
+      00 61 00 6e 00 20 00 6c 00 65 00 61 00 76 00 65
+      00 20 00 74 00 68 00 65 00 20 00 70 00 72 00 6f
+      00 74 00 65 00 63 00 74 00 65 00 64 00 20 00 73
+      00 70 00 61 00 63 00 65 00 0a 00 49 00 74 00 20
+      00 69 00 73 00 20 00 72
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          5 of 13
+      Content (raw, hex): 0079006f0075002000630061006e0020006c00650061007600650020007400680065002000700072006f007400650063007400650064002000730070006100630065000a0049007400200069007300200072
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 6d 00 65 00 71 00 75 00 69 00 72
+      00 65 00 64 00 20 00 74 00 6f 00 20 00 61 00 64
+      00 68 00 65 00 72 00 65 00 20 00 74 00 6f 00 20
+      00 74 00 68 00 65 00 20 00 48 00 6f 00 6d 00 65
+      00 20 00 46 00 72 00 6f 00 6e 00 74 00 20 00 43
+      00 6f 00 6d 00 6d 00 61
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          6 of 13
+      Content (raw, hex): 006500710075006900720065006400200074006f002000610064006800650072006500200074006f002000740068006500200048006f006d0065002000460072006f006e007400200043006f006d006d0061
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 7d 00 6e 00 64 00 20 00 67 00 75
+      00 69 00 64 00 65 00 6c 00 69 00 6e 00 65 00 73
+      00 0a 00 0a 04 38 04 3d 04 46 04 38 04 34 04 35
+      04 3d 04 42 00 20 04 37 04 30 04 32 04 35 04 40
+      04 48 04 35 04 3d 00 0a 04 20 04 30 04 37 04 40
+      04 35 04 48 04 35 04 3d
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          7 of 13
+      Content (raw, hex): 006e0064002000670075006900640065006c0069006e00650073000a000a0438043d0446043804340435043d044200200437043004320435044004480435043d000a0420043004370440043504480435043d
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 8d 04 3e 00 20 04 3f 04 3e 04 3a
+      04 38 04 3d 04 43 04 42 04 4c 00 20 04 31 04 35
+      04 37 04 3e 04 3f 04 30 04 41 04 3d 04 3e 04 35
+      00 20 04 3f 04 3e 04 3c 04 35 04 49 04 35 04 3d
+      04 38 04 35 00 0a 04 1f 04 40 04 38 00 20 04 41
+      04 38 04 33 04 3d 04 30
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          8 of 13
+      Content (raw, hex): 043e0020043f043e043a0438043d04430442044c0020043104350437043e043f04300441043d043e04350020043f043e043c043504490435043d04380435000a041f044004380020044104380433043d0430
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 9d 04 3b 04 35 00 20 04 42 04 40
+      04 35 04 32 04 3e 04 33 04 38 00 20 04 3f 04 40
+      04 3e 04 34 04 3e 04 3b 04 36 04 30 04 39 04 42
+      04 35 00 20 04 41 04 3b 04 35 04 34 04 3e 04 32
+      04 30 04 42 04 4c 00 20 04 43 04 3a 04 30 04 37
+      04 30 04 3d 04 38 04 4f
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          9 of 13
+      Content (raw, hex): 043b043500200442044004350432043e043304380020043f0440043e0434043e043b0436043004390442043500200441043b04350434043e043204300442044c00200443043a043004370430043d0438044f
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 ad 04 3c 00 20 04 1a 04 3e 04 3c
+      04 30 04 3d 04 34 04 3e 04 32 04 30 04 3d 04 38
+      04 4f 00 20 04 42 04 4b 04 3b 04 30 00 0a 00 0a
+      06 27 06 46 06 2a 06 47 06 49 00 20 06 27 06 44
+      06 2d 06 2f 06 2b 00 0a 06 4a 06 45 06 43 06 46
+      00 20 06 45 06 3a 06 27
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          10 of 13
+      Content (raw, hex): 043c0020041a043e043c0430043d0434043e04320430043d0438044f00200442044b043b0430000a000a06270646062a06470649002006270644062d062f062b000a064a06450643064600200645063a0627
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 bd 06 2f 06 31 06 29 00 20 06 27
+      06 44 06 2d 06 4a 06 51 06 32 00 20 06 27 06 44
+      06 45 06 2d 06 45 06 4a 00 0a 06 39 06 46 06 2f
+      00 20 06 2a 06 44 06 42 06 4a 00 20 06 2a 06 48
+      06 2c 06 4a 06 47 06 27 00 20 06 23 06 48 00 20
+      06 2a 06 46 06 28 06 4a
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          11 of 13
+      Content (raw, hex): 062f06310629002006270644062d064a065106320020062706440645062d0645064a000a06390646062f0020062a06440642064a0020062a0648062c064a064706270020062306480020062a06460628064a
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (88 bytes):
+      59 40 11 15 59 cd 06 47 06 27 06 0c 00 20 06 39
+      06 44 06 4a 06 43 06 45 00 20 06 27 06 44 06 2a
+      06 35 06 31 06 41 00 20 06 2d 06 33 06 28 00 20
+      06 2a 06 39 06 44 06 4a 06 45 06 27 06 2a 00 20
+      06 42 06 4a 06 27 06 2f 06 29 00 20 06 27 06 44
+      06 2c 06 28 06 47 06 29
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          12 of 13
+      Content (raw, hex): 06470627060c002006390644064a06430645002006270644062a0635063106410020062d063306280020062a06390644064a06450627062a00200642064a0627062f0629002006270644062c062806470629
+
+[/dev/cdc-wdm0] Received WMS event report indication:
+  Transfer Route MT Message:
+    Ack Indicator:  do-not-send
+    Transaction ID: 4294967295
+    Format:         gsm-wcdma-broadcast
+    Raw Data (87 bytes):
+      59 40 11 15 59 dd 00 20 06 27 06 44 06 2f 06 27
+      06 2e 06 44 06 4a 06 29 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d 00 0d
+      00 0d 00 0d 00 0d 00
+    CBS Header:
+      Serial Number: 0x5940 (GS: 1, Message Code: 404, Update: 0)
+      Message ID:    4373 (0x1115)
+      DCS:           0x59
+      Page:          13 of 13
+      Content (raw, hex): 002006270644062f0627062e0644064a0629000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d000d00
