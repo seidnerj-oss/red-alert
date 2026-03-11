@@ -1,3 +1,6 @@
+import sys
+from contextlib import contextmanager
+from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,7 +29,7 @@ class TestRgbToHex:
 
 
 def _mock_device(mac='aa:bb:cc:dd:ee:ff', device_id='abc123', supports_led_ring=True):
-    """Create a mock Device object as returned by aiounifi."""
+    """Create a mock Device object compatible with both backends."""
     device = MagicMock()
     device.mac = mac
     device.id = device_id
@@ -35,10 +38,14 @@ def _mock_device(mac='aa:bb:cc:dd:ee:ff', device_id='abc123', supports_led_ring=
 
 
 def _mock_controller(devices=None):
-    """Create a mock aiounifi Controller with devices."""
+    """Create a mock controller with devices (compatible with both backends)."""
     controller = AsyncMock()
     controller.login = AsyncMock()
     controller.request = AsyncMock()
+    controller.execute = AsyncMock()
+    controller.connect = AsyncMock()
+    controller.initialize = AsyncMock()
+    controller.disconnect = AsyncMock()
 
     # Mock the devices handler
     device_map = {}
@@ -55,14 +62,17 @@ def _mock_controller(devices=None):
     return controller
 
 
-class TestConnect:
+# --- aiounifi backend tests ---
+
+
+class TestConnectAiounifi:
     @pytest.mark.asyncio
     async def test_connect_logs_in_and_loads_devices(self):
         device = _mock_device(mac=DEVICE_MAC)
         mock_ctrl = _mock_controller([device])
 
-        with patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+        with patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
 
@@ -76,15 +86,124 @@ class TestConnect:
         mock_ctrl = _mock_controller([device])
 
         with (
-            patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl),
+            patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl),
             patch('red_alert.integrations.unifi.led_controller.aiohttp.ClientSession') as mock_session_cls,
         ):
             mock_session_cls.return_value = AsyncMock()
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             await controller.connect()
 
             mock_session_cls.assert_called_once()
             assert controller._owns_session is True
+
+
+# --- pyunifiapi backend tests ---
+
+
+@contextmanager
+def _fake_pyunifiapi(mock_config_cls=None, mock_ctrl_cls=None, mock_led_status_cls=None, mock_locate_cls=None):
+    """Inject fake pyunifiapi modules into sys.modules so lazy imports resolve to mocks."""
+    mock_config_cls = mock_config_cls or MagicMock()
+    mock_ctrl_cls = mock_ctrl_cls or MagicMock()
+    mock_led_status_cls = mock_led_status_cls or MagicMock()
+    mock_locate_cls = mock_locate_cls or MagicMock()
+
+    pkg = ModuleType('pyunifiapi')
+    pkg.ControllerConfig = mock_config_cls
+
+    ctrl_mod = ModuleType('pyunifiapi.controller')
+    ctrl_mod.Controller = mock_ctrl_cls
+
+    models_mod = ModuleType('pyunifiapi.models')
+    device_mod = ModuleType('pyunifiapi.models.device')
+    device_mod.DeviceSetLedStatus = mock_led_status_cls
+    device_mod.DeviceLocateRequest = mock_locate_cls
+
+    saved = {k: sys.modules.get(k) for k in ('pyunifiapi', 'pyunifiapi.controller', 'pyunifiapi.models', 'pyunifiapi.models.device')}
+    sys.modules['pyunifiapi'] = pkg
+    sys.modules['pyunifiapi.controller'] = ctrl_mod
+    sys.modules['pyunifiapi.models'] = models_mod
+    sys.modules['pyunifiapi.models.device'] = device_mod
+
+    with patch('red_alert.integrations.unifi.led_controller._HAS_PYUNIFIAPI', True):
+        try:
+            yield
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v
+
+
+class TestConnectPyunifiapi:
+    @pytest.mark.asyncio
+    async def test_connect_and_initialize(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl_instance = _mock_controller([device])
+        mock_ctrl_cls = MagicMock(return_value=mock_ctrl_instance)
+
+        with _fake_pyunifiapi(mock_ctrl_cls=mock_ctrl_cls):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='pyunifiapi')
+            await controller.connect()
+
+            mock_ctrl_cls.assert_called_once()
+            mock_ctrl_instance.connect.assert_called_once()
+            mock_ctrl_instance.initialize.assert_called_once()
+            assert controller._connected is True
+
+    @pytest.mark.asyncio
+    async def test_uses_execute_for_requests(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl_instance = _mock_controller([device])
+        mock_ctrl_cls = MagicMock(return_value=mock_ctrl_instance)
+        mock_led_cls = MagicMock()
+        mock_led_cls.create = MagicMock(return_value=MagicMock())
+
+        with _fake_pyunifiapi(mock_ctrl_cls=mock_ctrl_cls, mock_led_status_cls=mock_led_cls):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='pyunifiapi')
+            await controller.connect()
+            await controller.set_led(on=True, color_hex='#FF0000', brightness=100)
+
+            mock_ctrl_instance.execute.assert_called_once()
+            mock_ctrl_instance.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_close_disconnects(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl_instance = _mock_controller([device])
+        mock_ctrl_cls = MagicMock(return_value=mock_ctrl_instance)
+
+        with _fake_pyunifiapi(mock_ctrl_cls=mock_ctrl_cls):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='pyunifiapi')
+            await controller.connect()
+            await controller.close()
+
+            mock_ctrl_instance.disconnect.assert_called_once()
+            assert controller._connected is False
+
+    @pytest.mark.asyncio
+    async def test_passes_totp_secret_natively(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl_instance = _mock_controller([device])
+        mock_ctrl_cls = MagicMock(return_value=mock_ctrl_instance)
+        mock_config_cls = MagicMock()
+
+        with _fake_pyunifiapi(mock_config_cls=mock_config_cls, mock_ctrl_cls=mock_ctrl_cls):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='pyunifiapi', totp_secret='JBSWY3DPEHPK3PXP')
+            await controller.connect()
+
+            mock_config_cls.assert_called_once_with(
+                host='192.168.1.1',
+                username='admin',
+                password='pass',
+                port=443,
+                site='default',
+                totp_secret='JBSWY3DPEHPK3PXP',
+            )
+
+
+# --- Backend-agnostic LED tests ---
 
 
 class TestSetLed:
@@ -93,7 +212,7 @@ class TestSetLed:
         device = _mock_device(mac=DEVICE_MAC)
         mock_ctrl = _mock_controller([device])
 
-        with patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl):
+        with patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl):
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
             controller._session = AsyncMock()
             await controller.connect()
@@ -107,7 +226,7 @@ class TestSetLed:
         dev2 = _mock_device(mac=DEVICE_MAC_2, device_id='id2')
         mock_ctrl = _mock_controller([dev1, dev2])
 
-        with patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl):
+        with patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl):
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC, DEVICE_MAC_2])
             controller._session = AsyncMock()
             await controller.connect()
@@ -120,7 +239,7 @@ class TestSetLed:
         device = _mock_device(mac=DEVICE_MAC)
         mock_ctrl = _mock_controller([device])
 
-        with patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl):
+        with patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl):
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
             controller._session = AsyncMock()
             await controller.connect()
@@ -136,7 +255,7 @@ class TestSetLed:
         device = _mock_device(mac=DEVICE_MAC)
         mock_ctrl = _mock_controller([device])
 
-        with patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl):
+        with patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl):
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
             controller._session = AsyncMock()
             await controller.connect()
@@ -149,7 +268,7 @@ class TestSetLed:
     async def test_skips_missing_device(self):
         mock_ctrl = _mock_controller([])  # no devices found
 
-        with patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl):
+        with patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl):
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
             controller._session = AsyncMock()
             await controller.connect()
@@ -163,7 +282,7 @@ class TestSetLed:
         mock_ctrl = _mock_controller([device])
 
         with (
-            patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl),
+            patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl),
             patch('red_alert.integrations.unifi.led_controller.aiohttp.ClientSession', return_value=AsyncMock()),
         ):
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
@@ -178,8 +297,8 @@ class TestSetLed:
         mock_ctrl = _mock_controller([device])
 
         with (
-            patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl),
-            patch('red_alert.integrations.unifi.led_controller.DeviceSetLedStatus') as mock_request_cls,
+            patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl),
+            patch('red_alert.integrations.unifi.led_controller.AioDeviceSetLedStatus') as mock_request_cls,
         ):
             mock_request_cls.create = MagicMock(return_value=MagicMock())
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
@@ -202,8 +321,8 @@ class TestLocate:
         mock_ctrl = _mock_controller([device])
 
         with (
-            patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl),
-            patch('red_alert.integrations.unifi.led_controller.DeviceLocateRequest') as mock_locate_cls,
+            patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl),
+            patch('red_alert.integrations.unifi.led_controller.AioDeviceLocateRequest') as mock_locate_cls,
         ):
             mock_locate_cls.create = MagicMock(return_value=MagicMock())
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
@@ -220,8 +339,8 @@ class TestLocate:
         mock_ctrl = _mock_controller([device])
 
         with (
-            patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl),
-            patch('red_alert.integrations.unifi.led_controller.DeviceLocateRequest') as mock_locate_cls,
+            patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl),
+            patch('red_alert.integrations.unifi.led_controller.AioDeviceLocateRequest') as mock_locate_cls,
         ):
             mock_locate_cls.create = MagicMock(return_value=MagicMock())
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
@@ -295,7 +414,7 @@ class TestConnectWith2fa:
         mock_ctrl.connectivity = MagicMock()
         mock_ctrl.connectivity._request = AsyncMock()
 
-        with patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl):
+        with patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl):
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], totp_secret='JBSWY3DPEHPK3PXP')
             controller._session = AsyncMock()
             await controller.connect()
@@ -311,7 +430,7 @@ class TestConnectWith2fa:
         mock_ctrl.connectivity = MagicMock()
         mock_ctrl.connectivity._request = original_request
 
-        with patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl):
+        with patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl):
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
             controller._session = AsyncMock()
             await controller.connect()
@@ -326,7 +445,7 @@ class TestClose:
         mock_ctrl = _mock_controller([device])
 
         with (
-            patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl),
+            patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl),
             patch('red_alert.integrations.unifi.led_controller.aiohttp.ClientSession') as mock_session_cls,
         ):
             mock_session = AsyncMock()
@@ -344,7 +463,7 @@ class TestClose:
         device = _mock_device(mac=DEVICE_MAC)
         mock_ctrl = _mock_controller([device])
 
-        with patch('red_alert.integrations.unifi.led_controller.Controller', return_value=mock_ctrl):
+        with patch('red_alert.integrations.unifi.led_controller.AioController', return_value=mock_ctrl):
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], session=session)
             await controller.connect()
             await controller.close()

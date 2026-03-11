@@ -1,30 +1,50 @@
 """
-UniFi AP LED controller via aiounifi.
+UniFi AP LED controller.
 
 Controls LED color, brightness, on/off state, and locate (blink) mode
 on UniFi access points through the UniFi Network controller REST API.
 
-Uses aiounifi for authentication, session management, and API calls.
-Supports local controller accounts with optional TOTP-based 2FA.
+Supports two backends:
+- aiounifi (default) - the library used by Home Assistant's UniFi integration
+- pyunifiapi - native support for 2FA, no aiohttp dependency
+
+Uses a local controller account with optional TOTP-based 2FA.
 """
+
+# pyright: reportMissingImports=false, reportPossiblyUnboundVariable=false
 
 import asyncio
 import functools
 import logging
 import re
-import ssl
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
-
-import aiohttp
-
-from aiounifi.controller import Controller
-from aiounifi.models.configuration import Configuration
-from aiounifi.models.device import DeviceLocateRequest, DeviceSetLedStatus
 
 logger = logging.getLogger('red_alert.unifi')
 
 HEX_COLOR_PATTERN = re.compile(r'^#(?:[0-9a-fA-F]{3}){1,2}$')
+
+# Backend availability
+_HAS_AIOUNIFI = False
+_HAS_PYUNIFIAPI = False
+
+try:
+    import aiohttp
+    from aiounifi.controller import Controller as AioController
+    from aiounifi.models.configuration import Configuration as AioConfiguration
+    from aiounifi.models.device import DeviceLocateRequest as AioDeviceLocateRequest
+    from aiounifi.models.device import DeviceSetLedStatus as AioDeviceSetLedStatus
+
+    _HAS_AIOUNIFI = True
+except ImportError:
+    pass
+
+try:
+    import pyunifiapi as _pyunifiapi_check  # noqa: F401
+
+    _HAS_PYUNIFIAPI = True
+except ImportError:
+    pass
 
 
 def _wrap_request_with_2fa(original_request, totp_secret: str):
@@ -51,7 +71,12 @@ def rgb_to_hex(r: int, g: int, b: int) -> str:
 
 
 class UnifiLedController:
-    """Controls LED color/brightness/state on UniFi APs via aiounifi."""
+    """Controls LED color/brightness/state on UniFi APs.
+
+    Supports two backends:
+    - ``'aiounifi'`` (default): uses aiounifi + aiohttp. 2FA via monkey-patch.
+    - ``'pyunifiapi'``: uses py-unifiapi + httpx. Native 2FA support.
+    """
 
     def __init__(
         self,
@@ -61,24 +86,26 @@ class UnifiLedController:
         device_macs: list[str],
         port: int = 443,
         site: str = 'default',
-        session: aiohttp.ClientSession | None = None,
+        session: Any | None = None,
         totp_secret: str | None = None,
+        backend: str = 'aiounifi',
     ):
         """
         Args:
-            host: Hostname or IP of the UniFi controller (e.g., '192.168.1.1').
+            host: Hostname or IP of the UniFi controller.
             username: Controller login username.
             password: Controller login password.
             device_macs: List of device MAC addresses to control.
-            port: Controller port (default: 443 for UniFi OS).
+            port: Controller port (default: 443).
             site: UniFi site name (default: 'default').
-            session: Optional aiohttp.ClientSession. If not provided, one is created internally.
-            totp_secret: Optional TOTP secret (base32) for 2FA. If set, generates a TOTP code on each login.
+            session: Optional aiohttp.ClientSession (aiounifi backend only). Ignored by pyunifiapi.
+            totp_secret: Optional TOTP secret (base32) for 2FA.
+            backend: Backend library to use: 'aiounifi' (default) or 'pyunifiapi'.
         """
         self._device_macs = [mac.lower() for mac in device_macs]
         self._session = session
         self._owns_session = session is None
-        self._controller: Controller | None = None
+        self._controller: Any = None
         self._connected = False
         self._current_state: tuple | None = None
 
@@ -88,9 +115,27 @@ class UnifiLedController:
         self._port = port
         self._site = site
         self._totp_secret = totp_secret
+        self._backend = backend
+
+        # Resolved at connect time based on backend
+        self._send_request: Callable | None = None
+        self._DeviceSetLedStatus: Any = None
+        self._DeviceLocateRequest: Any = None
 
     async def connect(self):
         """Authenticate with the controller and load device list."""
+        if self._backend == 'pyunifiapi':
+            await self._connect_pyunifiapi()
+        else:
+            await self._connect_aiounifi()
+
+    async def _connect_aiounifi(self):
+        """Connect using aiounifi backend."""
+        if not _HAS_AIOUNIFI:
+            raise ImportError('aiounifi is not installed. Install with: pip install "red-alert[unifi]"')
+
+        import ssl
+
         if self._session is None:
             self._session = aiohttp.ClientSession()
 
@@ -98,7 +143,7 @@ class UnifiLedController:
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
 
-        config = Configuration(
+        config = AioConfiguration(
             session=self._session,
             host=self._host,
             username=self._username,
@@ -107,7 +152,7 @@ class UnifiLedController:
             site=self._site,
             ssl_context=ssl_context,
         )
-        self._controller = Controller(config)
+        self._controller = AioController(config)
 
         if self._totp_secret:
             self._controller.connectivity._request = _wrap_request_with_2fa(self._controller.connectivity._request, self._totp_secret)
@@ -115,13 +160,49 @@ class UnifiLedController:
         await self._controller.login()
         await self._controller.devices.update()
 
+        self._send_request = self._controller.request
+        self._DeviceSetLedStatus = AioDeviceSetLedStatus
+        self._DeviceLocateRequest = AioDeviceLocateRequest
+
+        self._log_device_discovery()
+        self._connected = True
+
+    async def _connect_pyunifiapi(self):
+        """Connect using pyunifiapi backend."""
+        if not _HAS_PYUNIFIAPI:
+            raise ImportError('pyunifiapi is not installed. Install with: pip install py-unifiapi')
+
+        from pyunifiapi import ControllerConfig as PyControllerConfig
+        from pyunifiapi.controller import Controller as PyController
+        from pyunifiapi.models.device import DeviceLocateRequest as PyDeviceLocateRequest
+        from pyunifiapi.models.device import DeviceSetLedStatus as PyDeviceSetLedStatus
+
+        config = PyControllerConfig(
+            host=self._host,
+            username=self._username,
+            password=self._password,
+            port=self._port,
+            site=self._site,
+            totp_secret=self._totp_secret,
+        )
+        self._controller = PyController(config)
+        await self._controller.connect()
+        await self._controller.initialize()
+
+        self._send_request = self._controller.execute
+        self._DeviceSetLedStatus = PyDeviceSetLedStatus
+        self._DeviceLocateRequest = PyDeviceLocateRequest
+
+        self._log_device_discovery()
+        self._connected = True
+
+    def _log_device_discovery(self):
+        """Log which configured devices were found on the controller."""
         found = [mac for mac in self._device_macs if mac in self._controller.devices]
         missing = [mac for mac in self._device_macs if mac not in self._controller.devices]
-
         if missing:
             logger.warning('Devices not found on controller: %s', ', '.join(missing))
-        logger.info('Connected to UniFi controller, %d/%d device(s) found', len(found), len(self._device_macs))
-        self._connected = True
+        logger.info('Connected to UniFi controller (%s), %d/%d device(s) found', self._backend, len(found), len(self._device_macs))
 
     async def _ensure_connected(self):
         if not self._connected:
@@ -150,6 +231,7 @@ class UnifiLedController:
     async def _set_device_led(self, mac: str, on: bool, color_hex: str, brightness: int):
         """Set LED state on a single device."""
         assert self._controller is not None
+        assert self._send_request is not None
         device = self._controller.devices.get(mac)
         if device is None:
             logger.warning('Device %s not found, skipping LED update', mac)
@@ -157,13 +239,13 @@ class UnifiLedController:
 
         try:
             status = 'on' if on else 'off'
-            request = DeviceSetLedStatus.create(
+            request = self._DeviceSetLedStatus.create(
                 device,
                 status=status,
                 brightness=brightness if device.supports_led_ring else None,
                 color=color_hex if device.supports_led_ring else None,
             )
-            await self._controller.request(request)
+            await self._send_request(request)
             logger.debug('LED set on %s: on=%s, color=%s, brightness=%d', mac, on, color_hex, brightness)
         except Exception as e:
             logger.error('Error setting LED on %s: %s', mac, e)
@@ -182,16 +264,19 @@ class UnifiLedController:
     async def _locate_device(self, mac: str, enable: bool):
         """Enable or disable locate mode on a single device."""
         assert self._controller is not None
+        assert self._send_request is not None
         try:
-            request = DeviceLocateRequest.create(mac, locate=enable)
-            await self._controller.request(request)
+            request = self._DeviceLocateRequest.create(mac, locate=enable)
+            await self._send_request(request)
             logger.debug('Locate %s on %s', 'enabled' if enable else 'disabled', mac)
         except Exception as e:
             logger.error('Error setting locate on %s: %s', mac, e)
 
     async def close(self):
-        """Close the HTTP session if we own it."""
-        if self._owns_session and self._session:
+        """Close the connection and release resources."""
+        if self._backend == 'pyunifiapi' and self._controller:
+            await self._controller.disconnect()
+        elif self._owns_session and self._session:
             await self._session.close()
             self._session = None
         self._connected = False

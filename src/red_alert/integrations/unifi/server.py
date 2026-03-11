@@ -2,9 +2,10 @@
 UniFi LED alert monitor.
 
 Polls the Home Front Command API and sets UniFi AP LED colors
-based on alert state via aiounifi. Each state (routine, pre_alert, alert)
-is independently configurable with on/off, color, brightness, and blink.
+based on alert state. Each state (routine, pre_alert, alert) is
+independently configurable with on/off, color, brightness, and blink.
 
+Supports aiounifi (default) or pyunifiapi as the controller backend.
 Blink uses the controller's native locate mode (flash LED).
 
 Usage:
@@ -74,6 +75,7 @@ DEFAULT_CONFIG: dict = {
     'device_macs': [],
     'led_states': {},
     'totp_secret': None,
+    'backend': 'aiounifi',
 }
 
 
@@ -189,6 +191,7 @@ async def run_monitor(config: dict):
         port=cfg.get('port', 443),
         site=cfg.get('site', 'default'),
         totp_secret=cfg.get('totp_secret'),
+        backend=cfg.get('backend', 'aiounifi'),
     )
 
     monitor = UnifiAlertMonitor(api_client, led_controller, state_tracker, led_states)

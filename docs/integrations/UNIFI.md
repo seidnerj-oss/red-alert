@@ -1,6 +1,6 @@
 # UniFi LED Integration
 
-red-alert can control the RGB LEDs on UniFi access points via the UniFi Network controller REST API (using [aiounifi](https://github.com/Kane610/aiounifi)). LEDs change based on alert state:
+red-alert can control the RGB LEDs on UniFi access points via the UniFi Network controller REST API. LEDs change based on alert state:
 
 - **Routine** - white (configurable color, brightness, on/off)
 - **Pre-alert** - yellow (imminent warning, category 14)
@@ -88,6 +88,7 @@ python -m red_alert.integrations.unifi --config config.json
 | `interval` | API polling interval in seconds | `1` |
 | `areas_of_interest` | Cities/areas to filter alerts for (empty = all of Israel) | `[]` |
 | `totp_secret` | TOTP secret (base32) for 2FA - see [2FA Support](#2fa-support) | `null` |
+| `backend` | Controller library: `"aiounifi"` or `"pyunifiapi"` - see [Backend](#backend) | `"aiounifi"` |
 | `led_states` | Per-state LED configuration (see below) | See defaults |
 
 ## LED State Configuration
@@ -230,11 +231,41 @@ sudo systemctl enable redalert-unifi
 sudo systemctl start redalert-unifi
 ```
 
+## Backend
+
+The integration supports two controller libraries:
+
+| Backend | Library | 2FA | HTTP Client | Notes |
+|---------|---------|-----|-------------|-------|
+| `aiounifi` (default) | [aiounifi](https://github.com/Kane610/aiounifi) | Monkey-patch | aiohttp | Same library used by Home Assistant's UniFi integration |
+| `pyunifiapi` | [py-unifiapi](https://github.com/seidnerj/py-unifiapi) | Native | httpx | Also supports WebRTC SSH, cloud API |
+
+To switch backends, add `"backend": "pyunifiapi"` to your config:
+
+```json
+{
+    "host": "192.168.1.1",
+    "username": "redalert",
+    "password": "your-password",
+    "backend": "pyunifiapi",
+    "device_macs": ["aa:bb:cc:dd:ee:ff"]
+}
+```
+
+Install the chosen backend:
+```bash
+# aiounifi (default, installed with the unifi extra)
+pip install "red-alert[unifi]"
+
+# pyunifiapi (install separately)
+pip install py-unifiapi
+```
+
+**Note:** py-unifiapi is not yet published to PyPI. Install from source until it is published.
+
 ## Technical Details
 
-The integration uses [aiounifi](https://github.com/Kane610/aiounifi) to communicate with the UniFi Network controller. This is the same library used by [Home Assistant's UniFi integration](https://www.home-assistant.io/integrations/unifi/).
-
-Authentication uses the controller's internal REST API (the same API the web UI uses). It supports both UniFi OS (UDM, UDR, UCG) and legacy controllers automatically.
+Authentication uses the controller's internal REST API (the same API the web UI uses). Both backends support UniFi OS (UDM, UDR, UCG) and legacy controllers.
 
 LED control uses three device properties:
 - `led_override`: `"on"` or `"off"`
@@ -245,4 +276,4 @@ Color and brightness are only sent to devices that have an LED ring (`supports_l
 
 Blink mode uses the controller's native device locate feature (`set-locate`/`unset-locate`), which makes the LED flash.
 
-**Note:** A local controller account is recommended. TOTP-based 2FA is supported via the `totp_secret` config option (requires `pyotp`).
+**Note:** A local controller account is recommended. TOTP-based 2FA is supported via the `totp_secret` config option (requires `pyotp` for aiounifi, built-in for pyunifiapi).
