@@ -15,7 +15,7 @@ Each CBS message contains the alert text in Hebrew, English, Arabic, and Russian
 ## Prerequisites
 
 - A device with a QMI-capable LTE modem (tested on UniFi LTE Backup Pro with Sierra Wireless WP7607)
-- SSH access to the device
+- SSH access to the device (see [UniFi LTE Backup Pro SSH setup guide](UNIFI-LTE-PRO-SSH.md))
 - Docker on your build machine (for cross-compiling qmicli)
 - Python 3.14+
 
@@ -24,7 +24,7 @@ Each CBS message contains the alert text in Hebrew, English, Arabic, and Russian
 The [UniFi LTE Backup Pro](https://store.ui.com/us/en/collections/unifi-accessory-tech-lte-backup/products/u-lte-backup-pro) is a good fit for this because:
 
 - Always-on LTE connection with a QMI modem (`/dev/cdc-wdm0`)
-- SSH accessible from your local network
+- SSH accessible from your local network (see [SSH setup guide](UNIFI-LTE-PRO-SSH.md))
 - Low power, designed for 24/7 operation
 - Already running `qmi-proxy` for shared modem access
 
@@ -59,9 +59,10 @@ This builds `output/qmicli` - a ~8.5MB static binary.
 ### 2. Deploy to the device
 
 ```bash
-scp output/qmicli user@<device-ip>:/tmp/qmicli
-ssh user@<device-ip> 'chmod +x /tmp/qmicli'
+ssh user@<device-ip> 'cat > /tmp/qmicli && chmod +x /tmp/qmicli' < output/qmicli
 ```
+
+Note: The device runs dropbear which does not support `scp`/`sftp`. Use `ssh` with `cat` piping for file transfers.
 
 Note: `/tmp` is cleared on reboot. For persistence, copy to a writable partition or set up an init script.
 
