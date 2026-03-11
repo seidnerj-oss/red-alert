@@ -18,7 +18,7 @@ from typing import Any
 
 import aiohttp
 
-from aiounifi import Controller
+from aiounifi.controller import Controller
 from aiounifi.models.configuration import Configuration
 from aiounifi.models.device import DeviceLocateRequest, DeviceSetLedStatus
 

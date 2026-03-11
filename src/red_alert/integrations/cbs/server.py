@@ -130,15 +130,16 @@ class CbsAlertMonitor:
         )
 
         try:
-            async for raw_line in proc.stdout:
-                line = raw_line.decode('utf-8', errors='replace')
-                await self._process_line(line)
+            if proc.stdout:
+                async for raw_line in proc.stdout:
+                    line = raw_line.decode('utf-8', errors='replace')
+                    await self._process_line(line)
         finally:
             proc.terminate()
             await proc.wait()
 
         returncode = proc.returncode
-        if returncode:
+        if returncode and proc.stderr:
             stderr = await proc.stderr.read()
             logger.error('qmicli exited with code %d: %s', returncode, stderr.decode(errors='replace').strip())
 

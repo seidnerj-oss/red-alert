@@ -54,6 +54,8 @@ class HistoryManager:
             if not isinstance(e, dict):
                 continue
             alert_date_str = e.get('alertDate')
+            if not isinstance(alert_date_str, str):
+                continue
             t = parse_datetime_str(alert_date_str)
 
             if not isinstance(t, datetime):

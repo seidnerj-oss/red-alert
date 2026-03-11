@@ -122,7 +122,8 @@ class HomeFrontCommandApiClient:
                     return resp.content.decode('utf-8')
 
             text = await self._fetch_with_retries(_do_fetch)
-            text = check_bom(text)
+            if text is not None:
+                text = check_bom(text)
             return text
         except httpx.HTTPStatusError as e:
             self._log(f'HTTP error downloading file {url}: Status {e.response.status_code}', level='ERROR')

@@ -83,7 +83,16 @@ repos:
       - id: type-checking
         name: type checking (mypy)
         description: Run mypy on the codebase using uv
-        entry: bash -c 'uv run mypy src/'
+        entry: bash -c 'unset VIRTUAL_ENV && uv run mypy src/'
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+
+      - id: type-checking-pyright
+        name: type checking (basedpyright)
+        description: Run basedpyright on the codebase using uv
+        entry: bash -c 'unset VIRTUAL_ENV && uv run basedpyright src/'
         language: system
         types: [python]
         pass_filenames: false
