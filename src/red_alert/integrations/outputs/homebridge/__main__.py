@@ -41,6 +41,7 @@ def main():
         level=logging.INFO,
         format='%(asctime)s %(name)s %(levelname)s %(message)s',
     )
+    logging.getLogger('httpx').setLevel(logging.WARNING)
 
     app = create_app(config)
     web.run_app(app, host=config.get('host', '0.0.0.0'), port=config.get('port', 8512), print=None)

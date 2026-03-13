@@ -116,6 +116,7 @@ def main():
         level=logging.INFO,
         format='%(asctime)s %(name)s %(levelname)s %(message)s',
     )
+    logging.getLogger('httpx').setLevel(logging.WARNING)
 
     asyncio.run(run_monitor(config))
 
