@@ -126,7 +126,8 @@ class TestTelegramAlertMonitor:
 
     @pytest.mark.asyncio
     async def test_sends_alert_ended_on_routine(self):
-        monitor, api_client, bot = self._make_monitor()
+        no_hold = {'alert': 0, 'pre_alert': 0, 'all_clear': 0}
+        monitor, api_client, bot = self._make_monitor(hold_seconds=no_hold)
 
         # First: alert
         api_client.get_live_alerts.return_value = {'cat': '1', 'data': ['City A'], 'title': 'Rockets'}

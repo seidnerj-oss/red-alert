@@ -11,14 +11,17 @@ def mock_api_client():
     return AsyncMock()
 
 
+NO_HOLD = {'alert': 0, 'pre_alert': 0, 'all_clear': 0}
+
+
 @pytest.fixture
 def monitor(mock_api_client):
-    return AlertMonitor(mock_api_client)
+    return AlertMonitor(mock_api_client, hold_seconds=NO_HOLD)
 
 
 @pytest.fixture
 def monitor_with_cities(mock_api_client):
-    return AlertMonitor(mock_api_client, areas_of_interest=['תל אביב - מרכז העיר', 'חיפה'])
+    return AlertMonitor(mock_api_client, areas_of_interest=['תל אביב - מרכז העיר', 'חיפה'], hold_seconds=NO_HOLD)
 
 
 SAMPLE_ALERT = {
@@ -135,7 +138,7 @@ class TestHTTPEndpoints:
         from red_alert.integrations.homebridge.server import handle_contact, handle_city_contact, handle_health, handle_state, handle_status
 
         mock_client = AsyncMock()
-        monitor = AlertMonitor(mock_client)
+        monitor = AlertMonitor(mock_client, hold_seconds=NO_HOLD)
 
         app = web.Application()
         app['monitor'] = monitor

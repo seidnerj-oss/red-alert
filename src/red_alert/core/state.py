@@ -31,6 +31,8 @@ class AlertState(enum.Enum):
 
 
 DEFAULT_HOLD_SECONDS: dict[str, float] = {
+    'alert': 60,
+    'pre_alert': 60,
     'all_clear': 60,
 }
 

@@ -58,13 +58,22 @@ class TestAlertStateTracker:
         result = tracker.update({'cat': 1, 'data': ['City A']})
         assert result == AlertState.ALERT
 
-    def test_returns_to_routine_after_alert(self):
+    def test_returns_to_routine_after_alert_hold_expires(self):
         tracker = AlertStateTracker()
         tracker.update({'cat': '1', 'data': ['City A']})
         assert tracker.state == AlertState.ALERT
 
-        tracker.update(None)
-        assert tracker.state == AlertState.ROUTINE
+        # Within hold period - stays ALERT
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = tracker._state_entered_time + 30.0
+            result = tracker.update(None)
+        assert result == AlertState.ALERT
+
+        # After hold period - returns to ROUTINE
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = tracker._state_entered_time + 61.0
+            result = tracker.update(None)
+        assert result == AlertState.ROUTINE
         assert tracker.alert_data is None
 
 
@@ -231,13 +240,12 @@ class TestAllClear:
 class TestHold:
     """Per-state hold durations after API goes empty."""
 
-    def test_default_hold_includes_all_clear(self):
-        assert 'all_clear' in DEFAULT_HOLD_SECONDS
-        assert DEFAULT_HOLD_SECONDS['all_clear'] == 60
+    def test_default_hold_all_states_60s(self):
+        assert DEFAULT_HOLD_SECONDS == {'alert': 60, 'pre_alert': 60, 'all_clear': 60}
 
     def test_no_hold_immediate_routine(self):
         """Without hold, alert state drops to routine on empty API."""
-        tracker = AlertStateTracker(hold_seconds={'all_clear': 0})
+        tracker = AlertStateTracker(hold_seconds={'alert': 0, 'pre_alert': 0, 'all_clear': 0})
         tracker.update({'cat': '1', 'data': ['City A']})
         assert tracker.state == AlertState.ALERT
 
