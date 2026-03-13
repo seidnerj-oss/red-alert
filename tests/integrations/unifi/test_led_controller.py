@@ -351,33 +351,153 @@ class TestLocate:
             mock_locate_cls.create.assert_called_once_with(DEVICE_MAC, locate=False)
 
 
-class TestWrapRequestWith2fa:
+def _mock_session():
+    """Create a mock aiohttp session with cookie jar."""
+    session = MagicMock()
+    session.cookie_jar = MagicMock()
+    session.cookie_jar.update_cookies = MagicMock()
+    return session
+
+
+def _mock_response(status=200):
+    """Create a mock aiohttp response with the given status."""
+    resp = MagicMock()
+    resp.status = status
+    return resp
+
+
+class TestWrapRequestWith2faLocal:
+    """Tests for local account 2FA (single-step with ubic_2fa_token)."""
+
     @pytest.mark.asyncio
-    async def test_injects_totp_into_login_request(self):
-        original = AsyncMock(return_value=('response', b'data'))
-        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP')
+    async def test_local_2fa_on_first_request_failure(self):
+        """When the first request (no token) raises, retries with ubic_2fa_token."""
+        from aiounifi.errors import Forbidden
 
-        await wrapped('post', 'https://host/api/auth/login', json={'username': 'admin', 'password': 'pass', 'rememberMe': True})
+        session = _mock_session()
+        call_count = 0
 
-        call_args = original.call_args
-        assert 'ubic_2fa_token' in call_args.kwargs.get('json', call_args[2] if len(call_args[0]) > 2 else {})
+        async def fake_request(method, url, json=None, allow_redirects=True):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # First call without token - local controller rejects
+                raise Forbidden('403 Forbidden')
+            return (_mock_response(200), b'{"meta":{"rc":"ok"}}')
 
-    @pytest.mark.asyncio
-    async def test_generates_valid_6_digit_totp(self):
-        original = AsyncMock(return_value=('response', b'data'))
-        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP')
-
+        wrapped = _wrap_request_with_2fa(fake_request, 'JBSWY3DPEHPK3PXP', session)
         await wrapped('post', 'https://host/api/auth/login', json={'username': 'admin', 'password': 'pass'})
 
-        sent_json = original.call_args.kwargs.get('json', original.call_args[0][2] if len(original.call_args[0]) > 2 else None)
-        token = sent_json['ubic_2fa_token']
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_local_2fa_injects_ubic_2fa_token(self):
+        """The retry request includes ubic_2fa_token with a valid 6-digit TOTP."""
+        from aiounifi.errors import Forbidden
+
+        session = _mock_session()
+        captured_json = {}
+
+        async def fake_request(method, url, json=None, allow_redirects=True):
+            if 'ubic_2fa_token' not in (json or {}):
+                raise Forbidden('403 Forbidden')
+            captured_json.update(json)
+            return (_mock_response(200), b'{"meta":{"rc":"ok"}}')
+
+        wrapped = _wrap_request_with_2fa(fake_request, 'JBSWY3DPEHPK3PXP', session)
+        await wrapped('post', 'https://host/api/auth/login', json={'username': 'admin', 'password': 'pass'})
+
+        token = captured_json['ubic_2fa_token']
         assert len(token) == 6
         assert token.isdigit()
+        assert captured_json['username'] == 'admin'
+        assert captured_json['password'] == 'pass'
+
+
+class TestWrapRequestWith2faSso:
+    """Tests for SSO/cloud account 2FA (two-step with MFA cookie + token field)."""
+
+    @pytest.mark.asyncio
+    async def test_sso_two_step_flow(self):
+        """On 499 MFA challenge, extracts cookie and retries with token field."""
+        import json as json_mod
+
+        session = _mock_session()
+        mfa_body = json_mod.dumps(
+            {
+                'data': {
+                    'mfaCookie': 'UBIC_2FA=eyJhbGciOiJSUzI1NiJ9.test',
+                    'authenticators': [{'type': 'totp', 'id': 'abc123'}],
+                }
+            }
+        ).encode()
+        call_count = 0
+
+        async def fake_request(method, url, json=None, allow_redirects=True):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return (_mock_response(499), mfa_body)
+            return (_mock_response(200), b'{"meta":{"rc":"ok"}}')
+
+        wrapped = _wrap_request_with_2fa(fake_request, 'JBSWY3DPEHPK3PXP', session)
+        await wrapped('post', 'https://host/api/auth/login', json={'username': 'admin', 'password': 'pass'})
+
+        assert call_count == 2
+        session.cookie_jar.update_cookies.assert_called_once_with({'UBIC_2FA': 'eyJhbGciOiJSUzI1NiJ9.test'})
+
+    @pytest.mark.asyncio
+    async def test_sso_retries_with_token_field(self):
+        """The SSO retry uses 'token' field (not ubic_2fa_token)."""
+        import json as json_mod
+
+        session = _mock_session()
+        mfa_body = json_mod.dumps(
+            {
+                'data': {'mfaCookie': 'UBIC_2FA=jwt_value'},
+            }
+        ).encode()
+        captured_json = {}
+
+        async def fake_request(method, url, json=None, allow_redirects=True):
+            if 'token' in (json or {}):
+                captured_json.update(json)
+                return (_mock_response(200), b'{"meta":{"rc":"ok"}}')
+            return (_mock_response(499), mfa_body)
+
+        wrapped = _wrap_request_with_2fa(fake_request, 'JBSWY3DPEHPK3PXP', session)
+        await wrapped('post', 'https://host/api/auth/login', json={'username': 'admin', 'password': 'pass'})
+
+        token = captured_json['token']
+        assert len(token) == 6
+        assert token.isdigit()
+        assert 'ubic_2fa_token' not in captured_json
+
+    @pytest.mark.asyncio
+    async def test_sso_returns_raw_on_missing_mfa_cookie(self):
+        """If 499 response has no mfaCookie, returns the raw response."""
+        import json as json_mod
+
+        session = _mock_session()
+        mfa_body = json_mod.dumps({'data': {}}).encode()
+
+        async def fake_request(method, url, json=None, allow_redirects=True):
+            return (_mock_response(499), mfa_body)
+
+        wrapped = _wrap_request_with_2fa(fake_request, 'JBSWY3DPEHPK3PXP', session)
+        result = await wrapped('post', 'https://host/api/auth/login', json={'username': 'admin', 'password': 'pass'})
+
+        assert result[0].status == 499
+
+
+class TestWrapRequestWith2faPassthrough:
+    """Tests for requests that should not be modified."""
 
     @pytest.mark.asyncio
     async def test_does_not_modify_non_login_requests(self):
-        original = AsyncMock(return_value=('response', b'data'))
-        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP')
+        session = _mock_session()
+        original = AsyncMock(return_value=(_mock_response(200), b'data'))
+        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP', session)
 
         await wrapped('get', 'https://host/api/devices', json=None)
 
@@ -385,8 +505,9 @@ class TestWrapRequestWith2fa:
 
     @pytest.mark.asyncio
     async def test_does_not_modify_post_without_username(self):
-        original = AsyncMock(return_value=('response', b'data'))
-        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP')
+        session = _mock_session()
+        original = AsyncMock(return_value=(_mock_response(200), b'data'))
+        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP', session)
 
         payload = {'led_override': 'on'}
         await wrapped('post', 'https://host/api/devices/123', json=payload)
@@ -394,16 +515,16 @@ class TestWrapRequestWith2fa:
         original.assert_called_once_with('post', 'https://host/api/devices/123', json=payload, allow_redirects=True)
 
     @pytest.mark.asyncio
-    async def test_preserves_original_auth_fields(self):
-        original = AsyncMock(return_value=('response', b'data'))
-        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP')
+    async def test_no_2fa_needed_passes_through(self):
+        """When first request succeeds (no 2FA required), returns directly."""
+        session = _mock_session()
+        original = AsyncMock(return_value=(_mock_response(200), b'{"meta":{"rc":"ok"}}'))
+        wrapped = _wrap_request_with_2fa(original, 'JBSWY3DPEHPK3PXP', session)
 
-        await wrapped('post', 'https://host/api/login', json={'username': 'admin', 'password': 'secret', 'rememberMe': True})
+        result = await wrapped('post', 'https://host/api/auth/login', json={'username': 'admin', 'password': 'pass'})
 
-        sent_json = original.call_args.kwargs.get('json', original.call_args[0][2] if len(original.call_args[0]) > 2 else None)
-        assert sent_json['username'] == 'admin'
-        assert sent_json['password'] == 'secret'
-        assert sent_json['rememberMe'] is True
+        assert result[0].status == 200
+        original.assert_called_once()  # Only one call, no retry
 
 
 class TestConnectWith2fa:

@@ -47,8 +47,17 @@ except ImportError:
     pass
 
 
-def _wrap_request_with_2fa(original_request, totp_secret: str):
-    """Wrap aiounifi's internal _request to inject TOTP 2FA token into login POST requests."""
+def _wrap_request_with_2fa(original_request, totp_secret: str, session: Any):
+    """Wrap aiounifi's internal _request to inject TOTP 2FA token into login POST requests.
+
+    Supports two auth flows:
+    - Local accounts: single request with ``ubic_2fa_token`` field.
+    - SSO/cloud accounts (UniFi OS gateways): two-step flow where the first
+      login returns HTTP 499 with an MFA cookie, and a second login sends the
+      TOTP code in the ``token`` field alongside that cookie.
+    """
+    import json as json_mod
+
     import pyotp
 
     @functools.wraps(original_request)
@@ -58,9 +67,39 @@ def _wrap_request_with_2fa(original_request, totp_secret: str):
         json: Mapping[str, Any] | None = None,
         allow_redirects: bool = True,
     ):
-        if method == 'post' and json and 'username' in json:
-            json = {**json, 'ubic_2fa_token': pyotp.TOTP(totp_secret).now()}
-        return await original_request(method, url, json=json, allow_redirects=allow_redirects)
+        if not (method == 'post' and json and 'username' in json):
+            return await original_request(method, url, json=json, allow_redirects=allow_redirects)
+
+        # First attempt: send login without any token to detect SSO vs local 2FA
+        try:
+            response, bytes_data = await original_request(method, url, json=json, allow_redirects=allow_redirects)
+        except Exception:
+            # Local 2FA: first request without token was rejected - retry with ubic_2fa_token
+            token = pyotp.TOTP(totp_secret).now()
+            return await original_request(method, url, json={**json, 'ubic_2fa_token': token}, allow_redirects=allow_redirects)
+
+        if response.status != 499:
+            # Not an SSO MFA challenge - return as-is (login succeeded or failed for other reasons)
+            return response, bytes_data
+
+        # SSO two-step flow: extract MFA cookie from 499 response body
+        logger.debug('SSO MFA challenge received, performing two-step auth')
+        try:
+            body = json_mod.loads(bytes_data)
+            mfa_cookie_str = body.get('data', {}).get('mfaCookie', '')
+        except (ValueError, AttributeError):
+            return response, bytes_data
+
+        if not mfa_cookie_str or '=' not in mfa_cookie_str:
+            return response, bytes_data
+
+        # Set the MFA cookie on the aiohttp session
+        cookie_name, cookie_val = mfa_cookie_str.split('=', 1)
+        session.cookie_jar.update_cookies({cookie_name: cookie_val})
+
+        # Re-login with the TOTP in the 'token' field (SSO expects this, not ubic_2fa_token)
+        token = pyotp.TOTP(totp_secret).now()
+        return await original_request(method, url, json={**json, 'token': token}, allow_redirects=allow_redirects)
 
     return _request_with_2fa
 
@@ -155,7 +194,7 @@ class UnifiLedController:
         self._controller = AioController(config)
 
         if self._totp_secret:
-            self._controller.connectivity._request = _wrap_request_with_2fa(self._controller.connectivity._request, self._totp_secret)
+            self._controller.connectivity._request = _wrap_request_with_2fa(self._controller.connectivity._request, self._totp_secret, self._session)
 
         await self._controller.login()
         await self._controller.devices.update()
@@ -224,12 +263,24 @@ class UnifiLedController:
 
         await self._ensure_connected()
 
-        tasks = [self._set_device_led(mac, on, color_hex, brightness) for mac in self._device_macs]
+        tasks = [self._set_device_led_inner(mac, on, color_hex, brightness) for mac in self._device_macs]
         await asyncio.gather(*tasks, return_exceptions=True)
         self._current_state = state
 
-    async def _set_device_led(self, mac: str, on: bool, color_hex: str, brightness: int):
-        """Set LED state on a single device."""
+    async def set_device_led(self, mac: str, on: bool = True, color_hex: str = '#FFFFFF', brightness: int = 100):
+        """Set LED state on a single device.
+
+        Args:
+            mac: Device MAC address.
+            on: Whether the LED should be on.
+            color_hex: Hex color string (e.g., '#FF0000').
+            brightness: Brightness percentage (0-100).
+        """
+        await self._ensure_connected()
+        await self._set_device_led_inner(mac, on, color_hex, brightness)
+
+    async def _set_device_led_inner(self, mac: str, on: bool, color_hex: str, brightness: int):
+        """Set LED state on a single device (internal, no connect check)."""
         assert self._controller is not None
         assert self._send_request is not None
         device = self._controller.devices.get(mac)
