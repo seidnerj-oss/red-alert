@@ -6,7 +6,7 @@ on alert state transitions:
     - ROUTINE -> ALERT:     alert notification with cities
     - ROUTINE -> PRE_ALERT: pre-alert warning
     - ALERT -> ALL_CLEAR:   explicit all-clear
-    - ALERT -> ROUTINE:     alert ended (cooldown expired)
+    - ALERT -> ROUTINE:     alert ended (hold expired)
     - PRE_ALERT -> ALERT:   alert escalation
 
 Usage:
@@ -44,7 +44,7 @@ SESSION_HEADERS = {
 
 DEFAULT_CONFIG: dict = {
     'interval': 1,
-    'cooldown': None,
+    'hold_seconds': {},
     'areas_of_interest': [],
     'bot_token': None,
     'chat_id': None,
@@ -145,7 +145,7 @@ async def run_monitor(config: dict):
 
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
     api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
-    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'), cooldown_seconds=cfg.get('cooldown'))
+    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'), hold_seconds=cfg.get('hold_seconds'))
     bot = TelegramBot(token=cfg['bot_token'], chat_id=cfg['chat_id'])
 
     monitor = TelegramAlertMonitor(api_client, bot, state_tracker)

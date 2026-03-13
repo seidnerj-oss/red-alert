@@ -80,11 +80,11 @@ class TestFormatAlertEndedMessage:
 
 
 class TestTelegramAlertMonitor:
-    def _make_monitor(self, areas_of_interest=None, cooldown=None):
+    def _make_monitor(self, areas_of_interest=None, hold_seconds=None):
         api_client = AsyncMock()
         bot = AsyncMock()
         bot.send_message = AsyncMock(return_value=True)
-        state_tracker = AlertStateTracker(areas_of_interest=areas_of_interest, cooldown_seconds=cooldown)
+        state_tracker = AlertStateTracker(areas_of_interest=areas_of_interest, hold_seconds=hold_seconds)
         monitor = TelegramAlertMonitor(api_client, bot, state_tracker)
         return monitor, api_client, bot
 

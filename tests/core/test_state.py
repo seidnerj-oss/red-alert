@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from red_alert.core.state import ACTIVE_ALERT_CATEGORIES, ALL_CLEAR_CATEGORY, AlertState, AlertStateTracker
+from red_alert.core.state import ACTIVE_ALERT_CATEGORIES, ALL_CLEAR_CATEGORY, DEFAULT_HOLD_SECONDS, AlertState, AlertStateTracker
 
 
 class TestAlertStateTracker:
@@ -180,13 +180,23 @@ class TestAllClear:
         result = tracker.update({'cat': '13', 'data': ['City A']})
         assert result == AlertState.ALL_CLEAR
 
-    def test_all_clear_transitions_to_routine_on_empty(self):
+    def test_all_clear_transitions_to_routine_after_hold(self):
+        """ALL_CLEAR is held for default 60s, then transitions to ROUTINE."""
         tracker = AlertStateTracker()
         tracker.update({'cat': '13', 'data': ['City A']})
         assert tracker.state == AlertState.ALL_CLEAR
 
-        tracker.update(None)
-        assert tracker.state == AlertState.ROUTINE
+        # Within hold period - stays ALL_CLEAR
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = tracker._state_entered_time + 30.0
+            result = tracker.update(None)
+        assert result == AlertState.ALL_CLEAR
+
+        # After hold period - returns to ROUTINE
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = tracker._state_entered_time + 61.0
+            result = tracker.update(None)
+        assert result == AlertState.ROUTINE
 
     def test_all_clear_without_data_field(self):
         """All-clear with empty data still triggers ALL_CLEAR (checked before data filtering)."""
@@ -198,87 +208,162 @@ class TestAllClear:
     def test_all_clear_not_in_active_categories(self):
         assert ALL_CLEAR_CATEGORY not in ACTIVE_ALERT_CATEGORIES
 
-
-class TestCooldown:
-    """Alert state persistence after API goes empty."""
-
-    def test_no_cooldown_immediate_routine(self):
+    def test_all_clear_hold_resets_on_repeat(self):
+        """Repeated all-clear signals reset the hold timer."""
         tracker = AlertStateTracker()
+        tracker.update({'cat': '13', 'data': ['City A']})
+        first_time = tracker._state_entered_time
+
+        tracker.update({'cat': '13', 'data': ['City A']})
+        assert tracker._state_entered_time >= first_time
+        assert tracker.state == AlertState.ALL_CLEAR
+
+    def test_all_clear_interrupted_by_alert(self):
+        """A new alert during all-clear hold transitions immediately."""
+        tracker = AlertStateTracker()
+        tracker.update({'cat': '13', 'data': ['City A']})
+        assert tracker.state == AlertState.ALL_CLEAR
+
+        result = tracker.update({'cat': '1', 'data': ['City A']})
+        assert result == AlertState.ALERT
+
+
+class TestHold:
+    """Per-state hold durations after API goes empty."""
+
+    def test_default_hold_includes_all_clear(self):
+        assert 'all_clear' in DEFAULT_HOLD_SECONDS
+        assert DEFAULT_HOLD_SECONDS['all_clear'] == 60
+
+    def test_no_hold_immediate_routine(self):
+        """Without hold, alert state drops to routine on empty API."""
+        tracker = AlertStateTracker(hold_seconds={'all_clear': 0})
         tracker.update({'cat': '1', 'data': ['City A']})
         assert tracker.state == AlertState.ALERT
 
         tracker.update(None)
         assert tracker.state == AlertState.ROUTINE
 
-    def test_cooldown_keeps_alert_active(self):
-        tracker = AlertStateTracker(cooldown_seconds=30.0)
+    def test_alert_hold_keeps_alert_active(self):
+        tracker = AlertStateTracker(hold_seconds={'alert': 30})
         tracker.update({'cat': '1', 'data': ['City A']})
         assert tracker.state == AlertState.ALERT
 
-        # Simulate empty API while still within cooldown window
+        # Simulate empty API while still within hold window
         with patch('red_alert.core.state.time') as mock_time:
-            mock_time.monotonic.return_value = tracker._last_alert_time + 10.0
+            mock_time.monotonic.return_value = tracker._state_entered_time + 10.0
             result = tracker.update(None)
         assert result == AlertState.ALERT
         assert tracker.state == AlertState.ALERT
 
-    def test_cooldown_expires_to_routine(self):
-        tracker = AlertStateTracker(cooldown_seconds=30.0)
+    def test_alert_hold_expires_to_routine(self):
+        tracker = AlertStateTracker(hold_seconds={'alert': 30})
         tracker.update({'cat': '1', 'data': ['City A']})
         assert tracker.state == AlertState.ALERT
 
-        # Simulate empty API after cooldown has expired
+        # Simulate empty API after hold has expired
         with patch('red_alert.core.state.time') as mock_time:
-            mock_time.monotonic.return_value = tracker._last_alert_time + 31.0
+            mock_time.monotonic.return_value = tracker._state_entered_time + 31.0
             result = tracker.update(None)
         assert result == AlertState.ROUTINE
 
-    def test_cooldown_keeps_pre_alert_active(self):
-        tracker = AlertStateTracker(cooldown_seconds=30.0)
+    def test_pre_alert_hold(self):
+        tracker = AlertStateTracker(hold_seconds={'pre_alert': 20})
         tracker.update({'cat': '14', 'data': ['City A']})
         assert tracker.state == AlertState.PRE_ALERT
 
         with patch('red_alert.core.state.time') as mock_time:
-            mock_time.monotonic.return_value = tracker._last_alert_time + 10.0
+            mock_time.monotonic.return_value = tracker._state_entered_time + 10.0
             result = tracker.update(None)
         assert result == AlertState.PRE_ALERT
 
-    def test_all_clear_bypasses_cooldown(self):
-        tracker = AlertStateTracker(cooldown_seconds=30.0)
+    def test_all_clear_hold(self):
+        tracker = AlertStateTracker(hold_seconds={'all_clear': 120})
+        tracker.update({'cat': '13', 'data': ['City A']})
+        assert tracker.state == AlertState.ALL_CLEAR
+
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = tracker._state_entered_time + 60.0
+            result = tracker.update(None)
+        assert result == AlertState.ALL_CLEAR
+
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = tracker._state_entered_time + 121.0
+            result = tracker.update(None)
+        assert result == AlertState.ROUTINE
+
+    def test_hold_resets_on_same_state(self):
+        """Hold timer resets when API confirms same state is still active."""
+        tracker = AlertStateTracker(hold_seconds={'alert': 30})
+        tracker.update({'cat': '1', 'data': ['City A']})
+        first_time = tracker._state_entered_time
+
+        # New alert during hold resets the timer
+        tracker.update({'cat': '1', 'data': ['City A']})
+        assert tracker._state_entered_time >= first_time
+
+    def test_hold_does_not_block_state_transition(self):
+        """State transitions happen immediately regardless of active hold."""
+        tracker = AlertStateTracker(hold_seconds={'alert': 30, 'pre_alert': 30})
         tracker.update({'cat': '1', 'data': ['City A']})
         assert tracker.state == AlertState.ALERT
 
-        # All-clear resets immediately, ignoring cooldown
+        # All-clear transitions immediately despite alert hold
         result = tracker.update({'cat': '13', 'data': ['City A']})
         assert result == AlertState.ALL_CLEAR
-        assert tracker._last_alert_time is None
 
-    def test_all_clear_then_empty_goes_routine(self):
-        """After all-clear resets cooldown, next empty poll goes to ROUTINE (not held by cooldown)."""
-        tracker = AlertStateTracker(cooldown_seconds=30.0)
+    def test_alert_hold_then_pre_alert(self):
+        """Pre-alert during alert hold transitions immediately."""
+        tracker = AlertStateTracker(hold_seconds={'alert': 30})
+        tracker.update({'cat': '1', 'data': ['City A']})
+        assert tracker.state == AlertState.ALERT
+
+        result = tracker.update({'cat': '14', 'data': ['City A']})
+        assert result == AlertState.PRE_ALERT
+
+    def test_hold_does_not_affect_routine(self):
+        """ROUTINE has no hold - setting it is ignored."""
+        tracker = AlertStateTracker(hold_seconds={'routine': 30})
+        tracker.update(None)
+        assert tracker.state == AlertState.ROUTINE
+
+        tracker.update(None)
+        assert tracker.state == AlertState.ROUTINE
+
+    def test_multiple_states_with_different_holds(self):
+        tracker = AlertStateTracker(hold_seconds={'alert': 10, 'pre_alert': 20, 'all_clear': 30})
+
+        # Alert with 10s hold
+        tracker.update({'cat': '1', 'data': ['City A']})
+        assert tracker.state == AlertState.ALERT
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = tracker._state_entered_time + 11.0
+            result = tracker.update(None)
+        assert result == AlertState.ROUTINE
+
+        # Pre-alert with 20s hold
+        tracker.update({'cat': '14', 'data': ['City A']})
+        assert tracker.state == AlertState.PRE_ALERT
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = tracker._state_entered_time + 15.0
+            result = tracker.update(None)
+        assert result == AlertState.PRE_ALERT
+
+    def test_all_clear_then_empty_respects_hold(self):
+        """After alert -> all-clear, the all-clear hold applies."""
+        tracker = AlertStateTracker(hold_seconds={'alert': 30, 'all_clear': 60})
         tracker.update({'cat': '1', 'data': ['City A']})
         tracker.update({'cat': '13', 'data': ['City A']})
         assert tracker.state == AlertState.ALL_CLEAR
 
-        result = tracker.update(None)
+        # All-clear hold keeps state
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = tracker._state_entered_time + 30.0
+            result = tracker.update(None)
+        assert result == AlertState.ALL_CLEAR
+
+        # All-clear hold expires
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = tracker._state_entered_time + 61.0
+            result = tracker.update(None)
         assert result == AlertState.ROUTINE
-
-    def test_cooldown_does_not_affect_non_alert_states(self):
-        """Cooldown only applies to ALERT and PRE_ALERT, not ROUTINE or ALL_CLEAR."""
-        tracker = AlertStateTracker(cooldown_seconds=30.0)
-        # Start in ROUTINE
-        tracker.update(None)
-        assert tracker.state == AlertState.ROUTINE
-
-        # Empty poll should still be ROUTINE
-        tracker.update(None)
-        assert tracker.state == AlertState.ROUTINE
-
-    def test_new_alert_during_cooldown_resets_timer(self):
-        tracker = AlertStateTracker(cooldown_seconds=30.0)
-        tracker.update({'cat': '1', 'data': ['City A']})
-        first_alert_time = tracker._last_alert_time
-
-        # New alert during cooldown resets the timer
-        tracker.update({'cat': '1', 'data': ['City A']})
-        assert tracker._last_alert_time >= first_alert_time

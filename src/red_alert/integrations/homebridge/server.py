@@ -46,7 +46,7 @@ DEFAULT_CONFIG = {
     'host': '0.0.0.0',
     'port': 8512,
     'interval': 1,
-    'cooldown': None,
+    'hold_seconds': {},
     'areas_of_interest': [],
 }
 
@@ -59,9 +59,11 @@ def _log_adapter(msg, level='INFO', **kwargs):
 class AlertMonitor:
     """Polls the Home Front Command API and tracks current alert state."""
 
-    def __init__(self, api_client: HomeFrontCommandApiClient, areas_of_interest: list[str] | None = None, cooldown_seconds: float | None = None):
+    def __init__(
+        self, api_client: HomeFrontCommandApiClient, areas_of_interest: list[str] | None = None, hold_seconds: dict[str, float] | None = None
+    ):
         self._api_client = api_client
-        self._state = AlertStateTracker(areas_of_interest=areas_of_interest, cooldown_seconds=cooldown_seconds)
+        self._state = AlertStateTracker(areas_of_interest=areas_of_interest, hold_seconds=hold_seconds)
         self.last_update = None
 
     @property
@@ -174,7 +176,7 @@ def create_app(config: dict | None = None) -> web.Application:
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
 
     api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
-    monitor = AlertMonitor(api_client, areas_of_interest=cfg.get('areas_of_interest'), cooldown_seconds=cfg.get('cooldown'))
+    monitor = AlertMonitor(api_client, areas_of_interest=cfg.get('areas_of_interest'), hold_seconds=cfg.get('hold_seconds'))
 
     app = web.Application()
     app['monitor'] = monitor

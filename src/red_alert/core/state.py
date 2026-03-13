@@ -30,23 +30,42 @@ class AlertState(enum.Enum):
     ALL_CLEAR = 'all_clear'
 
 
+DEFAULT_HOLD_SECONDS: dict[str, float] = {
+    'all_clear': 60,
+}
+
+
 class AlertStateTracker:
     """Classifies alert data into one of four states, filtered by areas of interest.
 
-    Supports an optional cooldown: when the API goes empty after an alert,
-    the alert state is held for ``cooldown_seconds`` before returning to ROUTINE.
-    An explicit all-clear (category 13) always resets immediately.
+    Supports per-state hold durations: when the API goes empty after being in a
+    non-ROUTINE state, that state is held for the configured number of seconds
+    before returning to ROUTINE. Hold timers reset each time the API confirms
+    the same state is still active. State transitions to a different state
+    happen immediately regardless of any active hold.
     """
 
-    def __init__(self, areas_of_interest: list[str] | None = None, cooldown_seconds: float | None = None):
+    def __init__(
+        self,
+        areas_of_interest: list[str] | None = None,
+        hold_seconds: dict[str, float] | None = None,
+    ):
         """
         Args:
             areas_of_interest: City/area names to monitor. If empty/None, all areas match.
-            cooldown_seconds: Seconds to hold alert state after API goes empty. None = no cooldown.
+            hold_seconds: Per-state hold duration in seconds. Keys are state names
+                ('alert', 'pre_alert', 'all_clear'). When the API goes empty, the
+                current state is held for this duration before returning to ROUTINE.
+                Default: {'all_clear': 60}. ROUTINE never has a hold.
         """
         self._areas = [standardize_name(a) for a in (areas_of_interest or [])]
-        self._cooldown = cooldown_seconds
-        self._last_alert_time: float | None = None
+        merged = {**DEFAULT_HOLD_SECONDS, **(hold_seconds or {})}
+        self._hold: dict[AlertState, float] = {}
+        for key, seconds in merged.items():
+            state = AlertState(key)
+            if state != AlertState.ROUTINE and seconds:
+                self._hold[state] = seconds
+        self._state_entered_time: float | None = None
         self.state = AlertState.ROUTINE
         self.alert_data: dict | None = None
 
@@ -66,9 +85,7 @@ class AlertStateTracker:
 
         # All-clear overrides everything (regardless of areas of interest)
         if cat == ALL_CLEAR_CATEGORY:
-            self.state = AlertState.ALL_CLEAR
-            self.alert_data = data
-            self._last_alert_time = None
+            self._set_state(AlertState.ALL_CLEAR, data)
             return self.state
 
         cities = data.get('data', [])
@@ -82,29 +99,35 @@ class AlertStateTracker:
         is_pre_alert = cat == PRE_ALERT_CATEGORY or self._has_pre_alert_title(data.get('title', ''))
 
         if is_pre_alert:
-            self.state = AlertState.PRE_ALERT
-            self.alert_data = data
-            self._last_alert_time = time.monotonic()
+            self._set_state(AlertState.PRE_ALERT, data)
         elif cat in ACTIVE_ALERT_CATEGORIES:
-            self.state = AlertState.ALERT
-            self.alert_data = data
-            self._last_alert_time = time.monotonic()
+            self._set_state(AlertState.ALERT, data)
         else:
             # Drills, updates, etc. - don't change state to alert
             self.state = AlertState.ROUTINE
             self.alert_data = None
+            self._state_entered_time = None
 
         return self.state
 
+    def _set_state(self, state: AlertState, data: dict):
+        """Set a non-ROUTINE state and record/reset the hold timer."""
+        self.state = state
+        self.alert_data = data
+        self._state_entered_time = time.monotonic()
+
     def _handle_empty(self) -> AlertState:
-        """Handle empty/None API response, respecting cooldown if configured."""
-        if self._cooldown and self._last_alert_time and self.state in (AlertState.ALERT, AlertState.PRE_ALERT):
-            elapsed = time.monotonic() - self._last_alert_time
-            if elapsed < self._cooldown:
-                return self.state
+        """Handle empty/None API response, respecting per-state hold durations."""
+        if self.state != AlertState.ROUTINE and self._state_entered_time:
+            hold = self._hold.get(self.state)
+            if hold:
+                elapsed = time.monotonic() - self._state_entered_time
+                if elapsed < hold:
+                    return self.state
+
         self.state = AlertState.ROUTINE
         self.alert_data = None
-        self._last_alert_time = None
+        self._state_entered_time = None
         return self.state
 
     def _matches_areas(self, cities: list) -> bool:

@@ -76,7 +76,7 @@ class TestBuildDeviceActions:
 
 
 class TestHomepodAlertMonitor:
-    def _make_monitor(self, device_actions=None, areas_of_interest=None, cooldown=None):
+    def _make_monitor(self, device_actions=None, areas_of_interest=None, hold_seconds=None):
         api_client = AsyncMock()
         controller = AsyncMock()
         controller.name = 'Test HomePod'
@@ -91,7 +91,7 @@ class TestHomepodAlertMonitor:
             AlertState.ROUTINE: None,
         }
 
-        state_tracker = AlertStateTracker(areas_of_interest=areas_of_interest, cooldown_seconds=cooldown)
+        state_tracker = AlertStateTracker(areas_of_interest=areas_of_interest, hold_seconds=hold_seconds)
         devices = [(controller, actions)]
         monitor = HomepodAlertMonitor(api_client, devices, state_tracker)
         return monitor, api_client, controller
