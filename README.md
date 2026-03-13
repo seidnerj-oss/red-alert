@@ -35,29 +35,35 @@ src/red_alert/
     state.py               # AlertState enum + AlertStateTracker (4-state model)
     utils.py               # Shared utilities
   integrations/
-    homeassistant/         # Home Assistant AppDaemon integration
-      app.py               # RedAlert(Hass) main class
-      file_manager.py      # CSV, TXT, JSON file management
-      geojson.py           # GeoJSON map data generation
-    homebridge/            # Homebridge HTTP server integration
-      server.py            # AlertMonitor + HTTP endpoints
-      __main__.py          # CLI entry point
-    unifi/                 # UniFi AP LED control integration
-      led_controller.py    # LED control via aiounifi REST API
-      server.py            # UnifiAlertMonitor + poll loop
-      __main__.py          # CLI entry point
-    hue/                   # Philips Hue light control integration
-      light_controller.py  # Hue Bridge REST API color control
-      server.py            # HueAlertMonitor + poll loop
-      __main__.py          # CLI entry point (with --register)
-    telegram/              # Telegram Bot notification integration
-      bot.py               # Telegram Bot API client (httpx)
-      server.py            # TelegramAlertMonitor + poll loop
-      __main__.py          # CLI entry point
-    homepod/               # Apple HomePod AirPlay audio integration
-      audio_controller.py  # HomepodController - pyatv AirPlay streaming
-      server.py            # HomepodAlertMonitor + poll loop
-      __main__.py          # CLI entry point (with --scan, --pair)
+    sources/               # Alert producers (input data)
+      cbs/                 # Cell Broadcast System via QMI modem
+        parser.py          # CBS page/message parsing
+        server.py          # CbsAlertMonitor + qmicli subprocess
+        __main__.py        # CLI entry point
+    outputs/               # Alert consumers (output destinations)
+      homeassistant/       # Home Assistant AppDaemon integration
+        app.py             # RedAlert(Hass) main class
+        file_manager.py    # CSV, TXT, JSON file management
+        geojson.py         # GeoJSON map data generation
+      homebridge/          # Homebridge HTTP server integration
+        server.py          # AlertMonitor + HTTP endpoints
+        __main__.py        # CLI entry point
+      unifi/               # UniFi AP LED control integration
+        led_controller.py  # LED control via aiounifi REST API
+        server.py          # UnifiAlertMonitor + poll loop
+        __main__.py        # CLI entry point
+      hue/                 # Philips Hue light control integration
+        light_controller.py  # Hue Bridge REST API color control
+        server.py          # HueAlertMonitor + poll loop
+        __main__.py        # CLI entry point (with --register)
+      telegram/            # Telegram Bot notification integration
+        bot.py             # Telegram Bot API client (httpx)
+        server.py          # TelegramAlertMonitor + poll loop
+        __main__.py        # CLI entry point
+      homepod/             # Apple HomePod AirPlay audio integration
+        audio_controller.py  # HomepodController - pyatv AirPlay streaming
+        server.py          # HomepodAlertMonitor + poll loop
+        __main__.py        # CLI entry point (with --scan, --pair)
 ```
 
 The **core** package has zero Home Assistant dependencies and can be used by any Python application. Integrations import from core and adapt it to their specific platform.

@@ -36,29 +36,35 @@ src/red_alert/
     utils.py         # standardize_name, check_bom, parse_datetime_str
   locale/            # gettext .po translation files (en, he)
   integrations/
-    homeassistant/
-      app.py         # RedAlert(Hass) - AppDaemon class
-      file_manager.py
-      geojson.py
-    homebridge/
-      server.py      # AlertMonitor + HTTP endpoints (uses AlertStateTracker)
-      __main__.py    # python -m red_alert.integrations.homebridge
-    unifi/
-      led_controller.py  # UnifiLedController - LED control via aiounifi
-      server.py          # UnifiAlertMonitor + poll loop
-      __main__.py        # python -m red_alert.integrations.unifi
-    hue/
-      light_controller.py  # HueLightController - Hue Bridge REST API via httpx
-      server.py            # HueAlertMonitor + poll loop
-      __main__.py          # python -m red_alert.integrations.hue (--register)
-    telegram/
-      bot.py               # TelegramBot - Bot API via httpx
-      server.py            # TelegramAlertMonitor + poll loop
-      __main__.py          # python -m red_alert.integrations.telegram
-    homepod/
-      audio_controller.py  # HomepodController - pyatv AirPlay streaming
-      server.py            # HomepodAlertMonitor + poll loop
-      __main__.py          # python -m red_alert.integrations.homepod (--scan, --pair)
+    sources/             # Alert producers (input data)
+      cbs/               # Cell Broadcast System via QMI modem
+        parser.py        # CbsPageParser, CbsMessageAssembler
+        server.py        # CbsAlertMonitor + qmicli subprocess
+        __main__.py      # python -m red_alert.integrations.sources.cbs
+    outputs/             # Alert consumers (output destinations)
+      homeassistant/
+        app.py           # RedAlert(Hass) - AppDaemon class
+        file_manager.py
+        geojson.py
+      homebridge/
+        server.py        # AlertMonitor + HTTP endpoints (uses AlertStateTracker)
+        __main__.py      # python -m red_alert.integrations.outputs.homebridge
+      unifi/
+        led_controller.py  # UnifiLedController - LED control via aiounifi
+        server.py          # UnifiAlertMonitor + poll loop
+        __main__.py        # python -m red_alert.integrations.outputs.unifi
+      hue/
+        light_controller.py  # HueLightController - Hue Bridge REST API via httpx
+        server.py            # HueAlertMonitor + poll loop
+        __main__.py          # python -m red_alert.integrations.outputs.hue (--register)
+      telegram/
+        bot.py               # TelegramBot - Bot API via httpx
+        server.py            # TelegramAlertMonitor + poll loop
+        __main__.py          # python -m red_alert.integrations.outputs.telegram
+      homepod/
+        audio_controller.py  # HomepodController - pyatv AirPlay streaming
+        server.py            # HomepodAlertMonitor + poll loop
+        __main__.py          # python -m red_alert.integrations.outputs.homepod (--scan, --pair)
 apps/red_alert/      # HACS entry point (imports from src/)
 data/                # city_data.json (ICBS geographic data), cities.json
 ```

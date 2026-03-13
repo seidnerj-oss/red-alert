@@ -72,7 +72,7 @@ Device MAC addresses can be found in the UniFi controller:
 ### 5. Start the Monitor
 
 ```bash
-python -m red_alert.integrations.unifi --config config.json
+python -m red_alert.integrations.outputs.unifi --config config.json
 ```
 
 ## Configuration Reference
@@ -218,7 +218,7 @@ After=network.target
 Type=simple
 User=pi
 WorkingDirectory=/path/to/red-alert
-ExecStart=/usr/bin/python3 -m red_alert.integrations.unifi --config /path/to/config.json
+ExecStart=/usr/bin/python3 -m red_alert.integrations.outputs.unifi --config /path/to/config.json
 Restart=always
 RestartSec=5
 

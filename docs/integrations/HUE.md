@@ -35,7 +35,7 @@ pip install httpx
 Press the **link button** on your Hue Bridge, then run:
 
 ```bash
-python -m red_alert.integrations.hue --register 192.168.1.50
+python -m red_alert.integrations.outputs.hue --register 192.168.1.50
 ```
 
 Replace `192.168.1.50` with your bridge IP. The command will print an API key. Save this for the config file.
@@ -74,7 +74,7 @@ You can specify `lights`, `groups`, or both. Groups are more efficient when you 
 ### 5. Start the Monitor
 
 ```bash
-python -m red_alert.integrations.hue --config config.json
+python -m red_alert.integrations.outputs.hue --config config.json
 ```
 
 ## Areas of Interest
@@ -111,7 +111,7 @@ After=network.target
 Type=simple
 User=pi
 WorkingDirectory=/path/to/red-alert
-ExecStart=/usr/bin/python3 -m red_alert.integrations.hue --config /path/to/config.json
+ExecStart=/usr/bin/python3 -m red_alert.integrations.outputs.hue --config /path/to/config.json
 Restart=always
 RestartSec=5
 

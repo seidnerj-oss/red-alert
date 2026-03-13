@@ -36,7 +36,7 @@ pip install ".[homepod]"
 Scan the local network for HomePod and other AirPlay devices:
 
 ```bash
-python -m red_alert.integrations.homepod --scan
+python -m red_alert.integrations.outputs.homepod --scan
 ```
 
 Output:
@@ -61,7 +61,7 @@ Note the **Identifier** for each device you want to control.
 Pair with a device to obtain credentials. You'll be prompted for a PIN displayed on the device or on your iOS device:
 
 ```bash
-python -m red_alert.integrations.homepod --pair AABBCCDD-1122-3344-5566-778899AABBCC
+python -m red_alert.integrations.outputs.homepod --pair AABBCCDD-1122-3344-5566-778899AABBCC
 ```
 
 The command will output credentials for your config file:
@@ -135,7 +135,7 @@ Audio can be local file paths or URLs. For local files, any format supported by 
 ### 6. Start the Monitor
 
 ```bash
-python -m red_alert.integrations.homepod --config config.json
+python -m red_alert.integrations.outputs.homepod --config config.json
 ```
 
 ## Configuration Reference
@@ -250,7 +250,7 @@ After=network.target
 Type=simple
 User=pi
 WorkingDirectory=/path/to/red-alert
-ExecStart=/usr/bin/python3 -m red_alert.integrations.homepod --config /path/to/config.json
+ExecStart=/usr/bin/python3 -m red_alert.integrations.outputs.homepod --config /path/to/config.json
 Restart=always
 RestartSec=5
 

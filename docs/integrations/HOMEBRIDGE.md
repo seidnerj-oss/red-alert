@@ -26,17 +26,17 @@ pip install aiohttp
 
 **Basic (all alerts, default port 8512):**
 ```bash
-python -m red_alert.integrations.homebridge
+python -m red_alert.integrations.outputs.homebridge
 ```
 
 **With options:**
 ```bash
-python -m red_alert.integrations.homebridge --port 8512 --interval 1
+python -m red_alert.integrations.outputs.homebridge --port 8512 --interval 1
 ```
 
 **With a config file:**
 ```bash
-python -m red_alert.integrations.homebridge --config config.json
+python -m red_alert.integrations.outputs.homebridge --config config.json
 ```
 
 **Example `config.json`:**
@@ -171,7 +171,7 @@ After=network.target
 Type=simple
 User=homebridge
 WorkingDirectory=/path/to/red-alert
-ExecStart=/usr/bin/python3 -m red_alert.integrations.homebridge --config /path/to/config.json
+ExecStart=/usr/bin/python3 -m red_alert.integrations.outputs.homebridge --config /path/to/config.json
 Restart=always
 RestartSec=5
 

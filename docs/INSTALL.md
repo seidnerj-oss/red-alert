@@ -4,12 +4,12 @@ red-alert supports multiple platforms. Choose the integration guide for your set
 
 ## Integrations
 
-- **[Home Assistant (AppDaemon)](integrations/homeassistant.md)** - Full-featured integration with binary sensors, history, GeoJSON maps, MQTT, and events
-- **[Homebridge (HomeKit)](integrations/homebridge.md)** - Lightweight HTTP server exposing alert state as HomeKit contact sensors
-- **[UniFi LED](integrations/unifi.md)** - Control RGB LEDs on UniFi access points based on alert state (white/yellow/red)
-- **[Philips Hue](integrations/hue.md)** - Control Philips Hue lights/groups based on alert state via the Hue Bridge REST API
-- **[Telegram](integrations/telegram.md)** - Real-time alert notifications via Telegram Bot API
-- **[HomePod](integrations/homepod.md)** - Play audio on Apple HomePod devices via AirPlay on alert state changes
+- **[Home Assistant (AppDaemon)](integrations/outputs/homeassistant.md)** - Full-featured integration with binary sensors, history, GeoJSON maps, MQTT, and events
+- **[Homebridge (HomeKit)](integrations/outputs/homebridge.md)** - Lightweight HTTP server exposing alert state as HomeKit contact sensors
+- **[UniFi LED](integrations/outputs/unifi.md)** - Control RGB LEDs on UniFi access points based on alert state (white/yellow/red)
+- **[Philips Hue](integrations/outputs/hue.md)** - Control Philips Hue lights/groups based on alert state via the Hue Bridge REST API
+- **[Telegram](integrations/outputs/telegram.md)** - Real-time alert notifications via Telegram Bot API
+- **[HomePod](integrations/outputs/homepod.md)** - Play audio on Apple HomePod devices via AirPlay on alert state changes
 
 ## Core Library
 

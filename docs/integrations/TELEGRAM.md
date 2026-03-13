@@ -74,7 +74,7 @@ pip install httpx
 ### 5. Start the Monitor
 
 ```bash
-python -m red_alert.integrations.telegram --config config.json
+python -m red_alert.integrations.outputs.telegram --config config.json
 ```
 
 ## Areas of Interest
@@ -124,7 +124,7 @@ After=network.target
 Type=simple
 User=pi
 WorkingDirectory=/path/to/red-alert
-ExecStart=/usr/bin/python3 -m red_alert.integrations.telegram --config /path/to/config.json
+ExecStart=/usr/bin/python3 -m red_alert.integrations.outputs.telegram --config /path/to/config.json
 Restart=always
 RestartSec=5
 
