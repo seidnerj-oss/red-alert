@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from red_alert.integrations.hue.light_controller import HueLightController, rgb_to_hue_state
+from red_alert.integrations.outputs.hue.light_controller import HueLightController, rgb_to_hue_state
 
 
 def _mock_hue_client(status_code=200):
@@ -145,3 +145,25 @@ class TestSetColor:
         assert 'http://192.168.1.50/api/key/lights/1/state' in urls
         assert 'http://192.168.1.50/api/key/lights/2/state' in urls
         assert 'http://192.168.1.50/api/key/groups/0/action' in urls
+
+
+class TestSetLightColor:
+    @pytest.mark.asyncio
+    async def test_sets_single_light(self):
+        client = _mock_hue_client()
+        controller = HueLightController('192.168.1.50', 'key', lights=[1, 2], client=client)
+
+        await controller.set_light_color('1', 255, 0, 0)
+
+        assert client.put.call_count == 1
+        assert client.put.call_args.args[0] == 'http://192.168.1.50/api/key/lights/1/state'
+
+    @pytest.mark.asyncio
+    async def test_sets_single_group(self):
+        client = _mock_hue_client()
+        controller = HueLightController('192.168.1.50', 'key', groups=[0], client=client)
+
+        await controller.set_group_color('0', 0, 255, 0)
+
+        assert client.put.call_count == 1
+        assert client.put.call_args.args[0] == 'http://192.168.1.50/api/key/groups/0/action'

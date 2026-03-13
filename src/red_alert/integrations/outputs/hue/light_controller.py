@@ -80,6 +80,20 @@ class HueLightController:
         await asyncio.gather(*tasks, return_exceptions=True)
         self._current_color = color
 
+    async def set_light_color(self, light_id: str, r: int, g: int, b: int):
+        """Set color on a single light by ID."""
+        if self._client is None:
+            self._client = httpx.AsyncClient()
+        state = rgb_to_hue_state(r, g, b)
+        await self._put(f'{self._base_url}/lights/{light_id}/state', state, f'light {light_id}')
+
+    async def set_group_color(self, group_id: str, r: int, g: int, b: int):
+        """Set color on a single group by ID."""
+        if self._client is None:
+            self._client = httpx.AsyncClient()
+        state = rgb_to_hue_state(r, g, b)
+        await self._put(f'{self._base_url}/groups/{group_id}/action', state, f'group {group_id}')
+
     async def _put(self, url: str, payload: dict, label: str):
         assert self._client is not None
         try:
