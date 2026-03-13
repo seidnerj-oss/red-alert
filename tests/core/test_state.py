@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from red_alert.core.state import ACTIVE_ALERT_CATEGORIES, ALL_CLEAR_CATEGORY, DEFAULT_HOLD_SECONDS, AlertState, AlertStateTracker
 
@@ -375,3 +375,92 @@ class TestHold:
             mock_time.monotonic.return_value = tracker._state_entered_time + 61.0
             result = tracker.update(None)
         assert result == AlertState.ROUTINE
+
+
+class TestLogging:
+    """Verify that AlertStateTracker emits structured log messages via its logger callback."""
+
+    def _make_tracker(self, **kwargs):
+        mock_logger = MagicMock()
+        tracker = AlertStateTracker(logger=mock_logger, hold_seconds={'alert': 0, 'pre_alert': 0, 'all_clear': 0}, **kwargs)
+        return tracker, mock_logger
+
+    def test_no_logger_does_not_crash(self):
+        tracker = AlertStateTracker()
+        tracker.update({'cat': '1', 'data': ['City A']})
+        tracker.update(None)
+
+    def test_logs_transition_to_alert(self):
+        tracker, log = self._make_tracker()
+        tracker.update({'cat': '1', 'data': ['City A'], 'title': 'Rockets'})
+        log.assert_called()
+        msgs = [call.args[0] for call in log.call_args_list]
+        assert any('routine -> alert' in m for m in msgs)
+        assert any('cat=1' in m and 'Rockets' in m for m in msgs)
+
+    def test_logs_transition_to_routine(self):
+        tracker, log = self._make_tracker()
+        tracker.update({'cat': '1', 'data': ['City A']})
+        log.reset_mock()
+        tracker.update(None)
+        log.assert_called()
+        msgs = [call.args[0] for call in log.call_args_list]
+        assert any('alert -> routine' in m for m in msgs)
+
+    def test_logs_transition_to_pre_alert(self):
+        tracker, log = self._make_tracker()
+        tracker.update({'cat': '14', 'data': ['City A'], 'title': 'Warning'})
+        msgs = [call.args[0] for call in log.call_args_list]
+        assert any('routine -> pre_alert' in m for m in msgs)
+
+    def test_logs_transition_to_all_clear(self):
+        tracker, log = self._make_tracker()
+        tracker.update({'cat': '13', 'data': ['City A']})
+        msgs = [call.args[0] for call in log.call_args_list]
+        assert any('routine -> all_clear' in m for m in msgs)
+
+    def test_no_log_when_state_unchanged(self):
+        tracker, log = self._make_tracker()
+        tracker.update(None)  # ROUTINE -> ROUTINE
+        log.assert_not_called()
+
+    def test_logs_area_match(self):
+        tracker, log = self._make_tracker(areas_of_interest=['City A'])
+        tracker.update({'cat': '1', 'data': ['City A', 'City B']})
+        msgs = [call.args[0] for call in log.call_args_list]
+        assert any('Area match' in m and 'City A' in m for m in msgs)
+
+    def test_logs_area_filtered(self):
+        tracker, log = self._make_tracker(areas_of_interest=['City X'])
+        tracker.update({'cat': '1', 'data': ['City A', 'City B']})
+        msgs = [call.args[0] for call in log.call_args_list]
+        assert any('Alert filtered' in m for m in msgs)
+
+    def test_logs_hold_expiry(self):
+        tracker = AlertStateTracker(logger=MagicMock(), hold_seconds={'alert': 30, 'pre_alert': 0, 'all_clear': 0})
+        mock_logger = tracker._log
+        tracker.update({'cat': '1', 'data': ['City A']})
+        mock_logger.reset_mock()
+
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = tracker._state_entered_time + 31.0
+            tracker.update(None)
+
+        msgs = [call.args[0] for call in mock_logger.call_args_list]
+        assert any('Hold expired' in m and 'alert' in m for m in msgs)
+
+    def test_city_preview_truncated(self):
+        tracker, log = self._make_tracker()
+        cities = [f'City {i}' for i in range(10)]
+        tracker.update({'cat': '1', 'data': cities, 'title': 'Rockets'})
+        msgs = [call.args[0] for call in log.call_args_list]
+        transition_msg = next(m for m in msgs if 'routine -> alert' in m)
+        assert '+5 more' in transition_msg
+
+    def test_alert_to_all_clear_logs_transition(self):
+        tracker, log = self._make_tracker()
+        tracker.update({'cat': '1', 'data': ['City A']})
+        log.reset_mock()
+        tracker.update({'cat': '13', 'data': ['City A']})
+        msgs = [call.args[0] for call in log.call_args_list]
+        assert any('alert -> all_clear' in m for m in msgs)

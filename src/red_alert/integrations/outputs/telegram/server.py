@@ -145,7 +145,7 @@ async def run_monitor(config: dict):
 
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
     api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
-    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'), hold_seconds=cfg.get('hold_seconds'))
+    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'), hold_seconds=cfg.get('hold_seconds'), logger=_log_adapter)
     bot = TelegramBot(token=cfg['bot_token'], chat_id=cfg['chat_id'])
 
     monitor = TelegramAlertMonitor(api_client, bot, state_tracker)

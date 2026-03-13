@@ -55,7 +55,13 @@ class HomeFrontCommandApiClient:
 
             try:
                 text = check_bom(text)
-                return json.loads(text)
+                data = json.loads(text)
+                if data and isinstance(data, dict):
+                    cat = data.get('cat', '?')
+                    title = data.get('title', '')
+                    cities = data.get('data', [])
+                    self._log(f"Alert received: cat={cat}, title='{title}', {len(cities)} cities")
+                return data
             except json.JSONDecodeError as e:
                 log_text_preview = text[:1000].replace('\n', '\\n').replace('\r', '\\r')
                 if 'Expecting value: line 1 column 1 (char 0)' not in str(e):

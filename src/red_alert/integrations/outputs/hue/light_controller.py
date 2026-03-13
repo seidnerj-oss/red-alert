@@ -101,7 +101,7 @@ class HueLightController:
             if resp.status_code != 200:
                 logger.error('Hue API error for %s: %s %s', label, resp.status_code, resp.text)
             else:
-                logger.debug('Set %s', label)
+                logger.info('Set %s: %s', label, payload)
         except OSError as e:
             logger.error('Connection error setting %s: %s', label, e)
 

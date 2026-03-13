@@ -10,6 +10,7 @@ Four states:
 
 import enum
 import time
+from collections.abc import Callable
 
 from red_alert.core.utils import standardize_name
 
@@ -51,6 +52,7 @@ class AlertStateTracker:
         self,
         areas_of_interest: list[str] | None = None,
         hold_seconds: dict[str, float] | None = None,
+        logger: Callable | None = None,
     ):
         """
         Args:
@@ -59,6 +61,7 @@ class AlertStateTracker:
                 ('alert', 'pre_alert', 'all_clear'). When the API goes empty, the
                 current state is held for this duration before returning to ROUTINE.
                 Default: {'all_clear': 60}. ROUTINE never has a hold.
+            logger: Optional logging callback with signature ``logger(msg, level='INFO')``.
         """
         self._areas = [standardize_name(a) for a in (areas_of_interest or [])]
         merged = {**DEFAULT_HOLD_SECONDS, **(hold_seconds or {})}
@@ -70,6 +73,12 @@ class AlertStateTracker:
         self._state_entered_time: float | None = None
         self.state = AlertState.ROUTINE
         self.alert_data: dict | None = None
+        self._log = logger
+
+    def _emit(self, msg: str, level: str = 'INFO') -> None:
+        """Emit a log message via the optional logger callback."""
+        if self._log:
+            self._log(msg, level=level)
 
     def update(self, data: dict | None) -> AlertState:
         """Classify alert data and return the new state.
@@ -80,23 +89,36 @@ class AlertStateTracker:
         Returns:
             The current AlertState after classification.
         """
-        if not data or not isinstance(data, dict):
-            return self._handle_empty()
+        old_state = self.state
 
+        if not data or not isinstance(data, dict):
+            self._handle_empty()
+        else:
+            self._classify(data)
+
+        if self.state != old_state:
+            self._log_transition(old_state, data)
+
+        return self.state
+
+    def _classify(self, data: dict) -> None:
+        """Classify non-empty alert data and update internal state."""
         cat = self._parse_category(data.get('cat'))
 
         # All-clear overrides everything (regardless of areas of interest)
         if cat == ALL_CLEAR_CATEGORY:
             self._set_state(AlertState.ALL_CLEAR, data)
-            return self.state
+            return
 
         cities = data.get('data', [])
         if not cities:
-            return self._handle_empty()
+            self._handle_empty()
+            return
 
         # Check if alert is relevant to our areas of interest
         if not self._matches_areas(cities):
-            return self._handle_empty()
+            self._handle_empty()
+            return
 
         is_pre_alert = cat == PRE_ALERT_CATEGORY or self._has_pre_alert_title(data.get('title', ''))
 
@@ -110,7 +132,20 @@ class AlertStateTracker:
             self.alert_data = None
             self._state_entered_time = None
 
-        return self.state
+    def _log_transition(self, old_state: AlertState, data: dict | None) -> None:
+        """Log a state transition with relevant context."""
+        if self.state == AlertState.ROUTINE:
+            self._emit(f'State: {old_state.value} -> routine')
+        elif data and isinstance(data, dict):
+            cat = data.get('cat', '?')
+            title = data.get('title', '')
+            cities = data.get('data', [])
+            city_preview = ', '.join(str(c) for c in cities[:5])
+            if len(cities) > 5:
+                city_preview += f' ... (+{len(cities) - 5} more)'
+            self._emit(f"State: {old_state.value} -> {self.state.value} (cat={cat}, title='{title}', cities=[{city_preview}])")
+        else:
+            self._emit(f'State: {old_state.value} -> {self.state.value}')
 
     def _set_state(self, state: AlertState, data: dict):
         """Set a non-ROUTINE state and record/reset the hold timer."""
@@ -118,26 +153,32 @@ class AlertStateTracker:
         self.alert_data = data
         self._state_entered_time = time.monotonic()
 
-    def _handle_empty(self) -> AlertState:
+    def _handle_empty(self) -> None:
         """Handle empty/None API response, respecting per-state hold durations."""
         if self.state != AlertState.ROUTINE and self._state_entered_time:
             hold = self._hold.get(self.state)
             if hold:
                 elapsed = time.monotonic() - self._state_entered_time
                 if elapsed < hold:
-                    return self.state
+                    return
+                self._emit(f'Hold expired for {self.state.value} after {elapsed:.1f}s')
 
         self.state = AlertState.ROUTINE
         self.alert_data = None
         self._state_entered_time = None
-        return self.state
 
     def _matches_areas(self, cities: list) -> bool:
         """Check if any alert city/area matches configured areas of interest."""
         if not self._areas:
             return True  # No filter = all areas
         alert_names = [standardize_name(c) for c in cities]
-        return any(area in alert_names for area in self._areas)
+        matched = any(area in alert_names for area in self._areas)
+        if matched:
+            matching = [c for c, n in zip(cities, alert_names) if n in self._areas]
+            self._emit(f'Area match: {matching}')
+        else:
+            self._emit(f'Alert filtered: cities {cities[:10]} did not match configured areas')
+        return matched
 
     @staticmethod
     def _has_pre_alert_title(title: str) -> bool:

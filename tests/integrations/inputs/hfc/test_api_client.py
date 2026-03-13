@@ -131,6 +131,39 @@ class TestGetAlertHistory:
         assert result is None
 
 
+class TestAlertReceivedLogging:
+    @pytest.mark.asyncio
+    async def test_logs_alert_summary_on_dict_response(self, api_urls, mock_logger):
+        alert_data = {'cat': '1', 'title': 'Rocket fire', 'data': ['City A', 'City B']}
+        resp = _make_response(json.dumps(alert_data).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_live_alerts()
+        msgs = [call.args[0] for call in mock_logger.call_args_list]
+        assert any('Alert received' in m and 'cat=1' in m and '2 cities' in m for m in msgs)
+
+    @pytest.mark.asyncio
+    async def test_no_alert_log_on_empty_response(self, api_urls, mock_logger):
+        resp = _make_response(b'')
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_live_alerts()
+        msgs = [call.args[0] for call in mock_logger.call_args_list] if mock_logger.call_args_list else []
+        assert not any('Alert received' in m for m in msgs)
+
+    @pytest.mark.asyncio
+    async def test_no_alert_log_on_list_response(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps([1, 2, 3]).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_live_alerts()
+        msgs = [call.args[0] for call in mock_logger.call_args_list] if mock_logger.call_args_list else []
+        assert not any('Alert received' in m for m in msgs)
+
+
 class TestDownloadFile:
     @pytest.mark.asyncio
     async def test_returns_text_on_success(self, api_urls, mock_logger):

@@ -297,7 +297,7 @@ class UnifiLedController:
                 color=color_hex if device.supports_led_ring else None,
             )
             await self._send_request(request)
-            logger.debug('LED set on %s: on=%s, color=%s, brightness=%d', mac, on, color_hex, brightness)
+            logger.info('LED set on %s: on=%s, color=%s, brightness=%d', mac, on, color_hex, brightness)
         except Exception as e:
             logger.error('Error setting LED on %s: %s', mac, e)
 
@@ -319,7 +319,7 @@ class UnifiLedController:
         try:
             request = self._DeviceLocateRequest.create(mac, locate=enable)
             await self._send_request(request)
-            logger.debug('Locate %s on %s', 'enabled' if enable else 'disabled', mac)
+            logger.info('Locate %s on %s', 'enabled' if enable else 'disabled', mac)
         except Exception as e:
             logger.error('Error setting locate on %s: %s', mac, e)
 
