@@ -3,7 +3,7 @@
 
 > Real-time Israeli Home Front Command alert monitoring library with multiple platform integrations
 
-red-alert is a Python library that connects to the official Israeli Home Front Command (Pikud Ha-Oref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon), **Homebridge** (HTTP contact sensor), **UniFi** (AP LED color control), **Philips Hue** (light color control), and **Telegram** (alert notifications).
+red-alert is a Python library that connects to the official Israeli Home Front Command (Pikud Ha-Oref) API to fetch real-time alerts. The core library is framework-agnostic and can be integrated into any platform. Currently supported integrations: **Home Assistant** (AppDaemon), **Homebridge** (HTTP contact sensor), **UniFi** (AP LED color control), **Philips Hue** (light color control), **Telegram** (alert notifications), and **HomePod** (AirPlay audio alerts).
 
 The library monitors all alert types issued by the Home Front Command, including:
 - Missile and rocket fire
@@ -54,6 +54,10 @@ src/red_alert/
       bot.py               # Telegram Bot API client (httpx)
       server.py            # TelegramAlertMonitor + poll loop
       __main__.py          # CLI entry point
+    homepod/               # Apple HomePod AirPlay audio integration
+      audio_controller.py  # HomepodController - pyatv AirPlay streaming
+      server.py            # HomepodAlertMonitor + poll loop
+      __main__.py          # CLI entry point (with --scan, --pair)
 ```
 
 The **core** package has zero Home Assistant dependencies and can be used by any Python application. Integrations import from core and adapt it to their specific platform.
@@ -100,6 +104,15 @@ See [Hue setup guide](docs/integrations/HUE.md) for full instructions.
 *   **Zero extra dependencies** - uses httpx (already a core dependency).
 
 See [Telegram setup guide](docs/integrations/TELEGRAM.md) for full instructions.
+
+### HomePod Integration
+
+*   **Plays** audio on Apple HomePod devices via AirPlay when alert state changes.
+*   **Per-device configuration** - each HomePod can have different audio, volume, and loop settings per state.
+*   **Four states**: configurable audio for alert, pre-alert, all-clear, and routine (stop).
+*   **Includes** `--scan` and `--pair` CLI commands for device discovery and credential setup.
+
+See [HomePod setup guide](docs/integrations/HOMEPOD.md) for full instructions.
 
 ### Home Assistant Integration
 
@@ -185,6 +198,7 @@ Upon restarting the AppDaemon add-on, Home Assistant will create several entitie
 - [UniFi LED Integration](docs/integrations/UNIFI.md)
 - [Philips Hue Integration](docs/integrations/HUE.md)
 - [Telegram Integration](docs/integrations/TELEGRAM.md)
+- [HomePod Integration](docs/integrations/HOMEPOD.md)
 - [City Names Reference](docs/CITIES.md)
 
 ---
