@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from red_alert.core.api_client import HomeFrontCommandApiClient
+from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
 
 
 @pytest.fixture

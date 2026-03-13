@@ -26,7 +26,6 @@ uv run pre-commit install
 ```
 src/red_alert/
   core/              # Pure Python - ZERO framework dependencies
-    api_client.py    # HomeFrontCommandApiClient (httpx)
     alert_processor.py
     city_data.py     # CityDataManager (ICBS geographic data)
     constants.py
@@ -36,11 +35,13 @@ src/red_alert/
     utils.py         # standardize_name, check_bom, parse_datetime_str
   locale/            # gettext .po translation files (en, he)
   integrations/
-    sources/             # Alert producers (input data)
+    inputs/              # Alert sources (input data)
+      hfc/               # Home Front Command website API
+        api_client.py    # HomeFrontCommandApiClient (httpx)
       cbs/               # Cell Broadcast System via QMI modem
         parser.py        # CbsPageParser, CbsMessageAssembler
         server.py        # CbsAlertMonitor + qmicli subprocess
-        __main__.py      # python -m red_alert.integrations.sources.cbs
+        __main__.py      # python -m red_alert.integrations.inputs.cbs
     outputs/             # Alert consumers (output destinations)
       homeassistant/
         app.py           # RedAlert(Hass) - AppDaemon class

@@ -26,7 +26,6 @@ red-alert is designed as a **multi-consumer library**:
 ```
 src/red_alert/
   core/                    # Framework-agnostic core (no HA dependency)
-    api_client.py          # HomeFrontCommandApiClient
     alert_processor.py     # Alert data processing
     city_data.py           # CityDataManager (ICBS geographic data)
     constants.py           # Icons, emojis, defaults
@@ -35,7 +34,9 @@ src/red_alert/
     state.py               # AlertState enum + AlertStateTracker (4-state model)
     utils.py               # Shared utilities
   integrations/
-    sources/               # Alert producers (input data)
+    inputs/                # Alert sources (input data)
+      hfc/                 # Home Front Command website API
+        api_client.py      # HomeFrontCommandApiClient (httpx)
       cbs/                 # Cell Broadcast System via QMI modem
         parser.py          # CBS page/message parsing
         server.py          # CbsAlertMonitor + qmicli subprocess
@@ -66,7 +67,7 @@ src/red_alert/
         __main__.py        # CLI entry point (with --scan, --pair)
 ```
 
-The **core** package has zero Home Assistant dependencies and can be used by any Python application. Integrations import from core and adapt it to their specific platform.
+The **core** package has zero framework dependencies and can be used by any Python application. Integrations are divided into **inputs** (alert sources) and **outputs** (alert consumers).
 
 ---
 
@@ -82,7 +83,7 @@ The **core** package has zero Home Assistant dependencies and can be used by any
 *   **Exposes** `/contact` (all alerts), `/city` (filtered by configured cities), and `/state` (routine/pre_alert/alert) endpoints.
 *   **Works** with `homebridge-http-contact-sensor` to create HomeKit contact sensor accessories.
 
-See [Homebridge setup guide](docs/integrations/HOMEBRIDGE.md) for full instructions.
+See [Homebridge setup guide](docs/integrations/outputs/HOMEBRIDGE.md) for full instructions.
 
 ### UniFi LED Integration
 
@@ -91,7 +92,7 @@ See [Homebridge setup guide](docs/integrations/HOMEBRIDGE.md) for full instructi
 *   **Supports** area-of-interest filtering, TOTP 2FA, per-state brightness/on/off, and blink (locate) mode.
 *   **Connects** via the UniFi Network controller REST API using [aiounifi](https://github.com/Kane610/aiounifi).
 
-See [UniFi setup guide](docs/integrations/UNIFI.md) for full instructions.
+See [UniFi setup guide](docs/integrations/outputs/UNIFI.md) for full instructions.
 
 ### Philips Hue Integration
 
@@ -100,7 +101,7 @@ See [UniFi setup guide](docs/integrations/UNIFI.md) for full instructions.
 *   **Supports** both individual lights and groups, with area-of-interest filtering.
 *   **Includes** a `--register` CLI command for easy Hue Bridge API key setup.
 
-See [Hue setup guide](docs/integrations/HUE.md) for full instructions.
+See [Hue setup guide](docs/integrations/outputs/HUE.md) for full instructions.
 
 ### Telegram Integration
 
@@ -109,7 +110,7 @@ See [Hue setup guide](docs/integrations/HUE.md) for full instructions.
 *   **Supports** area-of-interest filtering, configurable cooldown, and all alert types with category-specific emojis.
 *   **Zero extra dependencies** - uses httpx (already a core dependency).
 
-See [Telegram setup guide](docs/integrations/TELEGRAM.md) for full instructions.
+See [Telegram setup guide](docs/integrations/outputs/TELEGRAM.md) for full instructions.
 
 ### HomePod Integration
 
@@ -118,7 +119,7 @@ See [Telegram setup guide](docs/integrations/TELEGRAM.md) for full instructions.
 *   **Four states**: configurable audio for alert, pre-alert, all-clear, and routine (stop).
 *   **Includes** `--scan` and `--pair` CLI commands for device discovery and credential setup.
 
-See [HomePod setup guide](docs/integrations/HOMEPOD.md) for full instructions.
+See [HomePod setup guide](docs/integrations/outputs/HOMEPOD.md) for full instructions.
 
 ### Home Assistant Integration
 
@@ -199,12 +200,16 @@ Upon restarting the AppDaemon add-on, Home Assistant will create several entitie
 ## Documentation
 
 - [Installation Overview](docs/INSTALL.md)
-- [Home Assistant Integration](docs/integrations/HOMEASSISTANT.md)
-- [Homebridge Integration](docs/integrations/HOMEBRIDGE.md)
-- [UniFi LED Integration](docs/integrations/UNIFI.md)
-- [Philips Hue Integration](docs/integrations/HUE.md)
-- [Telegram Integration](docs/integrations/TELEGRAM.md)
-- [HomePod Integration](docs/integrations/HOMEPOD.md)
+- **Input Integrations:**
+  - [Cell Broadcast System (CBS)](docs/integrations/inputs/CBS.md)
+  - [UniFi LTE Pro SSH Setup](docs/integrations/inputs/UNIFI-LTE-PRO-SSH.md)
+- **Output Integrations:**
+  - [Home Assistant](docs/integrations/outputs/HOMEASSISTANT.md)
+  - [Homebridge](docs/integrations/outputs/HOMEBRIDGE.md)
+  - [UniFi LED](docs/integrations/outputs/UNIFI.md)
+  - [Philips Hue](docs/integrations/outputs/HUE.md)
+  - [Telegram](docs/integrations/outputs/TELEGRAM.md)
+  - [HomePod](docs/integrations/outputs/HOMEPOD.md)
 - [City Names Reference](docs/CITIES.md)
 
 ---

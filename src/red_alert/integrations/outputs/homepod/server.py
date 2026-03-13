@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from red_alert.core.api_client import HomeFrontCommandApiClient
+from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
 from red_alert.core.state import AlertState, AlertStateTracker
 from red_alert.integrations.outputs.homepod.audio_controller import HomepodController
 

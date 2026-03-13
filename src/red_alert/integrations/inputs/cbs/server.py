@@ -5,14 +5,14 @@ Spawns qmicli --wms-monitor as a subprocess, parses incoming CBS pages,
 reassembles multi-page messages, and maps CBS message IDs to AlertState.
 
 Usage:
-    python -m red_alert.integrations.sources.cbs --config config.json
+    python -m red_alert.integrations.inputs.cbs --config config.json
 """
 
 import asyncio
 import logging
 
 from red_alert.core.state import AlertState
-from red_alert.integrations.sources.cbs.parser import CbsMessage, CbsMessageAssembler, CbsPageParser
+from red_alert.integrations.inputs.cbs.parser import CbsMessage, CbsMessageAssembler, CbsPageParser
 
 logger = logging.getLogger('red_alert.cbs')
 

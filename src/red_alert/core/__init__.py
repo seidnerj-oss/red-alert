@@ -1,5 +1,4 @@
 from red_alert.core.alert_processor import AlertProcessor
-from red_alert.core.api_client import HomeFrontCommandApiClient
 from red_alert.core.city_data import CityDataManager
 from red_alert.core.constants import CLEAN_NAME_REGEX, DAY_NAMES, DEFAULT_UNKNOWN_AREA, ICONS_AND_EMOJIS
 from red_alert.core.history import HistoryManager
@@ -15,7 +14,6 @@ __all__ = [
     'DAY_NAMES',
     'DEFAULT_UNKNOWN_AREA',
     'HistoryManager',
-    'HomeFrontCommandApiClient',
     'ICONS_AND_EMOJIS',
     'check_bom',
     'parse_datetime_str',

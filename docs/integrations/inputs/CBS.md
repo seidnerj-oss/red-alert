@@ -123,7 +123,7 @@ On a machine that can SSH to the device (or on the device itself if Python is av
 ```
 
 ```bash
-python -m red_alert.integrations.sources.cbs --config cbs-config.json
+python -m red_alert.integrations.inputs.cbs --config cbs-config.json
 ```
 
 | Parameter | Description | Default |

@@ -1,4 +1,4 @@
-"""Entry point: python -m red_alert.integrations.sources.cbs"""
+"""Entry point: python -m red_alert.integrations.inputs.cbs"""
 
 import argparse
 import asyncio
@@ -6,7 +6,7 @@ import json
 import logging
 import sys
 
-from red_alert.integrations.sources.cbs.server import run_monitor
+from red_alert.integrations.inputs.cbs.server import run_monitor
 
 
 def main():

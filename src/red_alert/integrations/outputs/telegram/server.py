@@ -18,7 +18,7 @@ import logging
 
 import httpx
 
-from red_alert.core.api_client import HomeFrontCommandApiClient
+from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
 from red_alert.core.constants import ICONS_AND_EMOJIS
 from red_alert.core.state import AlertState, AlertStateTracker
 from red_alert.integrations.outputs.telegram.bot import TelegramBot, escape_html

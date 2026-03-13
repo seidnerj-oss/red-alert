@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from red_alert.core.state import AlertState
-from red_alert.integrations.sources.cbs.parser import CbsMessage
-from red_alert.integrations.sources.cbs.server import DEFAULT_MESSAGE_ID_MAP, CbsAlertMonitor
+from red_alert.integrations.inputs.cbs.parser import CbsMessage
+from red_alert.integrations.inputs.cbs.server import DEFAULT_MESSAGE_ID_MAP, CbsAlertMonitor
 
 FIXTURES_DIR = Path(__file__).parent / 'fixtures'
 

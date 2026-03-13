@@ -45,7 +45,7 @@ from appdaemon.plugins.hass.hassapi import Hass
 from datetime import datetime
 
 from red_alert.core.alert_processor import AlertProcessor
-from red_alert.core.api_client import HomeFrontCommandApiClient
+from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
 from red_alert.core.constants import DAY_NAMES, DEFAULT_UNKNOWN_AREA, ICONS_AND_EMOJIS
 from red_alert.core.state import ALL_CLEAR_CATEGORY, PRE_ALERT_CATEGORY, PRE_ALERT_TITLE_PHRASES
 from red_alert.core.history import HistoryManager

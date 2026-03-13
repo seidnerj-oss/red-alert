@@ -20,7 +20,7 @@ import logging
 import httpx
 from aiohttp import web
 
-from red_alert.core.api_client import HomeFrontCommandApiClient
+from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
 from red_alert.core.state import AlertState, AlertStateTracker
 
 logger = logging.getLogger('red_alert.homebridge')

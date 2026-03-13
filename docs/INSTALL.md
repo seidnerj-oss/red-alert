@@ -2,14 +2,19 @@
 
 red-alert supports multiple platforms. Choose the integration guide for your setup:
 
-## Integrations
+## Input Integrations (Alert Sources)
 
-- **[Home Assistant (AppDaemon)](integrations/outputs/homeassistant.md)** - Full-featured integration with binary sensors, history, GeoJSON maps, MQTT, and events
-- **[Homebridge (HomeKit)](integrations/outputs/homebridge.md)** - Lightweight HTTP server exposing alert state as HomeKit contact sensors
-- **[UniFi LED](integrations/outputs/unifi.md)** - Control RGB LEDs on UniFi access points based on alert state (white/yellow/red)
-- **[Philips Hue](integrations/outputs/hue.md)** - Control Philips Hue lights/groups based on alert state via the Hue Bridge REST API
-- **[Telegram](integrations/outputs/telegram.md)** - Real-time alert notifications via Telegram Bot API
-- **[HomePod](integrations/outputs/homepod.md)** - Play audio on Apple HomePod devices via AirPlay on alert state changes
+- **[Cell Broadcast System (CBS)](integrations/inputs/CBS.md)** - Monitor alerts via QMI modem Cell Broadcast messages
+- **Home Front Command API** - Built-in HTTP polling of the official oref.org.il alert API (used by all output integrations)
+
+## Output Integrations (Alert Consumers)
+
+- **[Home Assistant (AppDaemon)](integrations/outputs/HOMEASSISTANT.md)** - Full-featured integration with binary sensors, history, GeoJSON maps, MQTT, and events
+- **[Homebridge (HomeKit)](integrations/outputs/HOMEBRIDGE.md)** - Lightweight HTTP server exposing alert state as HomeKit contact sensors
+- **[UniFi LED](integrations/outputs/UNIFI.md)** - Control RGB LEDs on UniFi access points based on alert state (white/yellow/red)
+- **[Philips Hue](integrations/outputs/HUE.md)** - Control Philips Hue lights/groups based on alert state via the Hue Bridge REST API
+- **[Telegram](integrations/outputs/TELEGRAM.md)** - Real-time alert notifications via Telegram Bot API
+- **[HomePod](integrations/outputs/HOMEPOD.md)** - Play audio on Apple HomePod devices via AirPlay on alert state changes
 
 ## Core Library
 
@@ -22,7 +27,7 @@ pip install httpx
 ```python
 import asyncio
 import httpx
-from red_alert.core.api_client import HomeFrontCommandApiClient
+from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
 
 async def main():
     async with httpx.AsyncClient(headers={

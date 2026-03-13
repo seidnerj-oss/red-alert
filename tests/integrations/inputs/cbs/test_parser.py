@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from red_alert.integrations.sources.cbs.parser import CbsMessageAssembler, CbsPage, CbsPageParser, decode_ucs2_hex
+from red_alert.integrations.inputs.cbs.parser import CbsMessageAssembler, CbsPage, CbsPageParser, decode_ucs2_hex
 
 FIXTURES_DIR = Path(__file__).parent / 'fixtures'
 
