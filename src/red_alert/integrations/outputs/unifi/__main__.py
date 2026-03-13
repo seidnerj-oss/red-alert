@@ -28,6 +28,7 @@ def main():
         format='%(asctime)s %(name)s %(levelname)s %(message)s',
     )
     logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('aiounifi.interfaces.connectivity').setLevel(logging.ERROR)
 
     asyncio.run(run_monitor(config))
 
