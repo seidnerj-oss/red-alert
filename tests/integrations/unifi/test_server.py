@@ -6,6 +6,7 @@ from red_alert.core.state import AlertState
 from red_alert.integrations.unifi.server import (
     NAMED_COLORS,
     UnifiAlertMonitor,
+    _build_device_led_states,
     _build_led_states,
     _resolve_color,
     _resolve_led_state,
@@ -200,3 +201,95 @@ class TestUnifiAlertMonitor:
         await monitor.poll()
         led.locate.assert_called_with(enable=False)
         assert led.locate.call_count == 2
+
+
+class TestBuildDeviceLedStates:
+    def test_no_overrides_returns_base(self):
+        base = _build_led_states({})
+        result = _build_device_led_states(base, ['aa:bb:cc:dd:ee:ff'], {})
+        assert result['aa:bb:cc:dd:ee:ff'] is base
+
+    def test_override_brightness_for_one_device(self):
+        base = _build_led_states({})
+        overrides = {'aa:bb:cc:dd:ee:ff': {'led_states': {'routine': {'brightness': 5}}}}
+        result = _build_device_led_states(base, ['aa:bb:cc:dd:ee:ff', '11:22:33:44:55:66'], overrides)
+
+        assert result['aa:bb:cc:dd:ee:ff'][AlertState.ROUTINE]['brightness'] == 5
+        assert result['aa:bb:cc:dd:ee:ff'][AlertState.ALERT]['brightness'] == 100
+        assert result['11:22:33:44:55:66'] is base
+
+    def test_override_color(self):
+        base = _build_led_states({})
+        overrides = {'aa:bb:cc:dd:ee:ff': {'led_states': {'alert': {'color': 'blue'}}}}
+        result = _build_device_led_states(base, ['aa:bb:cc:dd:ee:ff'], overrides)
+
+        assert result['aa:bb:cc:dd:ee:ff'][AlertState.ALERT]['color'] == (0, 0, 255)
+        assert result['aa:bb:cc:dd:ee:ff'][AlertState.ROUTINE]['color'] == (255, 255, 255)
+
+    def test_override_multiple_states(self):
+        base = _build_led_states({})
+        overrides = {
+            'aa:bb:cc:dd:ee:ff': {
+                'led_states': {
+                    'routine': {'brightness': 5},
+                    'pre_alert': {'brightness': 50},
+                }
+            }
+        }
+        result = _build_device_led_states(base, ['aa:bb:cc:dd:ee:ff'], overrides)
+
+        assert result['aa:bb:cc:dd:ee:ff'][AlertState.ROUTINE]['brightness'] == 5
+        assert result['aa:bb:cc:dd:ee:ff'][AlertState.PRE_ALERT]['brightness'] == 50
+        assert result['aa:bb:cc:dd:ee:ff'][AlertState.ALERT]['brightness'] == 100
+
+    def test_mac_case_insensitive(self):
+        base = _build_led_states({})
+        overrides = {'AA:BB:CC:DD:EE:FF': {'led_states': {'routine': {'brightness': 10}}}}
+        result = _build_device_led_states(base, ['aa:bb:cc:dd:ee:ff'], overrides)
+
+        assert result['aa:bb:cc:dd:ee:ff'][AlertState.ROUTINE]['brightness'] == 10
+
+
+class TestUnifiAlertMonitorPerDevice:
+    def _make_monitor_with_overrides(self, device_macs, device_overrides):
+        base_states = _build_led_states({})
+        device_led_states = _build_device_led_states(base_states, device_macs, device_overrides)
+
+        api_client = AsyncMock()
+        led_controller = AsyncMock()
+        led_controller._device_macs = [m.lower() for m in device_macs]
+        state_tracker = AsyncMock()
+        monitor = UnifiAlertMonitor(api_client, led_controller, state_tracker, base_states, device_led_states)
+        return monitor, api_client, led_controller, state_tracker
+
+    @pytest.mark.asyncio
+    async def test_per_device_routine_brightness(self):
+        macs = ['aa:bb:cc:dd:ee:ff', '11:22:33:44:55:66']
+        overrides = {'11:22:33:44:55:66': {'led_states': {'routine': {'brightness': 5}}}}
+        monitor, api_client, led, state_tracker = self._make_monitor_with_overrides(macs, overrides)
+
+        api_client.get_live_alerts = AsyncMock(return_value={'data': []})
+        state_tracker.update = lambda data: AlertState.ROUTINE
+        await monitor.poll()
+
+        assert led.set_device_led.call_count == 2
+        calls = {call.args[0]: call for call in led.set_device_led.call_args_list}
+        assert calls['aa:bb:cc:dd:ee:ff'].kwargs['brightness'] == 100
+        assert calls['11:22:33:44:55:66'].kwargs['brightness'] == 5
+
+    @pytest.mark.asyncio
+    async def test_per_device_alert_same_for_all(self):
+        macs = ['aa:bb:cc:dd:ee:ff', '11:22:33:44:55:66']
+        overrides = {'11:22:33:44:55:66': {'led_states': {'routine': {'brightness': 5}}}}
+        monitor, api_client, led, state_tracker = self._make_monitor_with_overrides(macs, overrides)
+
+        api_client.get_live_alerts = AsyncMock(return_value={'data': []})
+        state_tracker.update = lambda data: AlertState.ALERT
+        await monitor.poll()
+
+        assert led.set_device_led.call_count == 2
+        calls = {call.args[0]: call for call in led.set_device_led.call_args_list}
+        assert calls['aa:bb:cc:dd:ee:ff'].kwargs['brightness'] == 100
+        assert calls['11:22:33:44:55:66'].kwargs['brightness'] == 100
+        assert calls['aa:bb:cc:dd:ee:ff'].kwargs['color_hex'] == '#FF0000'
+        assert calls['11:22:33:44:55:66'].kwargs['color_hex'] == '#FF0000'

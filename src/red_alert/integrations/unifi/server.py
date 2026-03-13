@@ -74,6 +74,7 @@ DEFAULT_CONFIG: dict = {
     'site': 'default',
     'device_macs': [],
     'led_states': {},
+    'device_overrides': {},
     'totp_secret': None,
     'backend': 'aiounifi',
 }
@@ -107,6 +108,52 @@ def _build_led_states(user_cfg: dict) -> dict[AlertState, dict]:
     return result
 
 
+def _build_device_led_states(
+    base_states: dict[AlertState, dict],
+    device_macs: list[str],
+    device_overrides: dict,
+) -> dict[str, dict[AlertState, dict]]:
+    """Build per-device LED states by merging device overrides onto the base states.
+
+    Returns a dict keyed by MAC address, each value an AlertState-keyed dict.
+    Devices without overrides get the base states as-is.
+    """
+    result = {}
+    for mac in device_macs:
+        mac_lower = mac.lower()
+        # Look up overrides by original MAC, lowercased MAC, or lowercased override keys
+        override_cfg = device_overrides.get(mac, device_overrides.get(mac_lower, {}))
+        if not override_cfg:
+            for key, val in device_overrides.items():
+                if key.lower() == mac_lower:
+                    override_cfg = val
+                    break
+        override_led = override_cfg.get('led_states', override_cfg) if isinstance(override_cfg, dict) else {}
+
+        if not override_led:
+            result[mac_lower] = base_states
+            continue
+
+        device_states = {}
+        for key, alert_state in STATE_KEY_MAP.items():
+            base = base_states[alert_state]
+            per_device = override_led.get(key, {})
+            if per_device:
+                merged = {**base, 'color': base['color']}
+                for field in ('on', 'brightness', 'blink'):
+                    if field in per_device:
+                        merged[field] = per_device[field]
+                if 'color' in per_device:
+                    merged['color'] = _resolve_color(per_device['color'])
+                merged['brightness'] = max(0, min(100, merged['brightness']))
+                device_states[alert_state] = merged
+            else:
+                device_states[alert_state] = base
+        result[mac_lower] = device_states
+
+    return result
+
+
 def _log_adapter(msg, level='INFO', **kwargs):
     """Adapt Python logging to the core logger interface."""
     getattr(logger, level.lower(), logger.info)(msg)
@@ -121,11 +168,13 @@ class UnifiAlertMonitor:
         led_controller: UnifiLedController,
         state_tracker: AlertStateTracker,
         led_states: dict[AlertState, dict] | None = None,
+        device_led_states: dict[str, dict[AlertState, dict]] | None = None,
     ):
         self._api_client = api_client
         self._led = led_controller
         self._state = state_tracker
         self._led_states = led_states or _build_led_states({})
+        self._device_led_states = device_led_states
         self._current_alert_state: AlertState | None = None
         self._locating = False
 
@@ -133,13 +182,23 @@ class UnifiAlertMonitor:
     def alert_state(self) -> AlertState:
         return self._state.state
 
-    def _state_cfg(self, state: AlertState) -> dict:
+    def _state_cfg(self, state: AlertState, mac: str | None = None) -> dict:
+        if mac and self._device_led_states and mac in self._device_led_states:
+            device_states = self._device_led_states[mac]
+            return device_states.get(state, device_states.get(AlertState.ROUTINE, self._led_states[AlertState.ROUTINE]))
         return self._led_states.get(state, self._led_states[AlertState.ROUTINE])
 
-    async def _apply_led_state(self, cfg: dict):
-        """Send the LED state to the controller."""
-        color_hex = rgb_to_hex(*cfg['color'])
-        await self._led.set_led(on=cfg['on'], color_hex=color_hex, brightness=cfg['brightness'])
+    async def _apply_led_state(self, state: AlertState):
+        """Send the LED state to the controller, with per-device overrides if configured."""
+        if self._device_led_states:
+            for mac in self._led._device_macs:
+                cfg = self._state_cfg(state, mac)
+                color_hex = rgb_to_hex(*cfg['color'])
+                await self._led.set_device_led(mac, on=cfg['on'], color_hex=color_hex, brightness=cfg['brightness'])
+        else:
+            cfg = self._state_cfg(state)
+            color_hex = rgb_to_hex(*cfg['color'])
+            await self._led.set_led(on=cfg['on'], color_hex=color_hex, brightness=cfg['brightness'])
 
     async def poll(self):
         """Poll the API, classify the alert, and update LED state."""
@@ -148,15 +207,15 @@ class UnifiAlertMonitor:
 
         if state != self._current_alert_state:
             self._current_alert_state = state
-            cfg = self._state_cfg(state)
 
-            # Handle blink via controller locate mode
+            # Handle blink via controller locate mode (uses base config)
+            cfg = self._state_cfg(state)
             should_blink = cfg['blink'] and cfg['on']
             if should_blink != self._locating:
                 await self._led.locate(enable=should_blink)
                 self._locating = should_blink
 
-            await self._apply_led_state(cfg)
+            await self._apply_led_state(state)
 
         return state
 
@@ -178,6 +237,8 @@ async def run_monitor(config: dict):
         return
 
     led_states = _build_led_states(cfg.get('led_states', {}))
+    device_overrides = cfg.get('device_overrides', {})
+    device_led_states = _build_device_led_states(led_states, cfg['device_macs'], device_overrides) if device_overrides else None
 
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
     api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
@@ -194,7 +255,7 @@ async def run_monitor(config: dict):
         backend=cfg.get('backend', 'aiounifi'),
     )
 
-    monitor = UnifiAlertMonitor(api_client, led_controller, state_tracker, led_states)
+    monitor = UnifiAlertMonitor(api_client, led_controller, state_tracker, led_states, device_led_states)
     interval = cfg['interval']
 
     logger.info(
@@ -206,9 +267,16 @@ async def run_monitor(config: dict):
 
     # Connect and set initial LED state
     await led_controller.connect()
-    initial_cfg = led_states[AlertState.ROUTINE]
-    initial_hex = rgb_to_hex(*initial_cfg['color'])
-    await led_controller.set_led(on=initial_cfg['on'], color_hex=initial_hex, brightness=initial_cfg['brightness'])
+    if device_led_states:
+        for mac in cfg['device_macs']:
+            mac_lower = mac.lower()
+            initial_cfg = device_led_states[mac_lower][AlertState.ROUTINE]
+            initial_hex = rgb_to_hex(*initial_cfg['color'])
+            await led_controller.set_device_led(mac_lower, on=initial_cfg['on'], color_hex=initial_hex, brightness=initial_cfg['brightness'])
+    else:
+        initial_cfg = led_states[AlertState.ROUTINE]
+        initial_hex = rgb_to_hex(*initial_cfg['color'])
+        await led_controller.set_led(on=initial_cfg['on'], color_hex=initial_hex, brightness=initial_cfg['brightness'])
 
     try:
         while True:
