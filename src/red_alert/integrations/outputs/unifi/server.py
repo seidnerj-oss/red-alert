@@ -185,6 +185,7 @@ def _normalize_config(config: dict) -> list[tuple[dict, list[dict]]]:
     """
     cfg = {**DEFAULT_CONFIG, **config}
     top_hold = cfg.get('hold_seconds', {})
+    top_led_states = config.get('led_states', {})
 
     # Multi-controller: controllers list (supports mixed local + cloud)
     if 'controllers' in config:
@@ -213,6 +214,14 @@ def _normalize_config(config: dict) -> list[tuple[dict, list[dict]]]:
                         monitor_cfg[k] = mon[k]
                 if top_hold or 'hold_seconds' in mon:
                     monitor_cfg['hold_seconds'] = {**top_hold, **mon.get('hold_seconds', {})}
+                if top_led_states or 'led_states' in mon:
+                    merged_led = {}
+                    for state_key in ('routine', 'pre_alert', 'alert', 'all_clear'):
+                        merged = {**top_led_states.get(state_key, {}), **mon.get('led_states', {}).get(state_key, {})}
+                        if merged:
+                            merged_led[state_key] = merged
+                    if merged_led:
+                        monitor_cfg['led_states'] = merged_led
                 monitors.append(monitor_cfg)
 
             groups.append((ctrl_connection, monitors))
@@ -230,6 +239,14 @@ def _normalize_config(config: dict) -> list[tuple[dict, list[dict]]]:
                     monitor_cfg[k] = mon[k]
             if top_hold or 'hold_seconds' in mon:
                 monitor_cfg['hold_seconds'] = {**top_hold, **mon.get('hold_seconds', {})}
+            if top_led_states or 'led_states' in mon:
+                merged_led = {}
+                for state_key in ('routine', 'pre_alert', 'alert', 'all_clear'):
+                    merged = {**top_led_states.get(state_key, {}), **mon.get('led_states', {}).get(state_key, {})}
+                    if merged:
+                        merged_led[state_key] = merged
+                if merged_led:
+                    monitor_cfg['led_states'] = merged_led
             monitors.append(monitor_cfg)
         return [(connection, monitors)]
 
