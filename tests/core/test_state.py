@@ -71,7 +71,7 @@ class TestAlertStateTracker:
 
         # After hold period - returns to ROUTINE
         with patch('red_alert.core.state.time') as mock_time:
-            mock_time.monotonic.return_value = tracker._state_entered_time + 61.0
+            mock_time.monotonic.return_value = tracker._state_entered_time + 1801.0
             result = tracker.update(None)
         assert result == AlertState.ROUTINE
         assert tracker.alert_data is None
@@ -190,7 +190,7 @@ class TestAllClear:
         assert result == AlertState.ALL_CLEAR
 
     def test_all_clear_transitions_to_routine_after_hold(self):
-        """ALL_CLEAR is held for default 60s, then transitions to ROUTINE."""
+        """ALL_CLEAR is held for default 300s (5min), then transitions to ROUTINE."""
         tracker = AlertStateTracker()
         tracker.update({'cat': '13', 'data': ['City A']})
         assert tracker.state == AlertState.ALL_CLEAR
@@ -203,7 +203,7 @@ class TestAllClear:
 
         # After hold period - returns to ROUTINE
         with patch('red_alert.core.state.time') as mock_time:
-            mock_time.monotonic.return_value = tracker._state_entered_time + 61.0
+            mock_time.monotonic.return_value = tracker._state_entered_time + 301.0
             result = tracker.update(None)
         assert result == AlertState.ROUTINE
 
@@ -216,6 +216,24 @@ class TestAllClear:
 
     def test_all_clear_not_in_active_categories(self):
         assert ALL_CLEAR_CATEGORY not in ACTIVE_ALERT_CATEGORIES
+
+    def test_all_clear_by_title_event_ended(self):
+        """'האירוע הסתיים' (event ended) triggers ALL_CLEAR regardless of category."""
+        tracker = AlertStateTracker()
+        result = tracker.update({'cat': '10', 'data': ['City A'], 'title': 'האירוע הסתיים'})
+        assert result == AlertState.ALL_CLEAR
+
+    def test_all_clear_by_title_with_active_category(self):
+        """Title-based all-clear overrides active alert category."""
+        tracker = AlertStateTracker()
+        result = tracker.update({'cat': '1', 'data': ['City A'], 'title': 'האירוע הסתיים'})
+        assert result == AlertState.ALL_CLEAR
+
+    def test_all_clear_by_title_overrides_areas(self):
+        """Title-based all-clear applies globally like category-based all-clear."""
+        tracker = AlertStateTracker(areas_of_interest=['כפר סבא'])
+        result = tracker.update({'cat': '10', 'data': ['מטולה'], 'title': 'האירוע הסתיים'})
+        assert result == AlertState.ALL_CLEAR
 
     def test_all_clear_hold_resets_on_repeat(self):
         """Repeated all-clear signals reset the hold timer."""
@@ -240,8 +258,8 @@ class TestAllClear:
 class TestHold:
     """Per-state hold durations after API goes empty."""
 
-    def test_default_hold_all_states_60s(self):
-        assert DEFAULT_HOLD_SECONDS == {'alert': 60, 'pre_alert': 60, 'all_clear': 60}
+    def test_default_hold_seconds(self):
+        assert DEFAULT_HOLD_SECONDS == {'alert': 1800, 'pre_alert': 1800, 'all_clear': 300}
 
     def test_no_hold_immediate_routine(self):
         """Without hold, alert state drops to routine on empty API."""
@@ -464,3 +482,221 @@ class TestLogging:
         tracker.update({'cat': '13', 'data': ['City A']})
         msgs = [call.args[0] for call in log.call_args_list]
         assert any('alert -> all_clear' in m for m in msgs)
+
+    def test_area_filtered_only_logged_once(self):
+        """Alert filtered should only log on first occurrence, not every poll."""
+        tracker, log = self._make_tracker(areas_of_interest=['City X'])
+        tracker.update({'cat': '1', 'data': ['City A']})
+        tracker.update({'cat': '1', 'data': ['City A']})
+        tracker.update({'cat': '1', 'data': ['City A']})
+        filtered_msgs = [call.args[0] for call in log.call_args_list if 'Alert filtered' in call.args[0]]
+        assert len(filtered_msgs) == 1
+
+    def test_area_match_only_logged_once(self):
+        """Area match should only log on first occurrence, not every poll."""
+        tracker, log = self._make_tracker(areas_of_interest=['City A'])
+        tracker.update({'cat': '1', 'data': ['City A']})
+        tracker.update({'cat': '1', 'data': ['City A']})
+        tracker.update({'cat': '1', 'data': ['City A']})
+        match_msgs = [call.args[0] for call in log.call_args_list if 'Area match' in call.args[0]]
+        assert len(match_msgs) == 1
+
+    def test_area_log_resets_after_empty(self):
+        """After API goes empty and returns, area result should be logged again."""
+        tracker, log = self._make_tracker(areas_of_interest=['City X'])
+        tracker.update({'cat': '1', 'data': ['City A']})  # filtered, logged
+        tracker.update(None)  # empty, resets
+        tracker.update({'cat': '1', 'data': ['City A']})  # filtered again, should log again
+        filtered_msgs = [call.args[0] for call in log.call_args_list if 'Alert filtered' in call.args[0]]
+        assert len(filtered_msgs) == 2
+
+
+class TestRealWorldScenarios:
+    """End-to-end scenarios based on observed HFC API behavior.
+
+    The HFC live alerts API sends brief pulses (~30-60s) for each event phase.
+    These tests simulate realistic timelines observed in production logs:
+    - Pre-alert (cat=14) pulse, gap, then all-clear (cat=13) pulse
+    - Rocket alert (cat=1) pulse, ~10min gap, then all-clear (cat=13) pulse
+    - All-clear may arrive with cat=10 + title "האירוע הסתיים" on the live endpoint
+      (history endpoint normalizes to cat=13)
+    """
+
+    def test_kfar_saba_pre_alert_to_all_clear(self):
+        """Real scenario: כפר סבא got pre-alert at 02:30, all-clear at 02:45 (~15min gap).
+
+        The API goes empty between the pre-alert pulse and the all-clear pulse.
+        The 30-minute hold bridges this gap so the state stays PRE_ALERT until
+        the all-clear arrives.
+        """
+        tracker = AlertStateTracker(areas_of_interest=['כפר סבא'])
+
+        # 02:30 - Pre-alert pulse arrives (669 cities including כפר סבא)
+        result = tracker.update(
+            {
+                'cat': '14',
+                'title': 'בדקות הקרובות צפויות להתקבל התרעות באזורך',
+                'data': ['כפר סבא', 'רעננה', 'הוד השרון'],
+            }
+        )
+        assert result == AlertState.PRE_ALERT
+        entered_time = tracker._state_entered_time
+
+        # 02:31 - API goes empty (pulse ended after ~30-60s)
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = entered_time + 60.0
+            result = tracker.update(None)
+        assert result == AlertState.PRE_ALERT  # held by 30min hold
+
+        # 02:34-02:35 - Rocket alerts for other cities (not כפר סבא)
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = entered_time + 240.0
+            result = tracker.update({'cat': '1', 'title': 'ירי רקטות וטילים', 'data': ['מטולה', 'כפר יובל']})
+        assert result == AlertState.PRE_ALERT  # rockets didn't match our area, hold continues
+
+        # 02:40 - API empty again
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = entered_time + 600.0
+            result = tracker.update(None)
+        assert result == AlertState.PRE_ALERT  # still within 30min hold
+
+        # 02:45 - All-clear arrives (cat=13, "האירוע הסתיים")
+        result = tracker.update({'cat': '13', 'title': 'האירוע הסתיים', 'data': ['כפר סבא', 'רעננה']})
+        assert result == AlertState.ALL_CLEAR
+
+    def test_metula_full_alert_cycle(self):
+        """Real scenario: מטולה got rockets at 03:45, all-clear at 03:56 (~10min gap)."""
+        tracker = AlertStateTracker(areas_of_interest=['מטולה'])
+
+        # 03:45 - Rocket alert
+        result = tracker.update({'cat': '1', 'title': 'ירי רקטות וטילים', 'data': ['מטולה']})
+        assert result == AlertState.ALERT
+        entered_time = tracker._state_entered_time
+
+        # 03:46 - API empty (pulse ended)
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = entered_time + 60.0
+            result = tracker.update(None)
+        assert result == AlertState.ALERT  # held by 30min hold
+
+        # 03:55 - Still empty, 10 minutes later
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = entered_time + 600.0
+            result = tracker.update(None)
+        assert result == AlertState.ALERT  # still within 30min hold
+
+        # 03:56 - All-clear
+        result = tracker.update({'cat': '13', 'title': 'האירוע הסתיים', 'data': ['מטולה']})
+        assert result == AlertState.ALL_CLEAR
+
+    def test_all_clear_with_cat_10_and_title(self):
+        """Real scenario: live API sends all-clear as cat=10 with title 'האירוע הסתיים'.
+
+        The history endpoint normalizes this to cat=13, but the live endpoint may
+        use the matrix_id (10) as the category. Title-based detection handles this.
+        """
+        tracker = AlertStateTracker()
+
+        # Active alert
+        tracker.update({'cat': '1', 'title': 'ירי רקטות וטילים', 'data': ['מטולה']})
+        assert tracker.state == AlertState.ALERT
+
+        # All-clear arrives with cat=10 (matrix_id) instead of cat=13
+        result = tracker.update({'cat': '10', 'title': 'האירוע הסתיים', 'data': ['מטולה']})
+        assert result == AlertState.ALL_CLEAR
+
+    def test_hostile_aircraft_intrusion(self):
+        """Real scenario: hostile aircraft (cat=2, "חדירת כלי טיס עוין") observed in history."""
+        tracker = AlertStateTracker()
+        result = tracker.update({'cat': '2', 'title': 'חדירת כלי טיס עוין', 'data': ['City A']})
+        assert result == AlertState.ALERT
+
+    def test_pre_alert_hold_survives_unrelated_rockets(self):
+        """Pre-alert for one area should hold even when rockets hit other areas.
+
+        During a real event, the API may show rocket alerts for northern cities
+        while central Israel is in pre-alert. These rockets don't match our area
+        so the pre-alert hold should continue.
+        """
+        tracker = AlertStateTracker(areas_of_interest=['כפר סבא'])
+
+        # Pre-alert for our area
+        tracker.update(
+            {
+                'cat': '14',
+                'title': 'בדקות הקרובות צפויות להתקבל התרעות באזורך',
+                'data': ['כפר סבא'],
+            }
+        )
+        assert tracker.state == AlertState.PRE_ALERT
+        entered_time = tracker._state_entered_time
+
+        # Rockets hit north (not our area) - should NOT change state
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = entered_time + 300.0
+            result = tracker.update({'cat': '1', 'title': 'ירי רקטות וטילים', 'data': ['מטולה', 'כפר גלעדי']})
+        assert result == AlertState.PRE_ALERT
+
+    def test_multiple_salvos_with_all_clear_between(self):
+        """Real scenario: מטולה had two rocket salvos with all-clear between.
+
+        03:45 alert -> 03:56 all-clear -> 04:22 new alert -> 04:32 all-clear.
+        The all-clear should transition properly, and a new alert during
+        all-clear hold should transition immediately.
+        """
+        tracker = AlertStateTracker(areas_of_interest=['מטולה'])
+
+        # First salvo
+        tracker.update({'cat': '1', 'title': 'ירי רקטות וטילים', 'data': ['מטולה']})
+        assert tracker.state == AlertState.ALERT
+
+        # First all-clear
+        tracker.update({'cat': '13', 'title': 'האירוע הסתיים', 'data': ['מטולה']})
+        assert tracker.state == AlertState.ALL_CLEAR
+        all_clear_time = tracker._state_entered_time
+
+        # During all-clear hold, second salvo arrives
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = all_clear_time + 120.0  # 2 min into all-clear hold
+            result = tracker.update({'cat': '1', 'title': 'ירי רקטות וטילים', 'data': ['מטולה']})
+        assert result == AlertState.ALERT  # immediate transition
+
+        # Second all-clear
+        tracker.update({'cat': '13', 'title': 'האירוע הסתיים', 'data': ['מטולה']})
+        assert tracker.state == AlertState.ALL_CLEAR
+
+    def test_hold_expires_without_all_clear(self):
+        """If no all-clear arrives within 30 minutes, state returns to ROUTINE."""
+        tracker = AlertStateTracker()
+        tracker.update({'cat': '1', 'title': 'ירי רקטות וטילים', 'data': ['מטולה']})
+        entered_time = tracker._state_entered_time
+
+        # 29 minutes - still held
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = entered_time + 1740.0
+            result = tracker.update(None)
+        assert result == AlertState.ALERT
+
+        # 31 minutes - hold expired
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = entered_time + 1860.0
+            result = tracker.update(None)
+        assert result == AlertState.ROUTINE
+
+    def test_all_clear_hold_expires_to_routine(self):
+        """All-clear hold (5min) returns to ROUTINE after expiry."""
+        tracker = AlertStateTracker()
+        tracker.update({'cat': '13', 'title': 'האירוע הסתיים', 'data': ['מטולה']})
+        entered_time = tracker._state_entered_time
+
+        # 4 minutes - still held
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = entered_time + 240.0
+            result = tracker.update(None)
+        assert result == AlertState.ALL_CLEAR
+
+        # 6 minutes - expired
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = entered_time + 360.0
+            result = tracker.update(None)
+        assert result == AlertState.ROUTINE

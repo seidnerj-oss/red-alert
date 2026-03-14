@@ -3,9 +3,18 @@ Alert state classification for the Home Front Command API.
 
 Four states:
     ROUTINE    - No active alerts for configured areas
-    PRE_ALERT  - Category 14: imminent alert warning ("בדקות הקרובות")
+    PRE_ALERT  - Category 14 or title phrases ("בדקות הקרובות", "עדכון", etc.)
     ALERT      - Active alert (categories 1-7, 10) for configured areas
-    ALL_CLEAR  - Explicit all-clear signal (category 13) from the API
+    ALL_CLEAR  - Category 13 or title phrase ("האירוע הסתיים")
+
+Classification priority: ALL_CLEAR title/category is checked first, so an alert with
+cat=10 but title "האירוע הסתיים" is correctly classified as ALL_CLEAR, not ALERT.
+
+The HFC live alerts API sends brief pulses (typically 30-60 seconds), not persistent
+state. Each alert type - pre-alert, active alert, and all-clear - appears as a short
+pulse and then disappears. There can be significant gaps between pulses (e.g., 14
+minutes observed between a pre-alert disappearing and the all-clear arriving). Hold
+timers bridge these gaps so downstream consumers maintain the correct state.
 """
 
 import enum
@@ -14,14 +23,18 @@ from collections.abc import Callable
 
 from red_alert.core.utils import standardize_name
 
-# Alert categories that represent active threats (not drills, not pre-alerts)
+# Alert categories that represent active threats (not drills, not pre-alerts).
+# See constants.py for full category code documentation.
 ACTIVE_ALERT_CATEGORIES = {1, 2, 3, 4, 5, 6, 7, 10}
-PRE_ALERT_CATEGORY = 14
-ALL_CLEAR_CATEGORY = 13
-DRILL_CATEGORY_MIN = 100
+PRE_ALERT_CATEGORY = 14  # "בדקות הקרובות צפויות להתקבל התרעות באזורך"
+ALL_CLEAR_CATEGORY = 13  # "האירוע הסתיים" (event ended)
+DRILL_CATEGORY_MIN = 100  # Drills use 100 + threat code (e.g. 101 = missile drill)
 
 # Hebrew title phrases that indicate a pre-alert regardless of category code
 PRE_ALERT_TITLE_PHRASES = ('בדקות הקרובות', 'עדכון', 'שהייה בסמיכות למרחב מוגן')
+
+# Hebrew title phrases that indicate all-clear regardless of category code
+ALL_CLEAR_TITLE_PHRASES = ('האירוע הסתיים',)
 
 
 class AlertState(enum.Enum):
@@ -31,10 +44,15 @@ class AlertState(enum.Enum):
     ALL_CLEAR = 'all_clear'
 
 
+# Hold durations: how long to maintain a non-ROUTINE state after the API goes empty.
+# The HFC API sends brief pulses (~30-60s), so holds bridge the gap until the next
+# signal arrives. Observed real-world gap between pre-alert pulse and all-clear pulse
+# was ~14 minutes, so alert/pre_alert use 30 minutes. All-clear is a terminal state
+# that just needs a short display window before returning to routine.
 DEFAULT_HOLD_SECONDS: dict[str, float] = {
-    'alert': 60,
-    'pre_alert': 60,
-    'all_clear': 60,
+    'alert': 1800,
+    'pre_alert': 1800,
+    'all_clear': 300,
 }
 
 
@@ -60,7 +78,7 @@ class AlertStateTracker:
             hold_seconds: Per-state hold duration in seconds. Keys are state names
                 ('alert', 'pre_alert', 'all_clear'). When the API goes empty, the
                 current state is held for this duration before returning to ROUTINE.
-                Default: {'all_clear': 60}. ROUTINE never has a hold.
+                Default: alert/pre_alert=1800 (30min), all_clear=300 (5min). ROUTINE never has a hold.
             logger: Optional logging callback with signature ``logger(msg, level='INFO')``.
         """
         self._areas = [standardize_name(a) for a in (areas_of_interest or [])]
@@ -74,6 +92,7 @@ class AlertStateTracker:
         self.state = AlertState.ROUTINE
         self.alert_data: dict | None = None
         self._log = logger
+        self._last_area_result: bool | None = None
 
     def _emit(self, msg: str, level: str = 'INFO') -> None:
         """Emit a log message via the optional logger callback."""
@@ -93,6 +112,7 @@ class AlertStateTracker:
 
         if not data or not isinstance(data, dict):
             self._handle_empty()
+            self._last_area_result = None
         else:
             self._classify(data)
 
@@ -104,9 +124,10 @@ class AlertStateTracker:
     def _classify(self, data: dict) -> None:
         """Classify non-empty alert data and update internal state."""
         cat = self._parse_category(data.get('cat'))
+        title = data.get('title', '')
 
-        # All-clear overrides everything (regardless of areas of interest)
-        if cat == ALL_CLEAR_CATEGORY:
+        # All-clear by category or title - overrides everything (regardless of areas of interest)
+        if cat == ALL_CLEAR_CATEGORY or self._has_all_clear_title(title):
             self._set_state(AlertState.ALL_CLEAR, data)
             return
 
@@ -120,7 +141,7 @@ class AlertStateTracker:
             self._handle_empty()
             return
 
-        is_pre_alert = cat == PRE_ALERT_CATEGORY or self._has_pre_alert_title(data.get('title', ''))
+        is_pre_alert = cat == PRE_ALERT_CATEGORY or self._has_pre_alert_title(title)
 
         if is_pre_alert:
             self._set_state(AlertState.PRE_ALERT, data)
@@ -173,11 +194,13 @@ class AlertStateTracker:
             return True  # No filter = all areas
         alert_names = [standardize_name(c) for c in cities]
         matched = any(area in alert_names for area in self._areas)
-        if matched:
-            matching = [c for c, n in zip(cities, alert_names) if n in self._areas]
-            self._emit(f'Area match: {matching}')
-        else:
-            self._emit(f'Alert filtered: cities {cities[:10]} did not match configured areas')
+        if matched != self._last_area_result:
+            if matched:
+                matching = [c for c, n in zip(cities, alert_names) if n in self._areas]
+                self._emit(f'Area match: {matching}')
+            else:
+                self._emit(f'Alert filtered: cities {cities[:10]} did not match configured areas')
+            self._last_area_result = matched
         return matched
 
     @staticmethod
@@ -186,6 +209,13 @@ class AlertStateTracker:
         if not isinstance(title, str) or not title:
             return False
         return any(phrase in title for phrase in PRE_ALERT_TITLE_PHRASES)
+
+    @staticmethod
+    def _has_all_clear_title(title: str) -> bool:
+        """Check if the alert title contains Hebrew all-clear phrases."""
+        if not isinstance(title, str) or not title:
+            return False
+        return any(phrase in title for phrase in ALL_CLEAR_TITLE_PHRASES)
 
     @staticmethod
     def _parse_category(cat) -> int:
