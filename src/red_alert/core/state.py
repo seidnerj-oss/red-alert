@@ -7,8 +7,9 @@ Four states:
     ALERT      - Active alert (categories 1-7, 10) for configured areas
     ALL_CLEAR  - Category 13 or title phrase ("האירוע הסתיים")
 
-Classification priority: ALL_CLEAR title/category is checked first, so an alert with
-cat=10 but title "האירוע הסתיים" is correctly classified as ALL_CLEAR, not ALERT.
+Classification: ALL_CLEAR title/category takes priority over category-based alert
+classification. All states (including ALL_CLEAR) are filtered by areas of interest
+when configured - if the alert cities don't match your areas, the state won't change.
 
 The HFC live alerts API sends brief pulses (typically 30-60 seconds), not persistent
 state. Each alert type - pre-alert, active alert, and all-clear - appears as a short
@@ -125,14 +126,14 @@ class AlertStateTracker:
         """Classify non-empty alert data and update internal state."""
         cat = self._parse_category(data.get('cat'))
         title = data.get('title', '')
-
-        # All-clear by category or title - overrides everything (regardless of areas of interest)
-        if cat == ALL_CLEAR_CATEGORY or self._has_all_clear_title(title):
-            self._set_state(AlertState.ALL_CLEAR, data)
-            return
+        is_all_clear = cat == ALL_CLEAR_CATEGORY or self._has_all_clear_title(title)
 
         cities = data.get('data', [])
         if not cities:
+            # All-clear without city data is only relevant when no area filter is active
+            if is_all_clear and not self._areas:
+                self._set_state(AlertState.ALL_CLEAR, data)
+                return
             self._handle_empty()
             return
 
@@ -141,9 +142,10 @@ class AlertStateTracker:
             self._handle_empty()
             return
 
-        is_pre_alert = cat == PRE_ALERT_CATEGORY or self._has_pre_alert_title(title)
-
-        if is_pre_alert:
+        # Classify by type (all-clear takes priority over category-based classification)
+        if is_all_clear:
+            self._set_state(AlertState.ALL_CLEAR, data)
+        elif cat == PRE_ALERT_CATEGORY or self._has_pre_alert_title(title):
             self._set_state(AlertState.PRE_ALERT, data)
         elif cat in ACTIVE_ALERT_CATEGORIES:
             self._set_state(AlertState.ALERT, data)

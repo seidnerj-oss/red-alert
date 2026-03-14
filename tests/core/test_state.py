@@ -175,10 +175,16 @@ class TestAllClear:
     def test_all_clear_constant_is_13(self):
         assert ALL_CLEAR_CATEGORY == 13
 
-    def test_all_clear_overrides_areas_of_interest(self):
-        """All-clear applies globally, not filtered by configured areas."""
+    def test_all_clear_filtered_by_areas_of_interest(self):
+        """All-clear for non-matching area is ignored - you shouldn't get all-clear if you didn't get the alert."""
         tracker = AlertStateTracker(areas_of_interest=['כפר סבא'])
         result = tracker.update({'cat': '13', 'data': ['תל אביב']})
+        assert result == AlertState.ROUTINE
+
+    def test_all_clear_matching_area(self):
+        """All-clear for matching area triggers ALL_CLEAR."""
+        tracker = AlertStateTracker(areas_of_interest=['כפר סבא'])
+        result = tracker.update({'cat': '13', 'data': ['כפר סבא', 'תל אביב']})
         assert result == AlertState.ALL_CLEAR
 
     def test_all_clear_after_alert(self):
@@ -207,12 +213,17 @@ class TestAllClear:
             result = tracker.update(None)
         assert result == AlertState.ROUTINE
 
-    def test_all_clear_without_data_field(self):
-        """All-clear with empty data still triggers ALL_CLEAR (checked before data filtering)."""
+    def test_all_clear_without_data_field_no_area_filter(self):
+        """All-clear with empty data triggers ALL_CLEAR when no area filter is configured."""
         tracker = AlertStateTracker()
-        # Cat 13 without data - still parsed before city check
         result = tracker.update({'cat': '13'})
         assert result == AlertState.ALL_CLEAR
+
+    def test_all_clear_without_data_field_with_area_filter(self):
+        """All-clear with empty data is ignored when area filter is configured (can't verify relevance)."""
+        tracker = AlertStateTracker(areas_of_interest=['כפר סבא'])
+        result = tracker.update({'cat': '13'})
+        assert result == AlertState.ROUTINE
 
     def test_all_clear_not_in_active_categories(self):
         assert ALL_CLEAR_CATEGORY not in ACTIVE_ALERT_CATEGORIES
@@ -229,11 +240,36 @@ class TestAllClear:
         result = tracker.update({'cat': '1', 'data': ['City A'], 'title': 'האירוע הסתיים'})
         assert result == AlertState.ALL_CLEAR
 
-    def test_all_clear_by_title_overrides_areas(self):
-        """Title-based all-clear applies globally like category-based all-clear."""
+    def test_all_clear_by_title_filtered_by_areas(self):
+        """Title-based all-clear for non-matching area is ignored like category-based."""
         tracker = AlertStateTracker(areas_of_interest=['כפר סבא'])
         result = tracker.update({'cat': '10', 'data': ['מטולה'], 'title': 'האירוע הסתיים'})
+        assert result == AlertState.ROUTINE
+
+    def test_all_clear_by_title_matching_area(self):
+        """Title-based all-clear for matching area triggers ALL_CLEAR."""
+        tracker = AlertStateTracker(areas_of_interest=['כפר סבא'])
+        result = tracker.update({'cat': '10', 'data': ['כפר סבא'], 'title': 'האירוע הסתיים'})
         assert result == AlertState.ALL_CLEAR
+
+    def test_all_clear_for_unrelated_city_does_not_break_hold(self):
+        """Bug fix: all-clear for unrelated city should not trigger ALL_CLEAR during held state.
+
+        Real scenario: כפר סבא in PRE_ALERT hold, all-clear arrives for מרגליות.
+        Before fix: LEDs turned green. After fix: PRE_ALERT hold continues.
+        """
+        tracker = AlertStateTracker(areas_of_interest=['כפר סבא'])
+
+        # Pre-alert for our area
+        tracker.update({'cat': '14', 'data': ['כפר סבא'], 'title': 'בדקות הקרובות צפויות להתקבל התרעות באזורך'})
+        assert tracker.state == AlertState.PRE_ALERT
+        entered_time = tracker._state_entered_time
+
+        # All-clear for unrelated city - should NOT trigger ALL_CLEAR
+        with patch('red_alert.core.state.time') as mock_time:
+            mock_time.monotonic.return_value = entered_time + 60.0
+            result = tracker.update({'cat': '13', 'data': ['מרגליות'], 'title': 'האירוע הסתיים'})
+        assert result == AlertState.PRE_ALERT  # hold continues, not ALL_CLEAR
 
     def test_all_clear_hold_resets_on_repeat(self):
         """Repeated all-clear signals reset the hold timer."""
