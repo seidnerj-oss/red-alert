@@ -79,9 +79,9 @@ python -m red_alert.integrations.outputs.unifi --config config.json
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `host` | Hostname or IP of the UniFi controller | Required |
-| `username` | Local controller account username | Required |
-| `password` | Controller account password | Required |
+| `host` | Hostname or IP of the UniFi controller | Required (local) |
+| `username` | Controller/SSO account username | Required |
+| `password` | Controller/SSO account password | Required |
 | `port` | Controller port | `443` |
 | `site` | UniFi site name | `default` |
 | `device_macs` | List of AP MAC addresses to control | Required |
@@ -90,6 +90,9 @@ python -m red_alert.integrations.outputs.unifi --config config.json
 | `totp_secret` | TOTP secret (base32) for 2FA - see [2FA Support](#2fa-support) | `null` |
 | `backend` | Controller library: `"aiounifi"` or `"pyunifiapi"` - see [Backend](#backend) | `"aiounifi"` |
 | `led_states` | Per-state LED configuration (see below) | See defaults |
+| `monitors` | Per-area device groups - see [Multi-Monitor](#multi-monitor-per-area-device-groups) | `null` |
+| `controllers` | Multi-controller cloud config - see [Cloud Connection](#cloud-connection-multi-controller) | `null` |
+| `device_id` | Cloud controller device ID (single-controller cloud) | `null` |
 
 ## LED State Configuration
 
@@ -181,6 +184,130 @@ By default, the LEDs react to alerts anywhere in Israel. To only react to alerts
     ]
 }
 ```
+
+## Multi-Monitor (Per-Area Device Groups)
+
+Different APs can react to different alert areas with different LED settings. A `monitors` list defines per-area device groups, all sharing a single controller connection and API poll.
+
+```json
+{
+    "host": "192.168.1.1",
+    "username": "redalert",
+    "password": "your-password",
+    "interval": 1,
+    "monitors": [
+        {
+            "name": "Home",
+            "areas_of_interest": ["kfar saba", "raanana"],
+            "device_macs": ["ac:8b:a9:dc:3b:60", "ac:8b:a9:dc:3b:68"],
+            "led_states": {
+                "routine": {"brightness": 20}
+            }
+        },
+        {
+            "name": "Bedroom",
+            "areas_of_interest": ["tel aviv"],
+            "device_macs": ["ac:8b:a9:dc:38:84"],
+            "led_states": {
+                "alert": {"color": "blue", "blink": true}
+            }
+        }
+    ]
+}
+```
+
+Each monitor has its own `AlertStateTracker` - they track state independently based on their own `areas_of_interest`. Only the devices listed in a monitor's `device_macs` are updated when that monitor's state changes.
+
+### Per-Monitor Options
+
+| Parameter | Description |
+|-----------|-------------|
+| `name` | Display name for logging (defaults to `monitor-0`, `monitor-1`, etc.) |
+| `areas_of_interest` | Cities/areas to filter alerts for this group |
+| `device_macs` | AP MAC addresses controlled by this monitor |
+| `led_states` | LED config for this monitor (same format as top-level `led_states`) |
+| `device_overrides` | Per-device LED overrides within this monitor |
+| `hold_seconds` | Hold duration overrides for this monitor |
+
+### Inheritance
+
+- **Connection settings** (`host`, `username`, `password`, `port`, `site`, `totp_secret`, `backend`, `interval`) are always top-level and shared across all monitors.
+- **`hold_seconds`** defined at the top level is inherited by all monitors as a default. Per-monitor `hold_seconds` overrides specific keys while inheriting the rest.
+
+### Backward Compatibility
+
+If `monitors` is absent, the flat config format works exactly as before (single monitor with top-level `device_macs`, `areas_of_interest`, etc.). No config changes needed for existing setups.
+
+## Cloud Connection (Multi-Controller)
+
+If your UniFi account has access to multiple controllers (e.g., home and parents' home), you can control devices across all of them using Ubiquiti cloud connections. This connects via WebRTC through the Ubiquiti cloud, so the controllers don't need to be on the local network.
+
+**Requirements:**
+- `pyunifiapi` backend (cloud is not supported with aiounifi)
+- Your SSO account credentials and TOTP secret
+- The `device_id` of each controller (see [Finding Controller Device IDs](#finding-controller-device-ids))
+
+```json
+{
+    "username": "your-sso@email.com",
+    "password": "your-sso-password",
+    "totp_secret": "YOUR_TOTP_SECRET",
+    "controllers": [
+        {
+            "name": "Home",
+            "device_id": "abc123def456",
+            "site": "default",
+            "monitors": [
+                {
+                    "name": "Living Room",
+                    "device_macs": ["ac:8b:a9:dc:3b:60", "ac:8b:a9:dc:3b:68"],
+                    "areas_of_interest": ["kfar saba", "raanana"]
+                }
+            ]
+        },
+        {
+            "name": "Parents' Home",
+            "device_id": "789ghi012jkl",
+            "site": "default",
+            "monitors": [
+                {
+                    "name": "Hallway",
+                    "device_macs": ["11:22:33:44:55:66"],
+                    "areas_of_interest": ["herzliya"]
+                }
+            ]
+        }
+    ]
+}
+```
+
+Each controller gets its own WebRTC connection. All controllers share the same SSO credentials and alert API poll. The `controllers` key automatically sets `connection: "cloud"` and `backend: "pyunifiapi"`.
+
+### Per-Controller Options
+
+| Parameter | Description |
+|-----------|-------------|
+| `name` | Display name for logging |
+| `device_id` | Cloud controller device ID (required) |
+| `site` | UniFi site name on this controller (default: `"default"`) |
+| `monitors` | List of monitor groups for this controller (same format as top-level `monitors`) |
+
+### Finding Controller Device IDs
+
+The `device_id` identifies each controller in the Ubiquiti cloud. You can find it by:
+
+1. Logging into [unifi.ui.com](https://unifi.ui.com) with your SSO account
+2. Opening your browser's developer tools (Network tab)
+3. Looking for API calls that include device identifiers
+4. Alternatively, using the pyunifiapi `CloudHttpTransport.list_devices()` API after SSO authentication
+
+### Cloud Connection Notes
+
+- Cloud connections use WebRTC data channels proxied through Ubiquiti's cloud infrastructure
+- Only controllers running UniFi OS (Dream Machine, UCG, UDR, etc.) support cloud connections
+- The `host` field is not required for cloud connections
+- Each controller maintains its own WebRTC connection independently
+- If a controller's WebRTC connection drops, other controllers continue operating
 
 ## 2FA Support
 
