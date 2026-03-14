@@ -15,7 +15,7 @@ Each CBS message contains the alert text in Hebrew, English, Arabic, and Russian
 ## Prerequisites
 
 - A device with a QMI-capable LTE modem (tested on UniFi LTE Backup Pro with Sierra Wireless WP7607)
-- SSH access to the device (see [UniFi LTE Backup Pro SSH setup guide](UNIFI-LTE-PRO-SSH.md))
+- SSH access to the device (see [UniFi LTE Backup Pro SSH setup guide](CBS-UNIFI-LTE-PRO-SSH.md))
 - Docker on your build machine (for cross-compiling qmicli)
 - Python 3.14+
 
@@ -24,7 +24,7 @@ Each CBS message contains the alert text in Hebrew, English, Arabic, and Russian
 The [UniFi LTE Backup Pro](https://store.ui.com/us/en/collections/unifi-accessory-tech-lte-backup/products/u-lte-backup-pro) is a good fit for this because:
 
 - Always-on LTE connection with a QMI modem (`/dev/cdc-wdm0`)
-- SSH accessible from your local network (see [SSH setup guide](UNIFI-LTE-PRO-SSH.md))
+- SSH accessible from your local network (see [SSH setup guide](CBS-UNIFI-LTE-PRO-SSH.md))
 - Low power, designed for 24/7 operation
 - Already running `qmi-proxy` for shared modem access
 
