@@ -75,9 +75,12 @@ class HistoryManager:
                 self._log(f"Initial History Load: City '{std}' (raw: '{city_raw}') not found. Area='{area}'.", level='DEBUG')
                 unknown_cities_logged.add(std)
 
+            # Extended history uses 'category_desc', 24h history uses 'title'
+            title = e.get('category_desc', e.get('title', _('Unknown')))
+
             temp_hist.append(
                 {
-                    'title': e.get('title', _('Unknown')),
+                    'title': title,
                     'city': orig_name,
                     'area': area,
                     'time': t,

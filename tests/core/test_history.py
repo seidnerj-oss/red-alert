@@ -210,3 +210,93 @@ class TestGetHistoryAttributes:
 
         attrs = history_manager.get_history_attributes()
         assert len(attrs['last_24h_alerts']) == 2
+
+
+class TestLoadInitialHistoryExtendedFormat:
+    """Tests for loading history from the extended endpoint (GetAlarmsHistory.aspx)
+    which uses 'category_desc' instead of 'title' and ISO date format."""
+
+    @pytest.mark.asyncio
+    async def test_uses_category_desc_over_title(self, history_manager):
+        now = datetime.now()
+        mock_api = AsyncMock()
+        mock_api.get_alert_history.return_value = [
+            {
+                'alertDate': (now - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%S'),
+                'category_desc': 'ירי רקטות וטילים',
+                'data': 'תל אביב - מרכז העיר',
+                'category': 1,
+                'matrix_id': 1,
+            },
+        ]
+
+        await history_manager.load_initial_history(mock_api)
+        assert len(history_manager._history_list) == 1
+        assert history_manager._history_list[0]['title'] == 'ירי רקטות וטילים'
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_title_when_no_category_desc(self, history_manager):
+        now = datetime.now()
+        mock_api = AsyncMock()
+        mock_api.get_alert_history.return_value = [
+            {
+                'alertDate': (now - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S'),
+                'title': 'ירי רקטות וטילים',
+                'data': 'רמת גן - מזרח',
+            },
+        ]
+
+        await history_manager.load_initial_history(mock_api)
+        assert len(history_manager._history_list) == 1
+        assert history_manager._history_list[0]['title'] == 'ירי רקטות וטילים'
+
+    @pytest.mark.asyncio
+    async def test_handles_iso_date_format(self, history_manager):
+        now = datetime.now()
+        mock_api = AsyncMock()
+        mock_api.get_alert_history.return_value = [
+            {
+                'alertDate': (now - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%S'),
+                'category_desc': 'Test alert',
+                'data': 'תל אביב - מרכז העיר',
+            },
+        ]
+
+        await history_manager.load_initial_history(mock_api)
+        assert len(history_manager._history_list) == 1
+
+    @pytest.mark.asyncio
+    async def test_pre_alert_category_desc(self, history_manager):
+        now = datetime.now()
+        mock_api = AsyncMock()
+        mock_api.get_alert_history.return_value = [
+            {
+                'alertDate': (now - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%S'),
+                'category_desc': 'בדקות הקרובות צפויות להתקבל התרעות באזורך',
+                'data': 'תל אביב - מרכז העיר',
+                'category': 14,
+                'matrix_id': 10,
+            },
+        ]
+
+        await history_manager.load_initial_history(mock_api)
+        assert len(history_manager._history_list) == 1
+        assert history_manager._history_list[0]['title'] == 'בדקות הקרובות צפויות להתקבל התרעות באזורך'
+
+    @pytest.mark.asyncio
+    async def test_all_clear_category_desc(self, history_manager):
+        now = datetime.now()
+        mock_api = AsyncMock()
+        mock_api.get_alert_history.return_value = [
+            {
+                'alertDate': (now - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%S'),
+                'category_desc': 'האירוע הסתיים',
+                'data': 'אשקלון - דרום',
+                'category': 13,
+                'matrix_id': 10,
+            },
+        ]
+
+        await history_manager.load_initial_history(mock_api)
+        assert len(history_manager._history_list) == 1
+        assert history_manager._history_list[0]['title'] == 'האירוע הסתיים'
