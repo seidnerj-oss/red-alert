@@ -8,6 +8,7 @@ from red_alert.integrations.outputs.unifi.server import (
     UnifiAlertMonitor,
     _build_device_led_states,
     _build_led_states,
+    _normalize_config,
     _resolve_color,
     _resolve_led_state,
 )
@@ -293,3 +294,533 @@ class TestUnifiAlertMonitorPerDevice:
         assert calls['11:22:33:44:55:66'].kwargs['brightness'] == 100
         assert calls['aa:bb:cc:dd:ee:ff'].kwargs['color_hex'] == '#FF0000'
         assert calls['11:22:33:44:55:66'].kwargs['color_hex'] == '#FF0000'
+
+
+class TestNormalizeConfig:
+    def test_flat_config_backward_compat(self):
+        """Flat config (no monitors key) produces a single controller group with one monitor."""
+        config = {
+            'host': '192.168.1.1',
+            'username': 'admin',
+            'password': 'pass',
+            'device_macs': ['aa:bb:cc:dd:ee:ff'],
+            'areas_of_interest': ['tel aviv'],
+        }
+        groups = _normalize_config(config)
+
+        assert len(groups) == 1
+        connection, monitors = groups[0]
+        assert connection['host'] == '192.168.1.1'
+        assert connection['username'] == 'admin'
+        assert len(monitors) == 1
+        assert monitors[0]['device_macs'] == ['aa:bb:cc:dd:ee:ff']
+        assert monitors[0]['areas_of_interest'] == ['tel aviv']
+
+    def test_flat_config_defaults(self):
+        """Flat config fills in defaults from DEFAULT_CONFIG."""
+        groups = _normalize_config({'host': '1.2.3.4', 'username': 'a', 'password': 'b', 'device_macs': ['aa:bb:cc:dd:ee:ff']})
+        connection, _ = groups[0]
+
+        assert connection['interval'] == 1
+        assert connection['port'] == 443
+        assert connection['backend'] == 'aiounifi'
+        assert connection['connection'] == 'local'
+
+    def test_multi_monitor_splits_correctly(self):
+        """monitors key produces multiple monitor entries with shared connection."""
+        config = {
+            'host': '192.168.1.1',
+            'username': 'admin',
+            'password': 'pass',
+            'monitors': [
+                {
+                    'name': 'Home',
+                    'device_macs': ['aa:bb:cc:dd:ee:ff'],
+                    'areas_of_interest': ['kfar saba'],
+                },
+                {
+                    'name': 'Bedroom',
+                    'device_macs': ['11:22:33:44:55:66'],
+                    'areas_of_interest': ['tel aviv'],
+                },
+            ],
+        }
+        groups = _normalize_config(config)
+
+        assert len(groups) == 1
+        connection, monitors = groups[0]
+        assert connection['host'] == '192.168.1.1'
+        assert len(monitors) == 2
+        assert monitors[0]['name'] == 'Home'
+        assert monitors[0]['device_macs'] == ['aa:bb:cc:dd:ee:ff']
+        assert monitors[0]['areas_of_interest'] == ['kfar saba']
+        assert monitors[1]['name'] == 'Bedroom'
+        assert monitors[1]['device_macs'] == ['11:22:33:44:55:66']
+        assert monitors[1]['areas_of_interest'] == ['tel aviv']
+
+    def test_hold_seconds_inheritance(self):
+        """Top-level hold_seconds is inherited by monitors, with per-monitor overrides."""
+        config = {
+            'host': '1.2.3.4',
+            'username': 'a',
+            'password': 'b',
+            'hold_seconds': {'alert': 120, 'pre_alert': 60},
+            'monitors': [
+                {
+                    'name': 'A',
+                    'device_macs': ['aa:bb:cc:dd:ee:ff'],
+                },
+                {
+                    'name': 'B',
+                    'device_macs': ['11:22:33:44:55:66'],
+                    'hold_seconds': {'alert': 300},
+                },
+            ],
+        }
+        groups = _normalize_config(config)
+        _, monitors = groups[0]
+
+        # Monitor A inherits top-level hold_seconds
+        assert monitors[0]['hold_seconds'] == {'alert': 120, 'pre_alert': 60}
+        # Monitor B overrides alert but inherits pre_alert
+        assert monitors[1]['hold_seconds'] == {'alert': 300, 'pre_alert': 60}
+
+    def test_monitor_led_states_preserved(self):
+        """Per-monitor led_states are passed through."""
+        config = {
+            'host': '1.2.3.4',
+            'username': 'a',
+            'password': 'b',
+            'monitors': [
+                {
+                    'name': 'Dim',
+                    'device_macs': ['aa:bb:cc:dd:ee:ff'],
+                    'led_states': {'routine': {'brightness': 20}},
+                },
+            ],
+        }
+        groups = _normalize_config(config)
+        _, monitors = groups[0]
+
+        assert monitors[0]['led_states'] == {'routine': {'brightness': 20}}
+
+    def test_connection_keys_not_in_monitors(self):
+        """Connection-level keys like host/username are not leaked into monitor configs."""
+        config = {
+            'host': '1.2.3.4',
+            'username': 'a',
+            'password': 'b',
+            'monitors': [
+                {'name': 'M', 'device_macs': ['aa:bb:cc:dd:ee:ff']},
+            ],
+        }
+        groups = _normalize_config(config)
+        _, monitors = groups[0]
+
+        assert 'host' not in monitors[0]
+        assert 'username' not in monitors[0]
+        assert 'password' not in monitors[0]
+
+    def test_cloud_multi_controller(self):
+        """controllers key produces multiple controller groups for cloud mode."""
+        config = {
+            'username': 'sso@email.com',
+            'password': 'pass',
+            'totp_secret': 'SECRET',
+            'controllers': [
+                {
+                    'name': 'Home',
+                    'device_id': 'ctrl-home-123',
+                    'site': 'default',
+                    'monitors': [
+                        {'name': 'Living Room', 'device_macs': ['aa:bb:cc:dd:ee:ff'], 'areas_of_interest': ['kfar saba']},
+                    ],
+                },
+                {
+                    'name': 'Parents',
+                    'device_id': 'ctrl-parents-456',
+                    'monitors': [
+                        {'name': 'Hallway', 'device_macs': ['11:22:33:44:55:66'], 'areas_of_interest': ['herzliya']},
+                    ],
+                },
+            ],
+        }
+        groups = _normalize_config(config)
+
+        assert len(groups) == 2
+
+        # First controller
+        conn1, mons1 = groups[0]
+        assert conn1['connection'] == 'cloud'
+        assert conn1['backend'] == 'pyunifiapi'
+        assert conn1['device_id'] == 'ctrl-home-123'
+        assert conn1['site'] == 'default'
+        assert conn1['username'] == 'sso@email.com'
+        assert len(mons1) == 1
+        assert mons1[0]['name'] == 'Living Room'
+        assert mons1[0]['areas_of_interest'] == ['kfar saba']
+
+        # Second controller
+        conn2, mons2 = groups[1]
+        assert conn2['device_id'] == 'ctrl-parents-456'
+        assert conn2['username'] == 'sso@email.com'
+        assert len(mons2) == 1
+        assert mons2[0]['name'] == 'Hallway'
+
+    def test_cloud_controllers_inherit_shared_credentials(self):
+        """Each controller in a cloud config inherits shared credentials."""
+        config = {
+            'username': 'user@email.com',
+            'password': 'pass',
+            'totp_secret': 'TOTP123',
+            'controllers': [
+                {'device_id': 'c1', 'monitors': [{'device_macs': ['aa:bb:cc:dd:ee:ff']}]},
+                {'device_id': 'c2', 'monitors': [{'device_macs': ['11:22:33:44:55:66']}]},
+            ],
+        }
+        groups = _normalize_config(config)
+
+        for conn, _ in groups:
+            assert conn['username'] == 'user@email.com'
+            assert conn['password'] == 'pass'
+            assert conn['totp_secret'] == 'TOTP123'
+            assert conn['backend'] == 'pyunifiapi'
+            assert conn['connection'] == 'cloud'
+
+    def test_cloud_hold_seconds_inheritance(self):
+        """Top-level hold_seconds is inherited by monitors in cloud controllers."""
+        config = {
+            'username': 'u',
+            'password': 'p',
+            'hold_seconds': {'alert': 120},
+            'controllers': [
+                {
+                    'device_id': 'c1',
+                    'monitors': [
+                        {'device_macs': ['aa:bb:cc:dd:ee:ff']},
+                        {'device_macs': ['11:22:33:44:55:66'], 'hold_seconds': {'alert': 300}},
+                    ],
+                },
+            ],
+        }
+        groups = _normalize_config(config)
+        _, monitors = groups[0]
+
+        assert monitors[0]['hold_seconds'] == {'alert': 120}
+        assert monitors[1]['hold_seconds'] == {'alert': 300}
+
+    def test_mixed_local_and_cloud_controllers(self):
+        """controllers list with both local (host) and cloud (device_id) controllers."""
+        config = {
+            'username': 'sso@email.com',
+            'password': 'pass',
+            'totp_secret': 'SECRET',
+            'controllers': [
+                {
+                    'name': 'Home',
+                    'host': '172.16.1.1',
+                    'site': 'default',
+                    'monitors': [
+                        {'name': 'Study', 'device_macs': ['aa:bb:cc:dd:ee:ff']},
+                    ],
+                },
+                {
+                    'name': 'Parents',
+                    'device_id': 'ctrl-parents-456',
+                    'monitors': [
+                        {'name': 'Hallway', 'device_macs': ['11:22:33:44:55:66']},
+                    ],
+                },
+            ],
+        }
+        groups = _normalize_config(config)
+
+        assert len(groups) == 2
+
+        # Home controller: local mode
+        conn_home, mons_home = groups[0]
+        assert conn_home['host'] == '172.16.1.1'
+        assert conn_home['connection'] == 'local'
+        assert conn_home.get('device_id') is None
+        assert len(mons_home) == 1
+
+        # Parents controller: cloud mode
+        conn_parents, mons_parents = groups[1]
+        assert conn_parents['device_id'] == 'ctrl-parents-456'
+        assert conn_parents['connection'] == 'cloud'
+        assert conn_parents['backend'] == 'pyunifiapi'
+        assert len(mons_parents) == 1
+
+    def test_local_controller_preserves_backend(self):
+        """A local controller in the controllers list can use aiounifi backend."""
+        config = {
+            'username': 'admin',
+            'password': 'pass',
+            'backend': 'aiounifi',
+            'controllers': [
+                {
+                    'name': 'Home',
+                    'host': '192.168.1.1',
+                    'monitors': [{'device_macs': ['aa:bb:cc:dd:ee:ff']}],
+                },
+            ],
+        }
+        groups = _normalize_config(config)
+        conn, _ = groups[0]
+
+        assert conn['connection'] == 'local'
+        assert conn['backend'] == 'aiounifi'
+
+    def test_controller_can_override_port(self):
+        """Per-controller port overrides the top-level default."""
+        config = {
+            'username': 'u',
+            'password': 'p',
+            'port': 443,
+            'controllers': [
+                {
+                    'host': '10.0.0.1',
+                    'port': 8443,
+                    'monitors': [{'device_macs': ['aa:bb:cc:dd:ee:ff']}],
+                },
+            ],
+        }
+        groups = _normalize_config(config)
+        conn, _ = groups[0]
+
+        assert conn['port'] == 8443
+
+
+class TestUpdate:
+    """Tests for the update() method (receives pre-fetched data)."""
+
+    def _make_monitor(self, led_states=None):
+        api_client = AsyncMock()
+        led_controller = AsyncMock()
+        state_tracker = AsyncMock()
+        monitor = UnifiAlertMonitor(api_client, led_controller, state_tracker, led_states)
+        return monitor, api_client, led_controller, state_tracker
+
+    @pytest.mark.asyncio
+    async def test_update_alert_sends_red(self):
+        monitor, _, led, state_tracker = self._make_monitor()
+        state_tracker.update = lambda data: AlertState.ALERT
+        state = await monitor.update({'cat': '1', 'data': ['city']})
+        assert state == AlertState.ALERT
+        led.set_led.assert_called_once_with(on=True, color_hex='#FF0000', brightness=100)
+
+    @pytest.mark.asyncio
+    async def test_update_routine_sends_white(self):
+        monitor, _, led, state_tracker = self._make_monitor()
+        state_tracker.update = lambda data: AlertState.ROUTINE
+        state = await monitor.update(None)
+        assert state == AlertState.ROUTINE
+        led.set_led.assert_called_once_with(on=True, color_hex='#FFFFFF', brightness=100)
+
+    @pytest.mark.asyncio
+    async def test_update_no_api_call(self):
+        """update() must not call get_live_alerts - data is pre-fetched."""
+        monitor, api_client, _, state_tracker = self._make_monitor()
+        state_tracker.update = lambda data: AlertState.ROUTINE
+        await monitor.update(None)
+        api_client.get_live_alerts.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_no_change_skips_led(self):
+        monitor, _, led, state_tracker = self._make_monitor()
+        state_tracker.update = lambda data: AlertState.ROUTINE
+        await monitor.update(None)
+        await monitor.update(None)
+        led.set_led.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_poll_delegates_to_update(self):
+        """poll() fetches data then calls update() logic."""
+        monitor, api_client, led, state_tracker = self._make_monitor()
+        api_client.get_live_alerts = AsyncMock(return_value={'data': []})
+        state_tracker.update = lambda data: AlertState.ALERT
+        state = await monitor.poll()
+        assert state == AlertState.ALERT
+        api_client.get_live_alerts.assert_called_once()
+        led.set_led.assert_called_once()
+
+
+class TestMultiMonitor:
+    """Tests for multi-monitor mode with per-area device groups."""
+
+    def _make_multi_monitor(self, monitors_cfg):
+        """Create multiple monitors sharing one LED controller."""
+        api_client = AsyncMock()
+        led_controller = AsyncMock()
+        monitors = []
+        state_trackers = []
+
+        for cfg in monitors_cfg:
+            state_tracker = AsyncMock()
+            led_states = _build_led_states(cfg.get('led_states', {}))
+            device_macs = cfg.get('device_macs', [])
+            device_overrides = cfg.get('device_overrides', {})
+            device_led_states = _build_device_led_states(led_states, device_macs, device_overrides) if device_overrides else None
+
+            monitor = UnifiAlertMonitor(
+                api_client=api_client,
+                led_controller=led_controller,
+                state_tracker=state_tracker,
+                led_states=led_states,
+                device_led_states=device_led_states,
+                device_macs=device_macs,
+                name=cfg.get('name'),
+            )
+            monitors.append(monitor)
+            state_trackers.append(state_tracker)
+
+        return monitors, api_client, led_controller, state_trackers
+
+    @pytest.mark.asyncio
+    async def test_independent_state_tracking(self):
+        """Two monitors with different areas track state independently."""
+        monitors, _, led, trackers = self._make_multi_monitor(
+            [
+                {'name': 'Home', 'device_macs': ['aa:bb:cc:dd:ee:ff']},
+                {'name': 'Bedroom', 'device_macs': ['11:22:33:44:55:66']},
+            ]
+        )
+
+        # Home sees alert, Bedroom sees routine
+        trackers[0].update = lambda data: AlertState.ALERT
+        trackers[1].update = lambda data: AlertState.ROUTINE
+
+        data = {'cat': '1', 'data': ['kfar saba']}
+        state_home = await monitors[0].update(data)
+        state_bedroom = await monitors[1].update(data)
+
+        assert state_home == AlertState.ALERT
+        assert state_bedroom == AlertState.ROUTINE
+
+    @pytest.mark.asyncio
+    async def test_each_monitor_controls_own_macs(self):
+        """Each monitor only sends LED updates to its own device MACs."""
+        monitors, _, led, trackers = self._make_multi_monitor(
+            [
+                {'name': 'Home', 'device_macs': ['aa:bb:cc:dd:ee:ff']},
+                {'name': 'Bedroom', 'device_macs': ['11:22:33:44:55:66']},
+            ]
+        )
+
+        trackers[0].update = lambda data: AlertState.ALERT
+        trackers[1].update = lambda data: AlertState.ROUTINE
+
+        await monitors[0].update(None)
+        await monitors[1].update(None)
+
+        calls = led.set_device_led.call_args_list
+        assert len(calls) == 2
+
+        # Home monitor sets alert (red) on its MAC
+        home_call = calls[0]
+        assert home_call.args[0] == 'aa:bb:cc:dd:ee:ff'
+        assert home_call.kwargs['color_hex'] == '#FF0000'
+
+        # Bedroom monitor sets routine (white) on its MAC
+        bedroom_call = calls[1]
+        assert bedroom_call.args[0] == '11:22:33:44:55:66'
+        assert bedroom_call.kwargs['color_hex'] == '#FFFFFF'
+
+    @pytest.mark.asyncio
+    async def test_per_monitor_led_states(self):
+        """Each monitor can have its own LED state config."""
+        monitors, _, led, trackers = self._make_multi_monitor(
+            [
+                {
+                    'name': 'Home',
+                    'device_macs': ['aa:bb:cc:dd:ee:ff'],
+                    'led_states': {'routine': {'brightness': 20}},
+                },
+                {
+                    'name': 'Bedroom',
+                    'device_macs': ['11:22:33:44:55:66'],
+                    'led_states': {'routine': {'brightness': 5}},
+                },
+            ]
+        )
+
+        trackers[0].update = lambda data: AlertState.ROUTINE
+        trackers[1].update = lambda data: AlertState.ROUTINE
+
+        await monitors[0].update(None)
+        await monitors[1].update(None)
+
+        calls = {call.args[0]: call for call in led.set_device_led.call_args_list}
+        assert calls['aa:bb:cc:dd:ee:ff'].kwargs['brightness'] == 20
+        assert calls['11:22:33:44:55:66'].kwargs['brightness'] == 5
+
+    @pytest.mark.asyncio
+    async def test_multi_monitor_locate_per_device(self):
+        """In multi-monitor mode, blink uses locate_device per MAC, not bulk locate."""
+        monitors, _, led, trackers = self._make_multi_monitor(
+            [
+                {
+                    'name': 'Home',
+                    'device_macs': ['aa:bb:cc:dd:ee:ff'],
+                    'led_states': {'alert': {'blink': True}},
+                },
+                {
+                    'name': 'Bedroom',
+                    'device_macs': ['11:22:33:44:55:66'],
+                },
+            ]
+        )
+
+        trackers[0].update = lambda data: AlertState.ALERT
+        trackers[1].update = lambda data: AlertState.ROUTINE
+
+        await monitors[0].update(None)
+        await monitors[1].update(None)
+
+        # Home should use locate_device (per-device), not locate (bulk)
+        led.locate_device.assert_called_once_with('aa:bb:cc:dd:ee:ff', True)
+        led.locate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_multi_monitor_no_cross_contamination(self):
+        """State change in one monitor does not affect the other."""
+        monitors, _, led, trackers = self._make_multi_monitor(
+            [
+                {'name': 'Home', 'device_macs': ['aa:bb:cc:dd:ee:ff']},
+                {'name': 'Bedroom', 'device_macs': ['11:22:33:44:55:66']},
+            ]
+        )
+
+        # Both start routine
+        trackers[0].update = lambda data: AlertState.ROUTINE
+        trackers[1].update = lambda data: AlertState.ROUTINE
+        await monitors[0].update(None)
+        await monitors[1].update(None)
+        led.set_device_led.reset_mock()
+
+        # Only Home goes to alert
+        trackers[0].update = lambda data: AlertState.ALERT
+        await monitors[0].update(None)
+        await monitors[1].update(None)
+
+        # Only Home's MAC should get an update (alert/red)
+        assert led.set_device_led.call_count == 1
+        call = led.set_device_led.call_args_list[0]
+        assert call.args[0] == 'aa:bb:cc:dd:ee:ff'
+        assert call.kwargs['color_hex'] == '#FF0000'
+
+    @pytest.mark.asyncio
+    async def test_multi_monitor_multiple_macs_per_monitor(self):
+        """A single monitor can control multiple devices."""
+        monitors, _, led, trackers = self._make_multi_monitor(
+            [
+                {'name': 'Home', 'device_macs': ['aa:bb:cc:dd:ee:ff', '11:22:33:44:55:66']},
+            ]
+        )
+
+        trackers[0].update = lambda data: AlertState.ALERT
+        await monitors[0].update(None)
+
+        assert led.set_device_led.call_count == 2
+        macs_called = {call.args[0] for call in led.set_device_led.call_args_list}
+        assert macs_called == {'aa:bb:cc:dd:ee:ff', '11:22:33:44:55:66'}

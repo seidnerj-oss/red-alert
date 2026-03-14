@@ -219,6 +219,128 @@ class TestConnectPyunifiapi:
             )
 
 
+# --- Cloud connection tests ---
+
+
+@contextmanager
+def _fake_pyunifiapi_cloud(mock_cloud_config_cls=None, mock_cloud_ctrl_cls=None, mock_led_status_cls=None, mock_locate_cls=None):
+    """Inject fake pyunifiapi modules for cloud controller tests."""
+    mock_cloud_config_cls = mock_cloud_config_cls or MagicMock()
+    mock_cloud_ctrl_cls = mock_cloud_ctrl_cls or MagicMock()
+    mock_led_status_cls = mock_led_status_cls or MagicMock()
+    mock_locate_cls = mock_locate_cls or MagicMock()
+
+    pkg = ModuleType('pyunifiapi')
+    pkg.CloudConfig = mock_cloud_config_cls
+
+    cloud_ctrl_mod = ModuleType('pyunifiapi.cloud_controller')
+    cloud_ctrl_mod.CloudController = mock_cloud_ctrl_cls
+
+    models_mod = ModuleType('pyunifiapi.models')
+    device_mod = ModuleType('pyunifiapi.models.device')
+    device_mod.DeviceSetLedStatus = mock_led_status_cls
+    device_mod.DeviceLocateRequest = mock_locate_cls
+
+    saved = {k: sys.modules.get(k) for k in ('pyunifiapi', 'pyunifiapi.cloud_controller', 'pyunifiapi.models', 'pyunifiapi.models.device')}
+    sys.modules['pyunifiapi'] = pkg
+    sys.modules['pyunifiapi.cloud_controller'] = cloud_ctrl_mod
+    sys.modules['pyunifiapi.models'] = models_mod
+    sys.modules['pyunifiapi.models.device'] = device_mod
+
+    with patch('red_alert.integrations.outputs.unifi.led_controller._HAS_PYUNIFIAPI', True):
+        try:
+            yield
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v
+
+
+class TestConnectPyunifiapiCloud:
+    @pytest.mark.asyncio
+    async def test_cloud_connect_and_initialize(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl_instance = _mock_controller([device])
+        mock_ctrl_cls = MagicMock(return_value=mock_ctrl_instance)
+
+        with _fake_pyunifiapi_cloud(mock_cloud_ctrl_cls=mock_ctrl_cls):
+            controller = UnifiLedController('', 'sso@email.com', 'pass', [DEVICE_MAC], backend='pyunifiapi', device_id='cloud-device-123')
+            await controller.connect()
+
+            mock_ctrl_cls.assert_called_once()
+            mock_ctrl_instance.connect.assert_called_once()
+            mock_ctrl_instance.initialize.assert_called_once()
+            assert controller._connected is True
+
+    @pytest.mark.asyncio
+    async def test_cloud_passes_cloud_config(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl_instance = _mock_controller([device])
+        mock_ctrl_cls = MagicMock(return_value=mock_ctrl_instance)
+        mock_cloud_config_cls = MagicMock()
+
+        with _fake_pyunifiapi_cloud(mock_cloud_config_cls=mock_cloud_config_cls, mock_cloud_ctrl_cls=mock_ctrl_cls):
+            controller = UnifiLedController(
+                '',
+                'sso@email.com',
+                'pass',
+                [DEVICE_MAC],
+                backend='pyunifiapi',
+                device_id='dev-123',
+                site='mysite',
+                totp_secret='SECRET',
+            )
+            await controller.connect()
+
+            mock_cloud_config_cls.assert_called_once_with(
+                username='sso@email.com',
+                password='pass',
+                device_id='dev-123',
+                totp_secret='SECRET',
+                site='mysite',
+            )
+
+    @pytest.mark.asyncio
+    async def test_cloud_uses_execute_for_requests(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl_instance = _mock_controller([device])
+        mock_ctrl_cls = MagicMock(return_value=mock_ctrl_instance)
+        mock_led_cls = MagicMock()
+        mock_led_cls.create = MagicMock(return_value=MagicMock())
+
+        with _fake_pyunifiapi_cloud(mock_cloud_ctrl_cls=mock_ctrl_cls, mock_led_status_cls=mock_led_cls):
+            controller = UnifiLedController('', 'u', 'p', [DEVICE_MAC], backend='pyunifiapi', device_id='dev-123')
+            await controller.connect()
+            await controller.set_led(on=True, color_hex='#FF0000', brightness=100)
+
+            mock_ctrl_instance.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_cloud_rejected_with_aiounifi(self):
+        """Cloud connections with aiounifi backend raise ValueError."""
+        controller = UnifiLedController('', 'u', 'p', [DEVICE_MAC], backend='aiounifi', device_id='dev-123')
+        controller._session = AsyncMock()
+
+        with pytest.raises(ValueError, match='Cloud connections require backend="pyunifiapi"'):
+            await controller.connect()
+
+    @pytest.mark.asyncio
+    async def test_cloud_close_disconnects(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl_instance = _mock_controller([device])
+        mock_ctrl_cls = MagicMock(return_value=mock_ctrl_instance)
+
+        with _fake_pyunifiapi_cloud(mock_cloud_ctrl_cls=mock_ctrl_cls):
+            controller = UnifiLedController('', 'u', 'p', [DEVICE_MAC], backend='pyunifiapi', device_id='dev-123')
+            await controller.connect()
+            await controller.close()
+
+            mock_ctrl_instance.disconnect.assert_called_once()
+            assert controller._connected is False
+
+
 # --- Backend-agnostic LED tests ---
 
 
@@ -308,7 +430,8 @@ class TestSetLed:
             mock_ctrl.request.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_no_color_brightness_without_led_ring(self):
+    async def test_always_sends_color_brightness(self):
+        """Color and brightness are always sent, even if supports_led_ring is False."""
         device = _mock_device(mac=DEVICE_MAC, supports_led_ring=False)
         mock_ctrl = _mock_controller([device])
 
@@ -325,8 +448,8 @@ class TestSetLed:
             mock_request_cls.create.assert_called_once_with(
                 device,
                 status='on',
-                brightness=None,
-                color=None,
+                brightness=80,
+                color='#FF0000',
             )
 
 
@@ -365,6 +488,61 @@ class TestLocate:
             await controller.locate(enable=False)
 
             mock_locate_cls.create.assert_called_once_with(DEVICE_MAC, locate=False)
+
+
+class TestLocateDevice:
+    @pytest.mark.asyncio
+    async def test_locate_device_enable(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl = _mock_controller([device])
+
+        with (
+            patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl),
+            patch('red_alert.integrations.outputs.unifi.led_controller.AioDeviceLocateRequest') as mock_locate_cls,
+        ):
+            mock_locate_cls.create = MagicMock(return_value=MagicMock())
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC, DEVICE_MAC_2])
+            controller._session = AsyncMock()
+            await controller.connect()
+            await controller.locate_device(DEVICE_MAC, enable=True)
+
+            # Only the specified device, not all
+            mock_locate_cls.create.assert_called_once_with(DEVICE_MAC, locate=True)
+            mock_ctrl.request.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_locate_device_disable(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl = _mock_controller([device])
+
+        with (
+            patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl),
+            patch('red_alert.integrations.outputs.unifi.led_controller.AioDeviceLocateRequest') as mock_locate_cls,
+        ):
+            mock_locate_cls.create = MagicMock(return_value=MagicMock())
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC, DEVICE_MAC_2])
+            controller._session = AsyncMock()
+            await controller.connect()
+            await controller.locate_device(DEVICE_MAC, enable=False)
+
+            mock_locate_cls.create.assert_called_once_with(DEVICE_MAC, locate=False)
+
+    @pytest.mark.asyncio
+    async def test_locate_device_auto_connects(self):
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl = _mock_controller([device])
+
+        with (
+            patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl),
+            patch('red_alert.integrations.outputs.unifi.led_controller.AioDeviceLocateRequest') as mock_locate_cls,
+            patch('red_alert.integrations.outputs.unifi.led_controller.aiohttp.ClientSession', return_value=AsyncMock()),
+        ):
+            mock_locate_cls.create = MagicMock(return_value=MagicMock())
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            await controller.locate_device(DEVICE_MAC, enable=True)
+
+            mock_ctrl.login.assert_called_once()
+            mock_locate_cls.create.assert_called_once()
 
 
 def _mock_session():

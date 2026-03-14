@@ -8,6 +8,10 @@ Supports two backends:
 - aiounifi (default) - the library used by Home Assistant's UniFi integration
 - pyunifiapi - native 2FA support, no aiohttp dependency
 
+Connection modes:
+- local (default) - direct connection to controller IP/hostname
+- cloud - connects via Ubiquiti cloud WebRTC (pyunifiapi only)
+
 Uses a local controller account with optional TOTP-based 2FA.
 """
 
@@ -128,12 +132,13 @@ class UnifiLedController:
         session: Any | None = None,
         totp_secret: str | None = None,
         backend: str = 'aiounifi',
+        device_id: str | None = None,
     ):
         """
         Args:
             host: Hostname or IP of the UniFi controller.
-            username: Controller login username.
-            password: Controller login password.
+            username: Controller login username (or SSO email for cloud).
+            password: Controller login password (or SSO password for cloud).
             device_macs: List of device MAC addresses to control.
             port: Controller port (default: 443).
             site: UniFi site name. Required when the controller has multiple sites.
@@ -141,6 +146,8 @@ class UnifiLedController:
             session: Optional aiohttp.ClientSession (aiounifi backend only). Ignored by pyunifiapi.
             totp_secret: Optional TOTP secret (base32) for 2FA.
             backend: Backend library to use: 'aiounifi' (default) or 'pyunifiapi'.
+            device_id: Cloud controller device ID for WebRTC connection (pyunifiapi only).
+                       When set, connects via Ubiquiti cloud instead of direct local connection.
         """
         self._device_macs = [mac.lower() for mac in device_macs]
         self._session = session
@@ -156,6 +163,7 @@ class UnifiLedController:
         self._site = site
         self._totp_secret = totp_secret
         self._backend = backend
+        self._device_id = device_id
 
         # Resolved at connect time based on backend
         self._send_request: Callable | None = None
@@ -164,7 +172,11 @@ class UnifiLedController:
 
     async def connect(self):
         """Authenticate with the controller and load device list."""
-        if self._backend == 'pyunifiapi':
+        if self._device_id:
+            if self._backend != 'pyunifiapi':
+                raise ValueError('Cloud connections require backend="pyunifiapi". aiounifi does not support cloud/WebRTC.')
+            await self._connect_pyunifiapi_cloud()
+        elif self._backend == 'pyunifiapi':
             await self._connect_pyunifiapi()
         else:
             await self._connect_aiounifi()
@@ -270,6 +282,35 @@ class UnifiLedController:
         self._log_device_discovery()
         self._connected = True
 
+    async def _connect_pyunifiapi_cloud(self):
+        """Connect using pyunifiapi cloud backend (WebRTC)."""
+        if not _HAS_PYUNIFIAPI:
+            raise ImportError('pyunifiapi is not installed. Install with: pip install pyunifiapi')
+
+        from pyunifiapi import CloudConfig as PyCloudConfig
+        from pyunifiapi.cloud_controller import CloudController as PyCloudController
+        from pyunifiapi.models.device import DeviceLocateRequest as PyDeviceLocateRequest
+        from pyunifiapi.models.device import DeviceSetLedStatus as PyDeviceSetLedStatus
+
+        config = PyCloudConfig(
+            username=self._username,
+            password=self._password,
+            device_id=self._device_id or '',
+            totp_secret=self._totp_secret,
+            site=self._site or 'default',
+        )
+        self._controller = PyCloudController(config)
+        await self._controller.connect()
+        await self._controller.initialize()
+        self._validate_site()
+
+        self._send_request = self._controller.execute
+        self._DeviceSetLedStatus = PyDeviceSetLedStatus
+        self._DeviceLocateRequest = PyDeviceLocateRequest
+
+        self._log_device_discovery()
+        self._connected = True
+
     def _log_device_discovery(self):
         """Log which configured devices were found on the controller."""
         found = [mac for mac in self._device_macs if mac in self._controller.devices]
@@ -328,8 +369,8 @@ class UnifiLedController:
             request = self._DeviceSetLedStatus.create(
                 device,
                 status=status,
-                brightness=brightness if device.supports_led_ring else None,
-                color=color_hex if device.supports_led_ring else None,
+                brightness=brightness,
+                color=color_hex,
             )
             await self._send_request(request)
             logger.info('LED set on %s: on=%s, color=%s, brightness=%d', mac, on, color_hex, brightness)
@@ -346,6 +387,16 @@ class UnifiLedController:
 
         tasks = [self._locate_device(mac, enable) for mac in self._device_macs]
         await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def locate_device(self, mac: str, enable: bool = True):
+        """Enable or disable locate mode (blinking) on a single device.
+
+        Args:
+            mac: Device MAC address.
+            enable: True to start blinking, False to stop.
+        """
+        await self._ensure_connected()
+        await self._locate_device(mac, enable)
 
     async def _locate_device(self, mac: str, enable: bool):
         """Enable or disable locate mode on a single device."""
