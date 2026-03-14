@@ -6,7 +6,7 @@ on UniFi access points through the UniFi Network controller REST API.
 
 Supports two backends:
 - aiounifi (default) - the library used by Home Assistant's UniFi integration
-- pyunifiapi - native support for 2FA, no aiohttp dependency
+- pyunifiapi - native 2FA support, no aiohttp dependency
 
 Uses a local controller account with optional TOTP-based 2FA.
 """
@@ -114,7 +114,7 @@ class UnifiLedController:
 
     Supports two backends:
     - ``'aiounifi'`` (default): uses aiounifi + aiohttp. 2FA via monkey-patch.
-    - ``'pyunifiapi'``: uses py-unifiapi + httpx. Native 2FA support.
+    - ``'pyunifiapi'``: uses pyunifiapi + httpx. Native 2FA support.
     """
 
     def __init__(
@@ -243,7 +243,7 @@ class UnifiLedController:
     async def _connect_pyunifiapi(self):
         """Connect using pyunifiapi backend."""
         if not _HAS_PYUNIFIAPI:
-            raise ImportError('pyunifiapi is not installed. Install with: pip install py-unifiapi')
+            raise ImportError('pyunifiapi is not installed. Install with: pip install pyunifiapi')
 
         from pyunifiapi import ControllerConfig as PyControllerConfig
         from pyunifiapi.controller import Controller as PyController

@@ -85,16 +85,16 @@ ssh -i ~/.ssh/your_key <username>@<device-ip>
 - The `$HOME` for the SSH user is `/` (not `/etc/persistent` where `~` resolves in the shell), which is why `/.ssh/authorized_keys` does not work.
 - After a device reboot, you may need to start dropbear again from the debug terminal (`dropbear -R`).
 
-## Automating via py-unifiapi
+## Automating via pyunifiapi
 
-The manual steps above can be automated using [py-unifiapi](https://github.com/seidnerj/py-unifiapi), a Python library that accesses UniFi devices via the controller's WebRTC data channel - the same protocol used by the browser debug terminal.
+The manual steps above can be automated using [pyunifiapi](https://github.com/seidnerj/pyunifiapi), a Python library that accesses UniFi devices via the controller's WebRTC data channel - the same protocol used by the browser debug terminal.
 
-> **Note:** py-unifiapi is not yet published to PyPI. Install from source for now (see below).
+> **Note:** pyunifiapi is not yet published to PyPI. Install from source for now (see below).
 
 A ready-made script is provided at [`scripts/setup-lte-pro-ssh.py`](../../scripts/setup-lte-pro-ssh.py). It connects to the device through the controller, injects your SSH public key, and starts dropbear - all in one command:
 
 ```bash
-pip install py-unifiapi  # once published, or: pip install git+https://github.com/seidnerj/py-unifiapi.git
+pip install pyunifiapi  # once published, or: pip install git+https://github.com/seidnerj/pyunifiapi.git
 
 python scripts/setup-lte-pro-ssh.py \
     --host <controller-ip> \

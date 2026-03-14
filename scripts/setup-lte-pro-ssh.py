@@ -5,7 +5,7 @@ Connects to the device through the UniFi Network Controller (same protocol as th
 browser debug terminal), injects an SSH public key, and starts the dropbear SSH server.
 
 Requirements:
-    pip install py-unifiapi
+    pip install pyunifiapi
 
 Usage:
     python scripts/setup-lte-pro-ssh.py \

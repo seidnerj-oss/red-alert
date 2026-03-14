@@ -238,7 +238,7 @@ The integration supports two controller libraries:
 | Backend | Library | 2FA | HTTP Client | Notes |
 |---------|---------|-----|-------------|-------|
 | `aiounifi` (default) | [aiounifi](https://github.com/Kane610/aiounifi) | Monkey-patch | aiohttp | Same library used by Home Assistant's UniFi integration |
-| `pyunifiapi` | [py-unifiapi](https://github.com/seidnerj/py-unifiapi) | Native | httpx | Also supports WebRTC SSH, cloud API |
+| `pyunifiapi` | [pyunifiapi](https://github.com/seidnerj/pyunifiapi) | Native | httpx | Also supports WebRTC SSH, cloud API |
 
 To switch backends, add `"backend": "pyunifiapi"` to your config:
 
@@ -258,10 +258,10 @@ Install the chosen backend:
 pip install "red-alert[unifi]"
 
 # pyunifiapi (install separately)
-pip install py-unifiapi
+pip install pyunifiapi
 ```
 
-**Note:** py-unifiapi is not yet published to PyPI. Install from source until it is published.
+**Note:** pyunifiapi is not yet published to PyPI. Install from source until it is published.
 
 ## Technical Details
 
