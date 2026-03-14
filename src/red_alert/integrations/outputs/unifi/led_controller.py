@@ -131,7 +131,7 @@ class UnifiLedController:
         site: str | None = None,
         session: Any | None = None,
         totp_secret: str | None = None,
-        backend: str = 'aiounifi',
+        backend: str | None = None,
         device_id: str | None = None,
     ):
         """
@@ -145,7 +145,7 @@ class UnifiLedController:
                   If None, auto-detected when only one site exists.
             session: Optional aiohttp.ClientSession (aiounifi backend only). Ignored by pyunifiapi.
             totp_secret: Optional TOTP secret (base32) for 2FA.
-            backend: Backend library to use: 'aiounifi' (default) or 'pyunifiapi'.
+            backend: Backend library: 'pyunifiapi' or 'aiounifi'. Required.
             device_id: Cloud controller device ID for WebRTC connection (pyunifiapi only).
                        When set, connects via Ubiquiti cloud instead of direct local connection.
         """
@@ -172,14 +172,18 @@ class UnifiLedController:
 
     async def connect(self):
         """Authenticate with the controller and load device list."""
+        if not self._backend:
+            raise ValueError('backend is required. Use "pyunifiapi" or "aiounifi".')
         if self._device_id:
             if self._backend != 'pyunifiapi':
                 raise ValueError('Cloud connections require backend="pyunifiapi". aiounifi does not support cloud/WebRTC.')
             await self._connect_pyunifiapi_cloud()
         elif self._backend == 'pyunifiapi':
             await self._connect_pyunifiapi()
-        else:
+        elif self._backend == 'aiounifi':
             await self._connect_aiounifi()
+        else:
+            raise ValueError(f'Unknown backend: "{self._backend}". Use "pyunifiapi" or "aiounifi".')
 
     async def _connect_aiounifi(self):
         """Connect using aiounifi backend."""

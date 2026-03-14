@@ -8,7 +8,7 @@ independently configurable with on/off, color, brightness, and blink.
 Supports multiple monitors with per-area device groups: different
 devices can react to different alert areas with different LED settings.
 
-Supports aiounifi (default) or pyunifiapi as the controller backend.
+Supports pyunifiapi (default) or aiounifi as the controller backend.
 Blink uses the controller's native locate mode (flash LED).
 
 Usage:
@@ -79,7 +79,7 @@ DEFAULT_CONFIG: dict = {
     'led_states': {},
     'device_overrides': {},
     'totp_secret': None,
-    'backend': 'aiounifi',
+    'backend': None,
     'connection': 'local',
     'device_id': None,
 }
@@ -422,6 +422,9 @@ async def run_monitor(config: dict):
         if not is_cloud and not connection.get('host'):
             logger.error('Controller missing "host" (local) or "device_id" (cloud). Check config.')
             return
+        if is_cloud and connection.get('backend') == 'aiounifi':
+            logger.error('Cloud connections require backend="pyunifiapi". aiounifi does not support cloud/WebRTC.')
+            return
 
     # Single HTTP client and API client (shared across all controllers)
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
@@ -462,7 +465,7 @@ async def run_monitor(config: dict):
             port=connection.get('port', 443),
             site=connection.get('site'),
             totp_secret=connection.get('totp_secret'),
-            backend=connection.get('backend', 'aiounifi'),
+            backend=connection.get('backend'),
             device_id=connection.get('device_id'),
         )
         led_controllers.append(led_controller)

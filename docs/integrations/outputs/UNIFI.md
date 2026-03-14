@@ -8,6 +8,8 @@ red-alert can control the RGB LEDs on UniFi access points via the UniFi Network 
 
 Each state supports independent configuration of color, brightness, on/off, and blink (locate mode).
 
+Developed and tested with **U6 Mesh** (U6M) access points, but should work with any UniFi device that supports LED color/brightness override and the locate (blink) command.
+
 ## How It Works
 
 1. The red-alert monitor polls the Home Front Command API every second
@@ -88,7 +90,7 @@ python -m red_alert.integrations.outputs.unifi --config config.json
 | `interval` | API polling interval in seconds | `1` |
 | `areas_of_interest` | Cities/areas to filter alerts for (empty = all of Israel) | `[]` |
 | `totp_secret` | TOTP secret (base32) for 2FA - see [2FA Support](#2fa-support) | `null` |
-| `backend` | Controller library: `"aiounifi"` or `"pyunifiapi"` - see [Backend](#backend) | `"aiounifi"` |
+| `backend` | Controller library: `"pyunifiapi"` or `"aiounifi"` - see [Backend](#backend) | Required |
 | `led_states` | Per-state LED configuration (see below) | See defaults |
 | `monitors` | Per-area device groups - see [Multi-Monitor](#multi-monitor-per-area-device-groups) | `null` |
 | `controllers` | Multi-controller cloud config - see [Cloud Connection](#cloud-connection-multi-controller) | `null` |

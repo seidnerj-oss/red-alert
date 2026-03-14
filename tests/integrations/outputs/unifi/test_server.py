@@ -323,7 +323,7 @@ class TestNormalizeConfig:
 
         assert connection['interval'] == 1
         assert connection['port'] == 443
-        assert connection['backend'] == 'aiounifi'
+        assert connection['backend'] is None
         assert connection['connection'] == 'local'
 
     def test_multi_monitor_splits_correctly(self):

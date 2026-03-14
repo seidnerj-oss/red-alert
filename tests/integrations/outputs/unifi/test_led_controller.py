@@ -351,7 +351,7 @@ class TestSetLed:
         mock_ctrl = _mock_controller([device])
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
             await controller.set_led(on=True, color_hex='#FF0000', brightness=100)
@@ -365,7 +365,7 @@ class TestSetLed:
         mock_ctrl = _mock_controller([dev1, dev2])
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC, DEVICE_MAC_2])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC, DEVICE_MAC_2], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
             await controller.set_led(on=True, color_hex='#00FF00', brightness=75)
@@ -378,7 +378,7 @@ class TestSetLed:
         mock_ctrl = _mock_controller([device])
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
 
@@ -394,7 +394,7 @@ class TestSetLed:
         mock_ctrl = _mock_controller([device])
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
 
@@ -407,7 +407,7 @@ class TestSetLed:
         mock_ctrl = _mock_controller([])  # no devices found
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
             await controller.set_led(on=True, color_hex='#FF0000', brightness=100)
@@ -423,7 +423,7 @@ class TestSetLed:
             patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl),
             patch('red_alert.integrations.outputs.unifi.led_controller.aiohttp.ClientSession', return_value=AsyncMock()),
         ):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             await controller.set_led(on=True, color_hex='#FF0000', brightness=100)
 
             mock_ctrl.login.assert_called_once()
@@ -440,7 +440,7 @@ class TestSetLed:
             patch('red_alert.integrations.outputs.unifi.led_controller.AioDeviceSetLedStatus') as mock_request_cls,
         ):
             mock_request_cls.create = MagicMock(return_value=MagicMock())
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
             await controller.set_led(on=True, color_hex='#FF0000', brightness=80)
@@ -464,7 +464,7 @@ class TestLocate:
             patch('red_alert.integrations.outputs.unifi.led_controller.AioDeviceLocateRequest') as mock_locate_cls,
         ):
             mock_locate_cls.create = MagicMock(return_value=MagicMock())
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
             await controller.locate(enable=True)
@@ -482,7 +482,7 @@ class TestLocate:
             patch('red_alert.integrations.outputs.unifi.led_controller.AioDeviceLocateRequest') as mock_locate_cls,
         ):
             mock_locate_cls.create = MagicMock(return_value=MagicMock())
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
             await controller.locate(enable=False)
@@ -501,7 +501,7 @@ class TestLocateDevice:
             patch('red_alert.integrations.outputs.unifi.led_controller.AioDeviceLocateRequest') as mock_locate_cls,
         ):
             mock_locate_cls.create = MagicMock(return_value=MagicMock())
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC, DEVICE_MAC_2])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC, DEVICE_MAC_2], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
             await controller.locate_device(DEVICE_MAC, enable=True)
@@ -520,7 +520,7 @@ class TestLocateDevice:
             patch('red_alert.integrations.outputs.unifi.led_controller.AioDeviceLocateRequest') as mock_locate_cls,
         ):
             mock_locate_cls.create = MagicMock(return_value=MagicMock())
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC, DEVICE_MAC_2])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC, DEVICE_MAC_2], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
             await controller.locate_device(DEVICE_MAC, enable=False)
@@ -538,7 +538,7 @@ class TestLocateDevice:
             patch('red_alert.integrations.outputs.unifi.led_controller.aiohttp.ClientSession', return_value=AsyncMock()),
         ):
             mock_locate_cls.create = MagicMock(return_value=MagicMock())
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             await controller.locate_device(DEVICE_MAC, enable=True)
 
             mock_ctrl.login.assert_called_once()
@@ -730,7 +730,7 @@ class TestConnectWith2fa:
         mock_ctrl.connectivity._request = AsyncMock()
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], totp_secret='JBSWY3DPEHPK3PXP')
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi', totp_secret='JBSWY3DPEHPK3PXP')
             controller._session = AsyncMock()
             await controller.connect()
 
@@ -746,7 +746,7 @@ class TestConnectWith2fa:
         mock_ctrl.connectivity._request = original_request
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
 
@@ -761,7 +761,7 @@ class TestSiteValidation:
         mock_ctrl = _mock_controller([device], sites=[_mock_site('default', 'Default')])
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
             assert controller._connected is True
@@ -774,7 +774,7 @@ class TestSiteValidation:
         mock_ctrl = _mock_controller([device], sites=sites)
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             with pytest.raises(ValueError, match='Multiple UniFi sites found'):
                 await controller.connect()
@@ -787,7 +787,7 @@ class TestSiteValidation:
         mock_ctrl = _mock_controller([device], sites=sites)
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             with pytest.raises(ValueError, match=r'"default" \(Default\).*"branch" \(Branch Office\)'):
                 await controller.connect()
@@ -800,7 +800,7 @@ class TestSiteValidation:
         mock_ctrl = _mock_controller([device], sites=sites)
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], site='remote')
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi', site='remote')
             controller._session = AsyncMock()
             await controller.connect()
             assert controller._connected is True
@@ -813,7 +813,7 @@ class TestSiteValidation:
         mock_ctrl = _mock_controller([device], sites=sites)
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], site='nonexistent')
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi', site='nonexistent')
             controller._session = AsyncMock()
             with pytest.raises(ValueError, match='Configured site "nonexistent" not found'):
                 await controller.connect()
@@ -825,7 +825,7 @@ class TestSiteValidation:
         mock_ctrl = _mock_controller([device], sites=[])
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             controller._session = AsyncMock()
             await controller.connect()
             assert controller._connected is True
@@ -843,7 +843,7 @@ class TestClose:
         ):
             mock_session = AsyncMock()
             mock_session_cls.return_value = mock_session
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi')
             await controller.connect()
             await controller.close()
 
@@ -857,7 +857,7 @@ class TestClose:
         mock_ctrl = _mock_controller([device])
 
         with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
-            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], session=session)
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='aiounifi', session=session)
             await controller.connect()
             await controller.close()
 
