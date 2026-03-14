@@ -71,7 +71,7 @@ DEFAULT_CONFIG: dict = {
     'username': None,
     'password': None,
     'port': 443,
-    'site': 'default',
+    'site': None,
     'device_macs': [],
     'led_states': {},
     'device_overrides': {},

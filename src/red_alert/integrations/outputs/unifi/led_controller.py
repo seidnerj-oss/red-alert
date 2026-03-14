@@ -124,7 +124,7 @@ class UnifiLedController:
         password: str,
         device_macs: list[str],
         port: int = 443,
-        site: str = 'default',
+        site: str | None = None,
         session: Any | None = None,
         totp_secret: str | None = None,
         backend: str = 'aiounifi',
@@ -136,7 +136,8 @@ class UnifiLedController:
             password: Controller login password.
             device_macs: List of device MAC addresses to control.
             port: Controller port (default: 443).
-            site: UniFi site name (default: 'default').
+            site: UniFi site name. Required when the controller has multiple sites.
+                  If None, auto-detected when only one site exists.
             session: Optional aiohttp.ClientSession (aiounifi backend only). Ignored by pyunifiapi.
             totp_secret: Optional TOTP secret (base32) for 2FA.
             backend: Backend library to use: 'aiounifi' (default) or 'pyunifiapi'.
@@ -182,13 +183,14 @@ class UnifiLedController:
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
 
+        # Use configured site or 'default' for initial connection
         config = AioConfiguration(
             session=self._session,
             host=self._host,
             username=self._username,
             password=self._password,
             port=self._port,
-            site=self._site,
+            site=self._site or 'default',
             ssl_context=ssl_context,
         )
         self._controller = AioController(config)
@@ -197,6 +199,8 @@ class UnifiLedController:
             self._controller.connectivity._request = _wrap_request_with_2fa(self._controller.connectivity._request, self._totp_secret, self._session)
 
         await self._controller.login()
+        await self._controller.sites.update()
+        self._validate_site()
         await self._controller.devices.update()
 
         self._send_request = self._controller.request
@@ -205,6 +209,36 @@ class UnifiLedController:
 
         self._log_device_discovery()
         self._connected = True
+
+    def _validate_site(self):
+        """Validate the configured site against available sites on the controller.
+
+        Must be called after sites have been fetched (aiounifi: sites.update(), pyunifiapi: initialize()).
+        Raises ValueError if multiple sites exist and no site was explicitly configured.
+        """
+        sites = list(self._controller.sites.values())
+
+        if not sites:
+            logger.warning('No sites returned by controller')
+            return
+
+        site_info = [(s.name, s.description) for s in sites]
+
+        if len(sites) == 1:
+            site = sites[0]
+            logger.info('Using site "%s" (%s)', site.name, site.description)
+            return
+
+        # Multiple sites - require explicit configuration
+        site_list = ', '.join(f'"{name}" ({desc})' for name, desc in site_info)
+        if self._site is None:
+            raise ValueError(f'Multiple UniFi sites found: {site_list}. Set "site" in your config to specify which one to use.')
+
+        site_names = [name for name, _ in site_info]
+        if self._site not in site_names:
+            raise ValueError(f'Configured site "{self._site}" not found. Available sites: {site_list}')
+
+        logger.info('Using site "%s" (%d sites available)', self._site, len(sites))
 
     async def _connect_pyunifiapi(self):
         """Connect using pyunifiapi backend."""
@@ -221,12 +255,13 @@ class UnifiLedController:
             username=self._username,
             password=self._password,
             port=self._port,
-            site=self._site,
+            site=self._site or 'default',
             totp_secret=self._totp_secret,
         )
         self._controller = PyController(config)
         await self._controller.connect()
-        await self._controller.initialize()
+        await self._controller.initialize()  # fetches sites among other data
+        self._validate_site()
 
         self._send_request = self._controller.execute
         self._DeviceSetLedStatus = PyDeviceSetLedStatus

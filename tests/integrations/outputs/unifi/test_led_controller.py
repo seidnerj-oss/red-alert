@@ -37,8 +37,16 @@ def _mock_device(mac='aa:bb:cc:dd:ee:ff', device_id='abc123', supports_led_ring=
     return device
 
 
-def _mock_controller(devices=None):
-    """Create a mock controller with devices (compatible with both backends)."""
+def _mock_site(name='default', description='Default'):
+    """Create a mock Site object."""
+    site = MagicMock()
+    site.name = name
+    site.description = description
+    return site
+
+
+def _mock_controller(devices=None, sites=None):
+    """Create a mock controller with devices and sites (compatible with both backends)."""
     controller = AsyncMock()
     controller.login = AsyncMock()
     controller.request = AsyncMock()
@@ -58,6 +66,13 @@ def _mock_controller(devices=None):
     controller.devices.get = MagicMock(side_effect=lambda mac, default=None: device_map.get(mac, default))
     controller.devices.__contains__ = MagicMock(side_effect=lambda mac: mac in device_map)
     controller.devices.__iter__ = MagicMock(return_value=iter(device_map))
+
+    # Mock the sites handler (default: single site named 'default')
+    if sites is None:
+        sites = [_mock_site()]
+    controller.sites = MagicMock()
+    controller.sites.update = AsyncMock()
+    controller.sites.values = MagicMock(return_value=sites)
 
     return controller
 
@@ -193,6 +208,7 @@ class TestConnectPyunifiapi:
             controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], backend='pyunifiapi', totp_secret='JBSWY3DPEHPK3PXP')
             await controller.connect()
 
+            # site defaults to 'default' when not explicitly configured (None -> 'default')
             mock_config_cls.assert_called_once_with(
                 host='192.168.1.1',
                 username='admin',
@@ -557,6 +573,84 @@ class TestConnectWith2fa:
             await controller.connect()
 
             assert mock_ctrl.connectivity._request is original_request
+
+
+class TestSiteValidation:
+    @pytest.mark.asyncio
+    async def test_single_site_succeeds_without_config(self):
+        """When only one site exists, connect succeeds even without explicit site config."""
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl = _mock_controller([device], sites=[_mock_site('default', 'Default')])
+
+        with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller._session = AsyncMock()
+            await controller.connect()
+            assert controller._connected is True
+
+    @pytest.mark.asyncio
+    async def test_multiple_sites_fails_without_config(self):
+        """When multiple sites exist and no site is configured, connect raises ValueError."""
+        device = _mock_device(mac=DEVICE_MAC)
+        sites = [_mock_site('default', 'Default'), _mock_site('remote', 'Remote Office')]
+        mock_ctrl = _mock_controller([device], sites=sites)
+
+        with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller._session = AsyncMock()
+            with pytest.raises(ValueError, match='Multiple UniFi sites found'):
+                await controller.connect()
+
+    @pytest.mark.asyncio
+    async def test_multiple_sites_error_lists_available(self):
+        """The error message includes available site names and descriptions."""
+        device = _mock_device(mac=DEVICE_MAC)
+        sites = [_mock_site('default', 'Default'), _mock_site('branch', 'Branch Office')]
+        mock_ctrl = _mock_controller([device], sites=sites)
+
+        with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller._session = AsyncMock()
+            with pytest.raises(ValueError, match=r'"default" \(Default\).*"branch" \(Branch Office\)'):
+                await controller.connect()
+
+    @pytest.mark.asyncio
+    async def test_multiple_sites_succeeds_with_valid_config(self):
+        """When multiple sites exist and the configured site is valid, connect succeeds."""
+        device = _mock_device(mac=DEVICE_MAC)
+        sites = [_mock_site('default', 'Default'), _mock_site('remote', 'Remote Office')]
+        mock_ctrl = _mock_controller([device], sites=sites)
+
+        with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], site='remote')
+            controller._session = AsyncMock()
+            await controller.connect()
+            assert controller._connected is True
+
+    @pytest.mark.asyncio
+    async def test_configured_site_not_found(self):
+        """When the configured site doesn't exist, connect raises ValueError."""
+        device = _mock_device(mac=DEVICE_MAC)
+        sites = [_mock_site('default', 'Default'), _mock_site('remote', 'Remote Office')]
+        mock_ctrl = _mock_controller([device], sites=sites)
+
+        with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC], site='nonexistent')
+            controller._session = AsyncMock()
+            with pytest.raises(ValueError, match='Configured site "nonexistent" not found'):
+                await controller.connect()
+
+    @pytest.mark.asyncio
+    async def test_no_sites_returned_warns_but_continues(self):
+        """When the controller returns no sites, log a warning but continue."""
+        device = _mock_device(mac=DEVICE_MAC)
+        mock_ctrl = _mock_controller([device], sites=[])
+
+        with patch('red_alert.integrations.outputs.unifi.led_controller.AioController', return_value=mock_ctrl):
+            controller = UnifiLedController('192.168.1.1', 'admin', 'pass', [DEVICE_MAC])
+            controller._session = AsyncMock()
+            await controller.connect()
+            assert controller._connected is True
 
 
 class TestClose:
