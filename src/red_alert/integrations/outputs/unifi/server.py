@@ -265,18 +265,8 @@ async def run_monitor(config: dict):
         cfg.get('areas_of_interest') or 'all',
     )
 
-    # Connect and set initial LED state
+    # Connect (first poll will set the initial LED state)
     await led_controller.connect()
-    if device_led_states:
-        for mac in cfg['device_macs']:
-            mac_lower = mac.lower()
-            initial_cfg = device_led_states[mac_lower][AlertState.ROUTINE]
-            initial_hex = rgb_to_hex(*initial_cfg['color'])
-            await led_controller.set_device_led(mac_lower, on=initial_cfg['on'], color_hex=initial_hex, brightness=initial_cfg['brightness'])
-    else:
-        initial_cfg = led_states[AlertState.ROUTINE]
-        initial_hex = rgb_to_hex(*initial_cfg['color'])
-        await led_controller.set_led(on=initial_cfg['on'], color_hex=initial_hex, brightness=initial_cfg['brightness'])
 
     try:
         while True:
