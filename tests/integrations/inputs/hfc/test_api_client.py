@@ -368,3 +368,267 @@ class TestDownloadFile:
 
         result = await api.download_file('https://example.com/notfound')
         assert result is None
+
+
+class TestGetAlertCategories:
+    @pytest.mark.asyncio
+    async def test_returns_list_on_success(self, api_urls, mock_logger):
+        categories = [
+            {'id': 1, 'category': 'missilealert', 'matrix_id': 1, 'priority': 120, 'queue': False},
+            {'id': 2, 'category': 'uav', 'matrix_id': 6, 'priority': 130, 'queue': False},
+        ]
+        resp = _make_response(json.dumps(categories).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_alert_categories()
+        assert result == categories
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_empty_response(self, api_urls, mock_logger):
+        resp = _make_response(b'')
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_alert_categories()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_non_list(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps({'not': 'a list'}).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_alert_categories()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_http_404(self, api_urls, mock_logger):
+        client = AsyncMock()
+        client.get = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                'Not Found',
+                request=httpx.Request('GET', 'https://example.com'),
+                response=httpx.Response(404),
+            )
+        )
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_alert_categories()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_uses_correct_url(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps([]).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_alert_categories()
+        call_url = client.get.call_args.args[0]
+        assert '/alerts/alertCategories.json' in call_url
+
+    @pytest.mark.asyncio
+    async def test_sends_referer_header(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps([]).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_alert_categories()
+        call_kwargs = client.get.call_args
+        assert call_kwargs.kwargs.get('headers', {}).get('Referer') == 'https://www.oref.org.il/'
+
+
+class TestGetAlertTranslations:
+    @pytest.mark.asyncio
+    async def test_returns_list_on_success(self, api_urls, mock_logger):
+        translations = [
+            {
+                'heb': 'היכנסו למרחב המוגן',
+                'eng': 'Enter the Protected Space',
+                'rus': 'Войдите в убежище',
+                'arb': 'ادخلوا الحيز المحمي',
+                'catId': 1,
+                'matrixCatId': 1,
+                'hebTitle': 'ירי רקטות וטילים',
+                'engTitle': 'Rocket and Missile Attack',
+                'rusTitle': 'Ракетный обстрел',
+                'arbTitle': 'إطلاق قذائف وصواريخ',
+                'updateType': '-',
+            },
+        ]
+        resp = _make_response(json.dumps(translations).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_alert_translations()
+        assert result == translations
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_empty_response(self, api_urls, mock_logger):
+        resp = _make_response(b'')
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_alert_translations()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_non_list(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps({'not': 'a list'}).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_alert_translations()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_uses_correct_url(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps([]).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_alert_translations()
+        call_url = client.get.call_args.args[0]
+        assert '/alerts/alertsTranslation.json' in call_url
+
+    @pytest.mark.asyncio
+    async def test_sends_referer_header(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps([]).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_alert_translations()
+        call_kwargs = client.get.call_args
+        assert call_kwargs.kwargs.get('headers', {}).get('Referer') == 'https://www.oref.org.il/'
+
+
+class TestGetAlertDisplayConfig:
+    @pytest.mark.asyncio
+    async def test_returns_list_on_success(self, api_urls, mock_logger):
+        config = [
+            {
+                'title': 'ירי רקטות וטילים',
+                'cat': 'missilealert',
+                'instructions': 'היכנסו למרחב המוגן',
+                'eventManagementLink': None,
+                'lifeSavingGuidelinesLink': None,
+                'ttlInMinutes': 10,
+                'updateType': '0',
+            },
+        ]
+        resp = _make_response(json.dumps(config).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_alert_display_config()
+        assert result == config
+        assert result[0]['ttlInMinutes'] == 10
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_empty_response(self, api_urls, mock_logger):
+        resp = _make_response(b'')
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_alert_display_config()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_non_list(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps({'not': 'a list'}).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_alert_display_config()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_uses_correct_url(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps([]).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_alert_display_config()
+        call_url = client.get.call_args.args[0]
+        assert '/alerts/RemainderConfig_heb.json' in call_url
+
+    @pytest.mark.asyncio
+    async def test_sends_referer_header(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps([]).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_alert_display_config()
+        call_kwargs = client.get.call_args
+        assert call_kwargs.kwargs.get('headers', {}).get('Referer') == 'https://www.oref.org.il/'
+
+
+class TestGetGlobalConfig:
+    @pytest.mark.asyncio
+    async def test_returns_dict_on_success(self, api_urls, mock_logger):
+        config = {
+            'alertsTimeout': 10,
+            'isSettlementStatusNeeded': False,
+            'feedbackForm': {'articles': True},
+            'defaultOgImage': '/media/test.jpg',
+        }
+        resp = _make_response(json.dumps(config).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_global_config()
+        assert result == config
+        assert result['alertsTimeout'] == 10
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_empty_response(self, api_urls, mock_logger):
+        resp = _make_response(b'')
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_global_config()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_non_dict(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps([1, 2, 3]).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_global_config()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_uses_correct_url(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps({}).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_global_config()
+        call_url = client.get.call_args.args[0]
+        assert 'api.oref.org.il/api/v1/global' in call_url
+
+    @pytest.mark.asyncio
+    async def test_sends_referer_header(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps({}).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_global_config()
+        call_kwargs = client.get.call_args
+        assert call_kwargs.kwargs.get('headers', {}).get('Referer') == 'https://www.oref.org.il/'
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_http_error(self, api_urls, mock_logger):
+        client = AsyncMock()
+        client.get = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                'Server Error',
+                request=httpx.Request('GET', 'https://example.com'),
+                response=httpx.Response(500),
+            )
+        )
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_global_config()
+        assert result is None

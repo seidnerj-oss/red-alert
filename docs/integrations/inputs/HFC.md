@@ -11,10 +11,11 @@ red-alert polls the Israeli Home Front Command (Pikud Ha-Oref) website API for l
 
 ## API Endpoints
 
-The HFC has two domains with different APIs:
+The HFC uses three domains:
 
-- **`www.oref.org.il`** - the main website (Angular app), hosts the live alerts and 24h history endpoints
-- **`alerts-history.oref.org.il`** - the alerts history site, hosts the extended history, city data, and district data endpoints
+- **`www.oref.org.il`** - the main website (Angular app), hosts the live alerts, 24h history, and metadata endpoints (categories, translations, display config)
+- **`alerts-history.oref.org.il`** - the alerts history site, hosts the extended history, district data, and static assets (alarm sound)
+- **`api.oref.org.il`** - the API gateway, hosts global configuration
 
 All endpoints require HTTPS and specific headers (see [Required HTTP Headers](#required-http-headers)).
 
@@ -142,7 +143,183 @@ Note: `data` is a single city name string (not an array like in the live endpoin
 
 **Known issue:** This endpoint is unreliable - it returns `\r\n` (empty) even when alerts occurred in the past 24 hours. We observed this on March 14, 2026: the endpoint returned empty at 04:25 UTC despite alerts occurring between 02:21-05:16. The extended history endpoint returned all 1614 entries for the same period. The 24h endpoint appears to have a shorter effective window or different caching behavior than its name suggests.
 
-### Endpoints We Don't Currently Use (But Could)
+### Metadata & Configuration Endpoints
+
+These endpoints provide supplementary data about alert types, translations, and display configuration. They are served from `www.oref.org.il` and `api.oref.org.il`.
+
+**NOTE:** The `www.oref.org.il/alerts/*.json` endpoints have been observed returning 404 outside of active alert periods. They may only be served when the HFC website is actively displaying alerts. The API wrappers handle this gracefully (returning None).
+
+#### Alert Categories (category definitions)
+
+```
+GET https://www.oref.org.il/alerts/alertCategories.json
+```
+
+Maps category IDs to English category slugs, matrix IDs, and display priorities. This is the authoritative source for understanding the relationship between `cat` (from live alerts), `category` (English slug), `matrix_id` (used in history), and display `priority` (higher = more urgent in website display). Covers all 28 real and drill alert types.
+
+**Response format:**
+```json
+[
+    {"id": 1, "category": "missilealert", "matrix_id": 1, "priority": 120, "queue": false},
+    {"id": 2, "category": "uav", "matrix_id": 6, "priority": 130, "queue": false},
+    {"id": 9, "category": "cbrne", "matrix_id": 4, "priority": 170, "queue": false},
+    {"id": 10, "category": "terrorattack", "matrix_id": 13, "priority": 160, "queue": false},
+    {"id": 13, "category": "update", "matrix_id": 10, "priority": 0, "queue": false},
+    {"id": 14, "category": "flash", "matrix_id": 10, "priority": 0, "queue": false},
+    {"id": 15, "category": "missilealertdrill", "matrix_id": 101, "priority": 40, "queue": false}
+]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | int | Category ID (matches `cat` in live alerts) |
+| `category` | string | English category slug (e.g., `missilealert`, `uav`, `cbrne`) |
+| `matrix_id` | int | Matrix ID (used in extended history `category`/`matrix_id` fields) |
+| `priority` | int | Display priority (higher = more urgent; 0 = no priority, e.g., drills) |
+| `queue` | bool | Whether alerts of this type are queued (always false in observed data) |
+
+**Full category mapping (28 entries):**
+
+| id | category | matrix_id | priority | Description |
+|----|----------|-----------|----------|-------------|
+| 1 | missilealert | 1 | 120 | Missile/rocket fire |
+| 2 | uav | 6 | 130 | Hostile aircraft intrusion |
+| 3 | nonconventional | 2 | 180 | Non-conventional (highest priority) |
+| 4 | warning | 8 | 140 | General warning |
+| 5 | memorialday1 | 2 | 0 | Memorial day siren 1 |
+| 6 | memorialday2 | 2 | 0 | Memorial day siren 2 |
+| 7 | earthquakealert1 | 3 | 90 | Earthquake (preliminary) |
+| 8 | earthquakealert2 | 3 | 110 | Earthquake (confirmed) |
+| 9 | cbrne | 4 | 170 | Chemical/biological/radiological/nuclear |
+| 10 | terrorattack | 13 | 160 | Terrorist infiltration |
+| 11 | tsunami | 5 | 100 | Tsunami |
+| 12 | hazmat | 7 | 150 | Hazardous materials |
+| 13 | update | 10 | 0 | Update/all-clear |
+| 14 | flash | 10 | 0 | Flash alert (pre-alert, stay in shelter, etc.) |
+| 15-28 | *drill | 101-113 | 10-80 | Drill variants (100 + threat matrix_id) |
+
+#### Alert Translations (multi-language alert text)
+
+```
+GET https://www.oref.org.il/alerts/alertsTranslation.json
+```
+
+4-language translations (Hebrew, English, Russian, Arabic) for all alert types. Each entry provides translated titles, instruction text, and is keyed by `catId`, `matrixCatId`, and `updateType`. Contains 66 entries covering all alert types, drills, and sub-types (e.g., different phases of terrorist infiltration or hazmat events).
+
+**Response format:**
+```json
+[
+    {
+        "heb": "זמן ההגעה למרחב המוגן {0} {1}, היכנסו למרחב המוגן",
+        "eng": "Time of arrival in the protected space {0} {1}, Enter the Protected Space",
+        "rus": "Время входа в защищённое пространство {0} {1}, Вход в убежище",
+        "arb": "المدة المتاحة للوصول الى المكان المحمي {0} {1}, ادخلوا فورا الى الحيّز المحمي",
+        "catId": 1,
+        "matrixCatId": 1,
+        "hebTitle": "ירי רקטות וטילים",
+        "engTitle": "Rocket and Missile Attack",
+        "rusTitle": "Ракетный обстрел",
+        "arbTitle": "إطلاق قذائف وصواريخ",
+        "updateType": "-"
+    }
+]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `heb` | string | Hebrew instruction text (`{0}` and `{1}` are shelter time placeholders) |
+| `eng` | string | English instruction text |
+| `rus` | string | Russian instruction text |
+| `arb` | string | Arabic instruction text |
+| `catId` | int | Category ID (from alertCategories) |
+| `matrixCatId` | int | Matrix category ID |
+| `hebTitle` / `engTitle` / `rusTitle` / `arbTitle` | string | Alert title in each language |
+| `updateType` | string | Sub-type identifier (`-` for primary alerts, numeric for sub-types) |
+
+This endpoint is useful for implementing multi-language alert display without hardcoding translations.
+
+#### Alert Display Config (website/app display settings)
+
+```
+GET https://www.oref.org.il/alerts/RemainderConfig_heb.json
+```
+
+Display configuration used by the HFC website and mobile app. Each entry defines the Hebrew title, shelter instructions, TTL (time-to-live in minutes for the alert display), and links to life-saving guidelines for a specific alert type/sub-type. Contains 37 entries covering all alert variations including sub-phases (e.g., "enter shelter", "stay in shelter", "you may leave shelter").
+
+**Response format:**
+```json
+[
+    {
+        "title": "ירי רקטות וטילים",
+        "cat": "missilealert",
+        "instructions": "היכנסו למרחב המוגן",
+        "eventManagementLink": null,
+        "lifeSavingGuidelinesLink": {
+            "target": "_self",
+            "name": "ירי רקטות וטילים מעודכן",
+            "url": "https://www.oref.org.il/heb/life-saving-guidelines/rocket-and-missile-attacks/",
+            "Type": "Content"
+        },
+        "ttlInMinutes": 10,
+        "updateType": "0"
+    }
+]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | string | Hebrew display title for this alert sub-type |
+| `cat` | string | Category slug (from alertCategories: `missilealert`, `uav`, `update`, `flash`, etc.) |
+| `instructions` | string | Hebrew shelter/safety instructions |
+| `eventManagementLink` | object/null | Link to event management page |
+| `lifeSavingGuidelinesLink` | object/null | Link to life-saving guidelines page |
+| `ttlInMinutes` | int | How long to display the alert (usually 10 minutes, 6 for pre-alerts) |
+| `updateType` | string | Sub-type identifier matching alertsTranslation (0=primary, 1-39=sub-types) |
+
+The `updateType` field distinguishes sub-phases within a category. For example, terrorist infiltration (`terrorattack`) has:
+- `updateType=0`: Initial alert ("enter shelter")
+- `updateType=11`: Threat removed
+- `updateType=12`: Flash - "do not leave shelter"
+- `updateType=13`: Event ended - "you may leave"
+
+#### Global Config (site-wide settings)
+
+```
+GET https://api.oref.org.il/api/v1/global
+```
+
+Global configuration for the HFC website. The `alertsTimeout` field indicates the recommended polling interval in seconds (currently 10). This is served from a different domain (`api.oref.org.il`) than the other endpoints.
+
+**Response format:**
+```json
+{
+    "alertsTimeout": 10,
+    "isSettlementStatusNeeded": false,
+    "feedbackForm": {
+        "articles": true,
+        "guidelines": true,
+        "contactUs": false,
+        "emergencies": true,
+        "eventsManagement": true,
+        "questionsAnswers": true,
+        "updatesNewsflashes": true,
+        "recommendations": true,
+        "alertHistory": true
+    },
+    "defaultOgImage": "/media/kvpohwhe/8480-1.jpg"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `alertsTimeout` | int | Recommended polling interval in seconds (10) |
+| `isSettlementStatusNeeded` | bool | Whether to show settlement status |
+| `feedbackForm` | object | Feature flags for the website feedback form |
+| `defaultOgImage` | string | Default Open Graph image path |
+
+Note: Our integrations poll every 1 second (not 10) because we prioritize alert latency over bandwidth.
+
+### Endpoints We Don't Currently Use
 
 #### City Data
 
@@ -152,9 +329,25 @@ GET https://alerts-history.oref.org.il/Shared/Ajax/GetCities.aspx?lang=he
 
 Similar city list with `areaid`, `mixname` (HTML-formatted label with area in `<span>` tag), and `color` fields. Less useful than GetDistricts since it lacks `migun_time` and `areaname`.
 
+#### Leftovers (purpose unclear)
+
+```
+GET https://alerts-history.oref.org.il/WarningMessages/Leftovers/HE.Leftovers.json
+```
+
+The HFC website polls this endpoint every 5 seconds. In our captures it returned "Not found". The purpose is unclear - it may be a legacy endpoint for leftover/trailing alerts or a feature that is no longer active.
+
+#### Alarm Sound (static audio file)
+
+```
+https://alerts-history.oref.org.il/Style/Shared/alarmSound.mp4
+```
+
+The official HFC alarm siren sound, served as an MP4 audio file. Used by the website and mobile app for audible alerts. This could be used by audio output integrations (e.g., HomePod) as an alternative to custom alert sounds.
+
 ## Alert Category Codes
 
-Categories observed in real production data (March 2026):
+Categories observed in real production data (March 2026). See also the [Alert Categories endpoint](#alert-categories-category-definitions) for the authoritative machine-readable mapping with priorities and matrix IDs.
 
 | Code | Hebrew Title | English | State |
 |------|-------------|---------|-------|

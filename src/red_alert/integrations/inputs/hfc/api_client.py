@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 from datetime import datetime, timedelta
+from typing import Literal, overload
 
 import httpx
 
@@ -9,19 +10,27 @@ from red_alert.core.utils import check_bom
 
 ALERTS_HISTORY_REFERER = 'https://alerts-history.oref.org.il/'
 ALERTS_HISTORY_BASE = 'https://alerts-history.oref.org.il'
+OREF_WEBSITE_BASE = 'https://www.oref.org.il'
+OREF_WEBSITE_REFERER = 'https://www.oref.org.il/'
+OREF_API_BASE = 'https://api.oref.org.il'
 
 
 class HomeFrontCommandApiClient:
     """Client for fetching alerts from the Israeli Home Front Command (Pikud Ha-Oref) API.
 
-    HFC API endpoints:
-        Live alerts:     /WarningMessages/alert/alerts.json
-        24h history:     /WarningMessages/alert/History/AlertsHistory.json
-        Extended history (alerts-history.oref.org.il):
-            /Shared/Ajax/GetAlarmsHistory.aspx?lang=he&fromDate=DD.MM.YYYY&toDate=DD.MM.YYYY&mode=0
-        City/district data (alerts-history.oref.org.il):
-            /Shared/Ajax/GetDistricts.aspx?lang=he  (includes migun_time - shelter time in seconds)
-            /Shared/Ajax/GetCities.aspx?lang=he      (includes areaid, mixname)
+    HFC API endpoints (three domains):
+        www.oref.org.il:
+            /WarningMessages/alert/alerts.json           - Live alerts (polled every second)
+            /WarningMessages/alert/History/AlertsHistory.json - 24h history (unreliable fallback)
+            /alerts/alertCategories.json                 - Alert category definitions
+            /alerts/alertsTranslation.json               - Multi-language alert translations
+            /alerts/RemainderConfig_heb.json             - Alert display config (TTL, instructions)
+        alerts-history.oref.org.il:
+            /Shared/Ajax/GetAlarmsHistory.aspx           - Extended history (primary)
+            /Shared/Ajax/GetDistricts.aspx               - District/city data with shelter times
+            /Shared/Ajax/GetCities.aspx                  - City data (less useful than districts)
+        api.oref.org.il:
+            /api/v1/global                               - Global config (polling interval)
 
     Live alerts response format:
         {"cat": "1", "title": "ירי רקטות וטילים", "data": ["city1", "city2"], "desc": "..."}
@@ -49,6 +58,61 @@ class HomeFrontCommandApiClient:
                 wait = 0.5 * (2**attempt) + random.uniform(0, 0.5)
                 self._log(f'Network error (attempt {attempt + 1}/{retries + 1}). Retrying in {wait:.2f}s.', level='DEBUG')
                 await asyncio.sleep(wait)
+
+    @overload
+    async def _fetch_json(
+        self, url: str, *, headers: dict[str, str] | None = None, expect_list: Literal[True] = True, label: str = ''
+    ) -> list | None: ...
+
+    @overload
+    async def _fetch_json(
+        self, url: str, *, headers: dict[str, str] | None = None, expect_list: Literal[False] = ..., label: str = ''
+    ) -> dict | None: ...
+
+    async def _fetch_json(self, url: str, *, headers: dict[str, str] | None = None, expect_list: bool = True, label: str = ''):
+        """Fetch JSON from a URL with retries, BOM handling, and shape validation.
+
+        Args:
+            url: The URL to fetch.
+            headers: Optional headers for the request.
+            expect_list: If True, validate response is a list. If False, validate it is a dict.
+            label: Descriptive label for log messages (e.g., 'districts').
+
+        Returns the parsed JSON data (list or dict), or None on failure.
+        """
+        try:
+
+            async def _do_fetch():
+                resp = await self._client.get(url, headers=headers)
+                resp.raise_for_status()
+                try:
+                    return resp.content.decode('utf-8-sig')
+                except UnicodeDecodeError:
+                    return resp.content.decode('utf-8')
+
+            text = await self._fetch_with_retries(_do_fetch)
+            if not text or not text.strip():
+                return None
+            try:
+                text = check_bom(text)
+                data = json.loads(text)
+                expected_type = list if expect_list else dict
+                if isinstance(data, expected_type):
+                    if label:
+                        self._log(f'{label.capitalize()}: loaded {len(data)} entries.')
+                    return data
+                self._log(f'{label.capitalize() if label else "Response"} is not a {expected_type.__name__}.', level='WARNING')
+                return None
+            except json.JSONDecodeError as e:
+                self._log(f'Invalid JSON in {label or "response"}: {e}', level='WARNING')
+                return None
+        except httpx.HTTPStatusError as e:
+            self._log(f'HTTP error fetching {label or url}: Status {e.response.status_code}', level='WARNING')
+        except httpx.TransportError as e:
+            self._log(f'Network/Timeout error fetching {label or url}: {e}', level='WARNING')
+        except Exception as e:
+            self._log(f'Unexpected error fetching {label or url}: {e.__class__.__name__} - {e}', level='ERROR', exc_info=True)
+        return None
 
     async def get_live_alerts(self):
         """Fetch live alerts, return dict or None."""
@@ -214,37 +278,7 @@ class HomeFrontCommandApiClient:
         Returns None on failure.
         """
         url = f'{ALERTS_HISTORY_BASE}/Shared/Ajax/GetDistricts.aspx?lang={lang}'
-        try:
-
-            async def _do_fetch():
-                resp = await self._client.get(url, headers={'Referer': ALERTS_HISTORY_REFERER})
-                resp.raise_for_status()
-                try:
-                    return resp.content.decode('utf-8-sig')
-                except UnicodeDecodeError:
-                    return resp.content.decode('utf-8')
-
-            text = await self._fetch_with_retries(_do_fetch)
-            if not text or not text.strip():
-                return None
-            try:
-                text = check_bom(text)
-                data = json.loads(text)
-                if isinstance(data, list):
-                    self._log(f'Districts: loaded {len(data)} entries.')
-                    return data
-                self._log('Districts response is not a list.', level='WARNING')
-                return None
-            except json.JSONDecodeError as e:
-                self._log(f'Invalid JSON in districts: {e}', level='WARNING')
-                return None
-        except httpx.HTTPStatusError as e:
-            self._log(f'HTTP error fetching districts: Status {e.response.status_code}', level='WARNING')
-        except httpx.TransportError as e:
-            self._log(f'Network/Timeout error fetching districts: {e}', level='WARNING')
-        except Exception as e:
-            self._log(f'Unexpected error fetching districts: {e.__class__.__name__} - {e}', level='ERROR', exc_info=True)
-        return None
+        return await self._fetch_json(url, headers={'Referer': ALERTS_HISTORY_REFERER}, label='districts')
 
     async def download_file(self, url: str):
         """Download text content (e.g. city data), return str or None."""
@@ -269,3 +303,50 @@ class HomeFrontCommandApiClient:
         except Exception as e:
             self._log(f'Unexpected error downloading file {url}: {e}', level='ERROR', exc_info=True)
         return None
+
+    async def get_alert_categories(self) -> list | None:
+        """Fetch alert category definitions from the HFC website.
+
+        Returns a list of dicts mapping category IDs to English names, matrix IDs,
+        and display priorities. Covers all 28 real and drill alert types.
+        Keys: id, category, matrix_id, priority, queue.
+
+        NOTE: This endpoint may return 404 when no alerts are active.
+        Returns None on failure.
+        """
+        url = f'{OREF_WEBSITE_BASE}/alerts/alertCategories.json'
+        return await self._fetch_json(url, headers={'Referer': OREF_WEBSITE_REFERER}, label='alert categories')
+
+    async def get_alert_translations(self) -> list | None:
+        """Fetch multi-language alert translations from the HFC website.
+
+        Returns a list of dicts with 4-language translations (Hebrew, English, Russian, Arabic)
+        for all alert types including titles and instruction text.
+        Keys: heb, eng, rus, arb, catId, matrixCatId, hebTitle, engTitle, rusTitle, arbTitle, updateType.
+        Returns None on failure.
+        """
+        url = f'{OREF_WEBSITE_BASE}/alerts/alertsTranslation.json'
+        return await self._fetch_json(url, headers={'Referer': OREF_WEBSITE_REFERER}, label='alert translations')
+
+    async def get_alert_display_config(self) -> list | None:
+        """Fetch alert display configuration from the HFC website.
+
+        Returns a list of dicts with display settings for each alert type/sub-type,
+        including Hebrew titles, shelter instructions, TTL in minutes, and links to
+        life-saving guidelines.
+        Keys: title, cat, instructions, eventManagementLink, lifeSavingGuidelinesLink, ttlInMinutes, updateType.
+        Returns None on failure.
+        """
+        url = f'{OREF_WEBSITE_BASE}/alerts/RemainderConfig_heb.json'
+        return await self._fetch_json(url, headers={'Referer': OREF_WEBSITE_REFERER}, label='alert display config')
+
+    async def get_global_config(self) -> dict | None:
+        """Fetch global site configuration from the HFC API.
+
+        Returns a dict with site-wide settings. The alertsTimeout field indicates
+        the recommended polling interval in seconds (currently 10).
+        Keys: alertsTimeout, isSettlementStatusNeeded, feedbackForm, defaultOgImage.
+        Returns None on failure.
+        """
+        url = f'{OREF_API_BASE}/api/v1/global'
+        return await self._fetch_json(url, headers={'Referer': OREF_WEBSITE_REFERER}, expect_list=False, label='global config')
