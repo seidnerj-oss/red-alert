@@ -24,7 +24,7 @@ import httpx
 from red_alert.core.state import AlertState, AlertStateTracker
 from red_alert.core.utils import standardize_name
 from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
-from red_alert.integrations.outputs.unifi.led_controller import UnifiLedController, rgb_to_hex
+from red_alert.integrations.outputs.unifi.led_controller import UnifiLedController, _color_label, rgb_to_hex
 
 logger = logging.getLogger('red_alert.unifi')
 
@@ -351,6 +351,9 @@ class UnifiAlertMonitor:
             cfg = self._state_cfg(state)
             should_blink = cfg['blink'] and cfg['on']
             blink_changed = should_blink != self._locating
+            color_hex = rgb_to_hex(*cfg['color'])
+            blink_label = ', blink' if should_blink else ''
+            logger.info('%s -> %s: %s brightness=%d%s', self._name, state.value, _color_label(color_hex), cfg['brightness'], blink_label)
 
             # Apply LED color and blink concurrently to avoid visible gap
             if blink_changed:
