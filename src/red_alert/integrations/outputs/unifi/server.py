@@ -16,8 +16,10 @@ Usage:
 """
 
 import asyncio
+import datetime
 import logging
 import time
+import zoneinfo
 
 import httpx
 
@@ -144,7 +146,7 @@ def _build_device_led_states(
                 if key.lower() == mac_lower:
                     override_cfg = val
                     break
-        override_led = override_cfg.get('led_states', override_cfg) if isinstance(override_cfg, dict) else {}
+        override_led = override_cfg.get('led_states', {}) if isinstance(override_cfg, dict) else {}
 
         if not override_led:
             result[mac_lower] = base_states
@@ -167,6 +169,52 @@ def _build_device_led_states(
                 device_states[alert_state] = base
         result[mac_lower] = device_states
 
+    return result
+
+
+def _parse_schedule(schedule: dict) -> dict:
+    """Parse a schedule entry into a normalized form.
+
+    Schedule format: {"time": "08:00-20:00", "timezone": "Asia/Jerusalem", "led_states": {...}}
+    The time range is HH:MM-HH:MM. Ranges that cross midnight (e.g. 20:00-08:00) are supported.
+    """
+    time_range = schedule.get('time', '')
+    if '-' not in time_range:
+        raise ValueError(f'Invalid schedule time range: {time_range!r} (expected HH:MM-HH:MM)')
+    start_str, end_str = time_range.split('-', 1)
+    start = datetime.time.fromisoformat(start_str.strip())
+    end = datetime.time.fromisoformat(end_str.strip())
+    tz_name = schedule.get('timezone')
+    if not tz_name:
+        raise ValueError('Schedule is missing required "timezone" field')
+    tz = zoneinfo.ZoneInfo(tz_name)
+    led_states = schedule.get('led_states', {})
+    return {'start': start, 'end': end, 'tz': tz, 'led_states': led_states}
+
+
+def _schedule_active(schedule: dict) -> bool:
+    """Check if a parsed schedule is currently active."""
+    now = datetime.datetime.now(tz=schedule['tz']).time()
+    start, end = schedule['start'], schedule['end']
+    if start <= end:
+        return bool(start <= now < end)
+    # Crosses midnight (e.g. 20:00-08:00)
+    return bool(now >= start or now < end)
+
+
+def _build_device_schedules(device_overrides: dict) -> dict[str, list[dict]]:
+    """Extract and parse schedules from device overrides.
+
+    Returns a dict keyed by lowercase MAC -> list of parsed schedules.
+    """
+    result = {}
+    for mac, override in device_overrides.items():
+        if not isinstance(override, dict):
+            continue
+        raw_schedules = override.get('schedules', [])
+        if raw_schedules:
+            parsed = [_parse_schedule(s) for s in raw_schedules]
+            result[mac.lower()] = parsed
     return result
 
 
@@ -282,6 +330,7 @@ class UnifiAlertMonitor:
         led_states: dict[AlertState, dict] | None = None,
         device_led_states: dict[str, dict[AlertState, dict]] | None = None,
         device_macs: list[str] | None = None,
+        device_schedules: dict[str, list[dict]] | None = None,
         name: str | None = None,
     ):
         self._api_client = api_client
@@ -290,19 +339,62 @@ class UnifiAlertMonitor:
         self._led_states = led_states or _build_led_states({})
         self._device_led_states = device_led_states
         self._device_macs = [mac.lower() for mac in device_macs] if device_macs else None
+        self._device_schedules = device_schedules or {}
         self._name = name
         self._current_alert_state: AlertState | None = None
         self._locating = False
+        self._active_schedule_key: str | None = None
 
     @property
     def alert_state(self) -> AlertState:
         return self._state.state
 
+    def _compute_schedule_key(self) -> str:
+        """Compute a key representing which schedules are currently active.
+
+        Changes when a schedule boundary is crossed, triggering LED re-apply.
+        """
+        parts = []
+        for mac in sorted(self._device_schedules):
+            for i, schedule in enumerate(self._device_schedules[mac]):
+                if _schedule_active(schedule):
+                    parts.append(f'{mac}:{i}')
+        return '|'.join(parts)
+
+    async def check_schedule(self) -> bool:
+        """Re-apply LED state if a schedule boundary was crossed. Returns True if LEDs were updated."""
+        if not self._device_schedules or self._current_alert_state is None:
+            return False
+        key = self._compute_schedule_key()
+        if key != self._active_schedule_key:
+            self._active_schedule_key = key
+            logger.info('%s schedule changed, re-applying LED state', self._name)
+            await self._apply_led_state(self._current_alert_state)
+            return True
+        return False
+
     def _state_cfg(self, state: AlertState, mac: str | None = None) -> dict:
         if mac and self._device_led_states and mac in self._device_led_states:
-            device_states = self._device_led_states[mac]
-            return device_states.get(state, device_states.get(AlertState.ROUTINE, self._led_states[AlertState.ROUTINE]))
-        return self._led_states.get(state, self._led_states[AlertState.ROUTINE])
+            base = self._device_led_states[mac]
+            cfg = base.get(state, base.get(AlertState.ROUTINE, self._led_states[AlertState.ROUTINE]))
+        else:
+            cfg = self._led_states.get(state, self._led_states[AlertState.ROUTINE])
+
+        if mac and mac in self._device_schedules:
+            for schedule in self._device_schedules[mac]:
+                if _schedule_active(schedule):
+                    state_key = next((k for k, v in STATE_KEY_MAP.items() if v == state), None)
+                    if state_key and state_key in schedule['led_states']:
+                        override = schedule['led_states'][state_key]
+                        cfg = dict(cfg)
+                        for field in ('on', 'brightness', 'blink'):
+                            if field in override:
+                                cfg[field] = override[field]
+                        if 'color' in override:
+                            cfg['color'] = _resolve_color(override['color'])
+                        cfg['brightness'] = max(0, min(100, cfg['brightness']))
+                    break
+        return cfg
 
     def _iter_macs(self) -> list[str]:
         """Return the list of MAC addresses this monitor controls."""
@@ -465,6 +557,7 @@ def _build_monitors_for_controller(
         device_macs = mon_cfg.get('device_macs', [])
         device_overrides = mon_cfg.get('device_overrides', {})
         device_led_states = _build_device_led_states(led_states, device_macs, device_overrides) if device_overrides else None
+        device_schedules = _build_device_schedules(device_overrides) if device_overrides else None
 
         log_fn = _prefixed_log_adapter(f'[{name}] ') if multi_monitor else _log_adapter
         state_tracker = AlertStateTracker(
@@ -480,6 +573,7 @@ def _build_monitors_for_controller(
             led_states=led_states,
             device_led_states=device_led_states,
             device_macs=device_macs if multi_monitor else None,
+            device_schedules=device_schedules,
             name=name,
         )
         monitors.append(monitor)
@@ -611,6 +705,13 @@ async def run_monitor(config: dict):
                         logger.debug('%s state: %s', monitor._name, state.value)
                     except Exception:
                         logger.exception('Error updating monitor "%s"', monitor._name)
+
+                # Check for schedule boundary crossings (time-of-day LED changes)
+                for monitor in all_monitors:
+                    try:
+                        await monitor.check_schedule()
+                    except Exception:
+                        logger.debug('Error checking schedule for "%s"', monitor._name, exc_info=True)
 
                 # Periodic reconciliation: refresh device data and fix mismatches
                 now = time.monotonic()

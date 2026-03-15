@@ -1,4 +1,5 @@
-from unittest.mock import AsyncMock
+import datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -7,10 +8,13 @@ from red_alert.integrations.outputs.unifi.server import (
     NAMED_COLORS,
     UnifiAlertMonitor,
     _build_device_led_states,
+    _build_device_schedules,
     _build_led_states,
     _normalize_config,
+    _parse_schedule,
     _resolve_color,
     _resolve_led_state,
+    _schedule_active,
 )
 
 
@@ -824,3 +828,114 @@ class TestMultiMonitor:
         assert led.set_device_led.call_count == 2
         macs_called = {call.args[0] for call in led.set_device_led.call_args_list}
         assert macs_called == {'aa:bb:cc:dd:ee:ff', '11:22:33:44:55:66'}
+
+
+class TestSchedule:
+    def test_parse_schedule(self):
+        s = _parse_schedule({'time': '08:00-20:00', 'timezone': 'Asia/Jerusalem', 'led_states': {'routine': {'brightness': 5}}})
+        assert s['start'] == datetime.time(8, 0)
+        assert s['end'] == datetime.time(20, 0)
+        assert s['led_states'] == {'routine': {'brightness': 5}}
+
+    def test_parse_schedule_missing_timezone_raises(self):
+        with pytest.raises(ValueError, match='missing required "timezone"'):
+            _parse_schedule({'time': '08:00-20:00'})
+
+    def test_parse_schedule_custom_timezone(self):
+        s = _parse_schedule({'time': '08:00-20:00', 'timezone': 'UTC'})
+        assert str(s['tz']) == 'UTC'
+
+    def test_schedule_active_within_range(self):
+        s = _parse_schedule({'time': '08:00-20:00', 'timezone': 'UTC'})
+        with patch('red_alert.integrations.outputs.unifi.server.datetime') as mock_dt:
+            mock_dt.datetime.now.return_value.time.return_value = datetime.time(12, 0)
+            mock_dt.time = datetime.time
+            assert _schedule_active(s) is True
+
+    def test_schedule_inactive_outside_range(self):
+        s = _parse_schedule({'time': '08:00-20:00', 'timezone': 'UTC'})
+        with patch('red_alert.integrations.outputs.unifi.server.datetime') as mock_dt:
+            mock_dt.datetime.now.return_value.time.return_value = datetime.time(22, 0)
+            mock_dt.time = datetime.time
+            assert _schedule_active(s) is False
+
+    def test_schedule_active_crosses_midnight(self):
+        s = _parse_schedule({'time': '20:00-08:00', 'timezone': 'UTC'})
+        with patch('red_alert.integrations.outputs.unifi.server.datetime') as mock_dt:
+            mock_dt.datetime.now.return_value.time.return_value = datetime.time(23, 0)
+            mock_dt.time = datetime.time
+            assert _schedule_active(s) is True
+
+    def test_schedule_inactive_crosses_midnight_daytime(self):
+        s = _parse_schedule({'time': '20:00-08:00', 'timezone': 'UTC'})
+        with patch('red_alert.integrations.outputs.unifi.server.datetime') as mock_dt:
+            mock_dt.datetime.now.return_value.time.return_value = datetime.time(12, 0)
+            mock_dt.time = datetime.time
+            assert _schedule_active(s) is False
+
+    def test_build_device_schedules(self):
+        overrides = {
+            'AA:BB:CC:DD:EE:FF': {
+                'led_states': {'routine': {'brightness': 100}},
+                'schedules': [{'time': '08:00-20:00', 'timezone': 'Asia/Jerusalem', 'led_states': {'routine': {'brightness': 5}}}],
+            }
+        }
+        result = _build_device_schedules(overrides)
+        assert 'aa:bb:cc:dd:ee:ff' in result
+        assert len(result['aa:bb:cc:dd:ee:ff']) == 1
+
+    def test_state_cfg_applies_active_schedule(self):
+        base = _build_led_states({})
+        device_overrides = {
+            'aa:bb:cc:dd:ee:ff': {
+                'led_states': {'routine': {'brightness': 100}},
+                'schedules': [{'time': '08:00-20:00', 'timezone': 'Asia/Jerusalem', 'led_states': {'routine': {'brightness': 5}}}],
+            }
+        }
+        device_led = _build_device_led_states(base, ['aa:bb:cc:dd:ee:ff'], device_overrides)
+        device_schedules = _build_device_schedules(device_overrides)
+
+        monitor = UnifiAlertMonitor(
+            api_client=AsyncMock(),
+            led_controller=AsyncMock(),
+            state_tracker=AsyncMock(),
+            led_states=base,
+            device_led_states=device_led,
+            device_macs=['aa:bb:cc:dd:ee:ff'],
+            device_schedules=device_schedules,
+            name='test',
+        )
+
+        with patch('red_alert.integrations.outputs.unifi.server.datetime') as mock_dt:
+            mock_dt.datetime.now.return_value.time.return_value = datetime.time(12, 0)
+            mock_dt.time = datetime.time
+            cfg = monitor._state_cfg(AlertState.ROUTINE, 'aa:bb:cc:dd:ee:ff')
+            assert cfg['brightness'] == 5
+
+    def test_state_cfg_inactive_schedule_uses_base(self):
+        base = _build_led_states({})
+        device_overrides = {
+            'aa:bb:cc:dd:ee:ff': {
+                'led_states': {'routine': {'brightness': 100}},
+                'schedules': [{'time': '08:00-20:00', 'timezone': 'Asia/Jerusalem', 'led_states': {'routine': {'brightness': 5}}}],
+            }
+        }
+        device_led = _build_device_led_states(base, ['aa:bb:cc:dd:ee:ff'], device_overrides)
+        device_schedules = _build_device_schedules(device_overrides)
+
+        monitor = UnifiAlertMonitor(
+            api_client=AsyncMock(),
+            led_controller=AsyncMock(),
+            state_tracker=AsyncMock(),
+            led_states=base,
+            device_led_states=device_led,
+            device_macs=['aa:bb:cc:dd:ee:ff'],
+            device_schedules=device_schedules,
+            name='test',
+        )
+
+        with patch('red_alert.integrations.outputs.unifi.server.datetime') as mock_dt:
+            mock_dt.datetime.now.return_value.time.return_value = datetime.time(22, 0)
+            mock_dt.time = datetime.time
+            cfg = monitor._state_cfg(AlertState.ROUTINE, 'aa:bb:cc:dd:ee:ff')
+            assert cfg['brightness'] == 100
