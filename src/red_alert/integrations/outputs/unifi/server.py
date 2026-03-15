@@ -585,11 +585,16 @@ async def run_monitor(config: dict):
                             await ctrl._controller.refresh_devices()
                         except Exception:
                             logger.debug('Failed to refresh devices for reconciliation', exc_info=True)
+                    total_corrected = 0
                     for monitor in all_monitors:
                         try:
-                            await monitor.reconcile()
+                            total_corrected += await monitor.reconcile()
                         except Exception:
                             logger.debug('Error during reconciliation for "%s"', monitor._name, exc_info=True)
+                    if total_corrected:
+                        logger.info('Reconciliation corrected %d device(s)', total_corrected)
+                    else:
+                        logger.debug('Reconciliation: all devices in sync')
 
             except Exception:
                 logger.exception('Error during poll cycle')
