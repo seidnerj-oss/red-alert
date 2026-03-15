@@ -1,8 +1,61 @@
 import functools
 import json
+import math
 import os
 
 from red_alert.core.utils import check_bom, standardize_name
+
+# Default path to the ICBS city data cache file (fetched at runtime, not committed)
+_DEFAULT_CITY_DATA_PATH = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'city_data.json')
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate the great-circle distance between two points in kilometers."""
+    r = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def find_cities_near(
+    latitude: float,
+    longitude: float,
+    radius_km: float = 5.0,
+    city_data_path: str | None = None,
+) -> list[str]:
+    """Find city names within a radius of the given coordinates.
+
+    Reads city_data.json directly (no CityDataManager or async required).
+    Returns original (non-standardized) city names sorted by distance.
+    """
+    path = city_data_path or _DEFAULT_CITY_DATA_PATH
+    try:
+        with open(path, encoding='utf-8-sig') as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+    results: list[tuple[float, str]] = []
+    for cities in data.get('areas', {}).values():
+        if not isinstance(cities, dict):
+            continue
+        for city_name, details in cities.items():
+            if not isinstance(details, dict):
+                continue
+            lat = details.get('lat')
+            lon = details.get('long')
+            if lat is None or lon is None:
+                continue
+            try:
+                dist = _haversine_km(latitude, longitude, float(lat), float(lon))
+            except (ValueError, TypeError):
+                continue
+            if dist <= radius_km:
+                results.append((dist, city_name))
+
+    results.sort(key=lambda x: x[0])
+    return [name for _, name in results]
 
 
 class CityDataManager:
@@ -75,6 +128,8 @@ class CityDataManager:
 
     async def _download_icbs_file(self):
         """Download ICBS city data from GitHub. Returns raw data dict or None."""
+        if not self._github_url:
+            return None
         self._log('Downloading city data from GitHub.')
         text = await self._api_client.download_file(self._github_url)
         if not text:

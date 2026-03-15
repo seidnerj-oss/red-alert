@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from red_alert.core.city_data import CityDataManager
+from red_alert.core.city_data import CityDataManager, _haversine_km, find_cities_near
 
 
 SAMPLE_CITY_DATA = {
@@ -36,6 +36,80 @@ def manager(tmp_path, mock_api_client, mock_logger):
     # Clear LRU cache between tests
     mgr.get_city_details.cache_clear()
     return mgr
+
+
+class TestHaversine:
+    def test_same_point_is_zero(self):
+        assert _haversine_km(32.0, 34.0, 32.0, 34.0) == 0.0
+
+    def test_known_distance(self):
+        # Tel Aviv to Haifa is roughly 83 km
+        dist = _haversine_km(32.0853, 34.7818, 32.7940, 34.9896)
+        assert 78 < dist < 88
+
+    def test_short_distance(self):
+        # Two nearby points (~1.1 km apart)
+        dist = _haversine_km(32.0853, 34.7818, 32.0853, 34.7918)
+        assert 0.5 < dist < 2.0
+
+
+class TestFindCitiesNear:
+    def test_finds_nearby_cities(self, tmp_path):
+        data = {
+            'areas': {
+                'גוש דן': {
+                    'תל אביב - מרכז העיר': {'lat': 32.0853, 'long': 34.7818},
+                    'רמת גן - מזרח': {'lat': 32.08, 'long': 34.81},
+                },
+                'שרון': {
+                    'נתניה - מזרח': {'lat': 32.3215, 'long': 34.8532},
+                },
+            }
+        }
+        path = tmp_path / 'city_data.json'
+        path.write_text(json.dumps(data), encoding='utf-8-sig')
+
+        result = find_cities_near(32.0853, 34.7818, radius_km=5.0, city_data_path=str(path))
+        assert 'תל אביב - מרכז העיר' in result
+        assert 'רמת גן - מזרח' in result
+        assert 'נתניה - מזרח' not in result
+
+    def test_sorted_by_distance(self, tmp_path):
+        data = {
+            'areas': {
+                'test': {
+                    'far': {'lat': 32.12, 'long': 34.78},
+                    'near': {'lat': 32.086, 'long': 34.782},
+                }
+            }
+        }
+        path = tmp_path / 'city_data.json'
+        path.write_text(json.dumps(data), encoding='utf-8-sig')
+
+        result = find_cities_near(32.0853, 34.7818, radius_km=10.0, city_data_path=str(path))
+        assert result[0] == 'near'
+        assert result[1] == 'far'
+
+    def test_empty_on_no_match(self, tmp_path):
+        data = {'areas': {'test': {'far_city': {'lat': 33.0, 'long': 35.0}}}}
+        path = tmp_path / 'city_data.json'
+        path.write_text(json.dumps(data), encoding='utf-8-sig')
+
+        result = find_cities_near(32.0853, 34.7818, radius_km=1.0, city_data_path=str(path))
+        assert result == []
+
+    def test_missing_file_returns_empty(self, tmp_path):
+        result = find_cities_near(32.0, 34.0, city_data_path=str(tmp_path / 'nonexistent.json'))
+        assert result == []
+
+    def test_skips_entries_without_coords(self, tmp_path):
+        data = {'areas': {'test': {'no_coords': {'name': 'x'}, 'with_coords': {'lat': 32.085, 'long': 34.782}}}}
+        path = tmp_path / 'city_data.json'
+        path.write_text(json.dumps(data), encoding='utf-8-sig')
+
+        result = find_cities_near(32.085, 34.782, radius_km=5.0, city_data_path=str(path))
+        assert 'with_coords' in result
+        assert 'no_coords' not in result
 
 
 class TestLoadData:

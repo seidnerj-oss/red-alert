@@ -1,13 +1,20 @@
 """Tests for CBS alert monitor."""
 
+import json
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from red_alert.core.state import AlertState
 from red_alert.integrations.inputs.cbs.parser import CbsMessage
-from red_alert.integrations.inputs.cbs.server import DEFAULT_MESSAGE_ID_MAP, CbsAlertMonitor
+from red_alert.integrations.inputs.cbs.server import (
+    DEFAULT_MESSAGE_ID_MAP,
+    CbsAlertMonitor,
+    _resolve_location,
+    _resolve_via_centroids,
+    run_monitor,
+)
 
 FIXTURES_DIR = Path(__file__).parent / 'fixtures'
 
@@ -161,6 +168,258 @@ class TestCbsAlertMonitor:
 
         callback.assert_called_once()
         assert monitor.alert_state == AlertState.PRE_ALERT
+
+
+class TestLocationResolution:
+    """Tests for location resolution in run_monitor."""
+
+    @pytest.mark.asyncio
+    async def test_no_location_raises_error(self):
+        with pytest.raises(ValueError, match='requires device location'):
+            await _resolve_location({'areas_of_interest': []})
+
+    @pytest.mark.asyncio
+    async def test_no_location_no_areas_raises_error(self):
+        with pytest.raises(ValueError, match='requires device location'):
+            await _resolve_location({})
+
+    @pytest.mark.asyncio
+    async def test_explicit_areas_without_coords(self):
+        areas = await _resolve_location({'areas_of_interest': ['חיפה']})
+        assert areas == ['חיפה']
+
+    @pytest.mark.asyncio
+    async def test_polygon_resolution_primary(self, tmp_path):
+        polygon_cache = tmp_path / 'polygons.json'
+
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
+
+        with patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr):
+            areas = await _resolve_location(
+                {
+                    'latitude': 32.0853,
+                    'longitude': 34.7818,
+                    'polygon_cache_path': str(polygon_cache),
+                }
+            )
+
+        assert areas == ['תל אביב - יפו']
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_centroid_when_polygon_fails(self, tmp_path):
+        city_data = {
+            'areas': {
+                'דן': {'תל אביב - מרכז': {'lat': 32.0853, 'long': 34.7818}},
+            }
+        }
+        city_data_path = tmp_path / 'city_data.json'
+        city_data_path.write_text(json.dumps(city_data), encoding='utf-8')
+
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=False)
+
+        with patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr):
+            areas = await _resolve_location(
+                {
+                    'latitude': 32.0853,
+                    'longitude': 34.7818,
+                    'city_data_path': str(city_data_path),
+                    'location_radius_km': 5.0,
+                    'polygon_cache_path': str(tmp_path / 'polygons.json'),
+                }
+            )
+
+        assert 'תל אביב - מרכז' in areas
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_centroid_when_polygon_empty(self, tmp_path):
+        city_data = {
+            'areas': {
+                'דן': {'תל אביב - מרכז': {'lat': 32.0853, 'long': 34.7818}},
+            }
+        }
+        city_data_path = tmp_path / 'city_data.json'
+        city_data_path.write_text(json.dumps(city_data), encoding='utf-8')
+
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr.find_cities_at_point.return_value = []
+
+        with patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr):
+            areas = await _resolve_location(
+                {
+                    'latitude': 32.0853,
+                    'longitude': 34.7818,
+                    'city_data_path': str(city_data_path),
+                    'location_radius_km': 5.0,
+                    'polygon_cache_path': str(tmp_path / 'polygons.json'),
+                }
+            )
+
+        assert 'תל אביב - מרכז' in areas
+
+    @pytest.mark.asyncio
+    async def test_explicit_areas_take_precedence_over_coords(self, tmp_path):
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
+
+        with patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr):
+            areas = await _resolve_location(
+                {
+                    'latitude': 32.0853,
+                    'longitude': 34.7818,
+                    'areas_of_interest': ['חיפה', 'חדרה'],
+                    'polygon_cache_path': str(tmp_path / 'polygons.json'),
+                }
+            )
+
+        assert areas == ['חיפה', 'חדרה']
+
+    @pytest.mark.asyncio
+    async def test_warns_on_no_overlap(self, tmp_path, caplog):
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
+
+        import logging
+
+        with (
+            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            caplog.at_level(logging.WARNING, logger='red_alert.cbs'),
+        ):
+            await _resolve_location(
+                {
+                    'latitude': 32.0853,
+                    'longitude': 34.7818,
+                    'areas_of_interest': ['חיפה'],
+                    'polygon_cache_path': str(tmp_path / 'polygons.json'),
+                }
+            )
+
+        assert any('none overlap' in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_coords_resolve_to_nothing_raises_error(self, tmp_path):
+        city_data = {'areas': {'test': {'far_city': {'lat': 40.0, 'long': 30.0}}}}
+        city_data_path = tmp_path / 'city_data.json'
+        city_data_path.write_text(json.dumps(city_data), encoding='utf-8')
+
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=False)
+
+        with (
+            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            pytest.raises(ValueError, match='did not resolve to any known cities'),
+        ):
+            await _resolve_location(
+                {
+                    'latitude': 32.0853,
+                    'longitude': 34.7818,
+                    'city_data_path': str(city_data_path),
+                    'location_radius_km': 1.0,
+                    'polygon_cache_path': str(tmp_path / 'polygons.json'),
+                }
+            )
+
+    @pytest.mark.asyncio
+    async def test_logs_overlap_confirmation(self, tmp_path, caplog):
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - מרכז']
+
+        import logging
+
+        with (
+            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            caplog.at_level(logging.INFO, logger='red_alert.cbs'),
+        ):
+            await _resolve_location(
+                {
+                    'latitude': 32.0853,
+                    'longitude': 34.7818,
+                    'areas_of_interest': ['תל אביב - מרכז'],
+                    'polygon_cache_path': str(tmp_path / 'polygons.json'),
+                }
+            )
+
+        assert any('confirm overlap' in r.message for r in caplog.records)
+
+
+class TestResolveViaCentroids:
+    def test_resolves_nearby_cities(self, tmp_path):
+        city_data = {
+            'areas': {
+                'דן': {'תל אביב - מרכז': {'lat': 32.0853, 'long': 34.7818}},
+                'שרון': {'נתניה': {'lat': 32.32, 'long': 34.85}},
+            }
+        }
+        city_data_path = tmp_path / 'city_data.json'
+        city_data_path.write_text(json.dumps(city_data), encoding='utf-8')
+
+        result = _resolve_via_centroids(
+            32.0853,
+            34.7818,
+            {
+                'city_data_path': str(city_data_path),
+                'location_radius_km': 5.0,
+            },
+        )
+
+        assert 'תל אביב - מרכז' in result
+        assert 'נתניה' not in result
+
+    def test_returns_empty_when_no_match(self, tmp_path):
+        city_data = {'areas': {'test': {'far_city': {'lat': 33.0, 'long': 35.0}}}}
+        city_data_path = tmp_path / 'city_data.json'
+        city_data_path.write_text(json.dumps(city_data), encoding='utf-8')
+
+        result = _resolve_via_centroids(
+            32.0853,
+            34.7818,
+            {
+                'city_data_path': str(city_data_path),
+                'location_radius_km': 1.0,
+            },
+        )
+
+        assert result == []
+
+
+class TestRunMonitorIntegration:
+    @pytest.mark.asyncio
+    async def test_run_monitor_creates_monitor_with_resolved_areas(self, tmp_path):
+        captured_monitor = {}
+
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
+
+        original_init = CbsAlertMonitor.__init__
+
+        def capture_init(self, **kwargs):
+            captured_monitor['areas'] = kwargs.get('areas_of_interest', [])
+            original_init(self, **kwargs)
+
+        config = {
+            'latitude': 32.0853,
+            'longitude': 34.7818,
+            'polygon_cache_path': str(tmp_path / 'polygons.json'),
+        }
+
+        with (
+            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch.object(CbsAlertMonitor, 'run_subprocess', new_callable=AsyncMock, side_effect=KeyboardInterrupt),
+            patch.object(CbsAlertMonitor, '__init__', lambda self, **kw: capture_init(self, **kw)),
+        ):
+            try:
+                await run_monitor(config)
+            except (KeyboardInterrupt, Exception):
+                pass
+
+        assert 'תל אביב - יפו' in captured_monitor.get('areas', [])
 
 
 class TestFixtureIntegration:

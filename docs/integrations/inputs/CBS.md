@@ -140,18 +140,30 @@ python -m red_alert.integrations.inputs.cbs --config cbs-config.json
 | `max_reconnect_delay` | Maximum reconnect delay (exponential backoff cap) | `60` |
 | `latitude` | Latitude of the LTE device's physical location | `null` |
 | `longitude` | Longitude of the LTE device's physical location | `null` |
-| `areas_of_interest` | City/area names the device's cell coverage maps to | `[]` |
+| `areas_of_interest` | City/area names the device's cell coverage maps to (takes precedence over lat/lon) | `[]` |
+| `city_data_path` | Path to `city_data.json` for centroid fallback resolution (optional) | runtime cache |
+| `location_radius_km` | Radius in km for centroid fallback resolution | `5.0` |
+| `polygon_cache_path` | Path to polygon data cache file (optional) | `data/polygon_cache.json` |
 
 ## Device Location
 
 Unlike the HTTP API which returns per-city alert data, Cell Broadcast alerts are received based on the cell tower's coverage area - the message itself does not specify which cities are affected. To map a received CBS alert to the correct areas of interest (for downstream consumers that filter by area), you must define where the LTE device is physically located.
 
-There are two ways to specify location, and they can be used together:
+There are two ways to specify location:
 
-- **`latitude` / `longitude`** - the device's geographic coordinates. Can be used to resolve the nearest matching cities from `city_data.json`.
-- **`areas_of_interest`** - explicit list of city/area names (matching the names used throughout red-alert) that the device's cell tower coverage maps to. This is the simpler option when you know which areas your cell tower covers.
+- **`areas_of_interest`** - explicit list of city/area names (matching the names used throughout red-alert) that the device's cell tower coverage maps to. This is the simpler option when you know which areas your cell tower covers. **Takes precedence** if both are provided.
+- **`latitude` / `longitude`** - the device's geographic coordinates. At startup, cities are resolved using polygon-based matching (primary) or centroid radius matching (fallback).
 
-If neither is set, CBS alerts will be treated as applying to all areas (no filtering).
+**Resolution behavior:**
+
+1. If only `areas_of_interest` is set, those areas are used directly.
+2. If only `latitude`/`longitude` is set:
+   - **Primary**: Point-in-polygon matching using HFC polygon boundaries (fetched from the HFC Meser Hadash app backend and cached locally). This provides precise city boundary matching.
+   - **Fallback**: If polygon data is unavailable, falls back to centroid radius matching within `location_radius_km` (default: 5 km) using city coordinate data.
+3. If both are set, `areas_of_interest` takes precedence. The coordinates are used for validation only - a warning is logged if the resolved cities don't overlap with the configured areas.
+4. If neither is set, the CBS monitor **refuses to start**. At least one of `areas_of_interest` or `latitude`/`longitude` must be configured.
+
+Polygon data is fetched from the HFC Meser Hadash app backend at startup and refreshed daily. The data is cached locally (default: `data/polygon_cache.json`). The HFC backend is geo-blocked outside Israel, so the cache allows the system to work even when the backend is temporarily unreachable.
 
 ## CBS Channel IDs
 
