@@ -162,7 +162,7 @@ class RedAlert(Hass):
         api_urls = {
             'live': 'https://www.oref.org.il/WarningMessages/alert/alerts.json',
             'history': 'https://www.oref.org.il/WarningMessages/alert/History/AlertsHistory.json',
-            'city_data_github': 'https://raw.githubusercontent.com/seidnerj/red-alert/main/data/city_data.json',
+            'city_data_github': None,
         }
         self.api_client = HomeFrontCommandApiClient(self.session, api_urls, self.log)
 
