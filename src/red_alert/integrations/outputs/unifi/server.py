@@ -594,7 +594,7 @@ async def run_monitor(config: dict):
                     if total_corrected:
                         logger.info('Reconciliation corrected %d device(s)', total_corrected)
                     else:
-                        logger.debug('Reconciliation: all devices in sync')
+                        logger.info('Reconciliation: all devices in sync')
 
             except Exception:
                 logger.exception('Error during poll cycle')
