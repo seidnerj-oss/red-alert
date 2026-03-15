@@ -17,6 +17,7 @@ Usage:
 
 import asyncio
 import logging
+import time
 
 import httpx
 
@@ -367,6 +368,53 @@ class UnifiAlertMonitor:
         data = await self._api_client.get_live_alerts()
         return await self.update(data)
 
+    async def reconcile(self) -> int:
+        """Check actual device LED state and fix any mismatches with the current expected state.
+
+        Reads each device's current LED settings from the controller and compares
+        with what the current alert state expects. Re-sends LED commands for any
+        device that doesn't match.
+
+        Returns:
+            Number of devices that were corrected.
+        """
+        if self._current_alert_state is None:
+            return 0
+
+        state = self._current_alert_state
+        corrected = 0
+
+        for mac in self._iter_macs():
+            cfg = self._state_cfg(state, mac)
+            expected_color = rgb_to_hex(*cfg['color']).upper()
+            expected_brightness = cfg['brightness']
+            expected_on = cfg['on']
+            expected_status = 'on' if expected_on else 'off'
+
+            device = self._led._controller.devices.get(mac)
+            if device is None:
+                continue
+
+            actual_color = (device.raw.get('led_override_color') or '#FFFFFF').upper()
+            actual_brightness = device.raw.get('led_override_color_brightness', 100)
+            actual_status = device.raw.get('led_override', 'on')
+
+            if actual_color != expected_color or actual_brightness != expected_brightness or actual_status != expected_status:
+                logger.warning(
+                    'Reconcile %s: expected %s/%s/%d, actual %s/%s/%d - correcting',
+                    mac,
+                    expected_status,
+                    expected_color,
+                    expected_brightness,
+                    actual_status,
+                    actual_color,
+                    actual_brightness,
+                )
+                await self._led.set_device_led(mac, on=expected_on, color_hex=expected_color, brightness=expected_brightness)
+                corrected += 1
+
+        return corrected
+
 
 def _build_monitors_for_controller(
     connection: dict,
@@ -514,6 +562,9 @@ async def run_monitor(config: dict):
     for ctrl in led_controllers:
         await ctrl.connect()
 
+    reconcile_interval = 60  # seconds between reconciliation checks
+    last_reconcile = 0.0
+
     try:
         while True:
             try:
@@ -524,6 +575,22 @@ async def run_monitor(config: dict):
                         logger.debug('%s state: %s', monitor._name, state.value)
                     except Exception:
                         logger.exception('Error updating monitor "%s"', monitor._name)
+
+                # Periodic reconciliation: refresh device data and fix mismatches
+                now = time.monotonic()
+                if now - last_reconcile >= reconcile_interval:
+                    last_reconcile = now
+                    for ctrl in led_controllers:
+                        try:
+                            await ctrl._controller.refresh_devices()
+                        except Exception:
+                            logger.debug('Failed to refresh devices for reconciliation', exc_info=True)
+                    for monitor in all_monitors:
+                        try:
+                            await monitor.reconcile()
+                        except Exception:
+                            logger.debug('Error during reconciliation for "%s"', monitor._name, exc_info=True)
+
             except Exception:
                 logger.exception('Error during poll cycle')
             await asyncio.sleep(interval)
