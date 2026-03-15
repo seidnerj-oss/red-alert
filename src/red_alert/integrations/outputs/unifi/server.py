@@ -22,6 +22,7 @@ import time
 import httpx
 
 from red_alert.core.state import AlertState, AlertStateTracker
+from red_alert.core.utils import standardize_name
 from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
 from red_alert.integrations.outputs.unifi.led_controller import UnifiLedController, rgb_to_hex
 
@@ -416,6 +417,36 @@ class UnifiAlertMonitor:
         return corrected
 
 
+async def _validate_areas_of_interest(
+    api_client: HomeFrontCommandApiClient,
+    monitors: list[UnifiAlertMonitor],
+) -> None:
+    """Validate configured areas_of_interest against the HFC district list.
+
+    Fetches the current city/district list from the HFC API and checks that
+    each monitor's configured areas still exist. Logs warnings for any
+    unrecognized city names.
+    """
+    districts = await api_client.get_districts()
+    if not districts:
+        logger.debug('Metadata validation: could not fetch districts')
+        return
+
+    known_cities = {standardize_name(d.get('label', '')) for d in districts if d.get('label')}
+
+    all_valid = True
+    for monitor in monitors:
+        for area in monitor._state._areas:
+            if area and area not in known_cities:
+                logger.warning('Metadata validation: area "%s" (monitor "%s") not found in HFC district list', area, monitor._name)
+                all_valid = False
+
+    if all_valid:
+        logger.info('Metadata validation: all areas of interest valid (%d known cities)', len(known_cities))
+    else:
+        logger.warning('Metadata validation: some areas may not match HFC alert city names')
+
+
 def _build_monitors_for_controller(
     connection: dict,
     monitor_cfgs: list[dict],
@@ -562,8 +593,10 @@ async def run_monitor(config: dict):
     for ctrl in led_controllers:
         await ctrl.connect()
 
-    reconcile_interval = 60  # seconds between reconciliation checks
+    reconcile_interval = 60  # seconds between LED state reconciliation checks
     last_reconcile = 0.0
+    metadata_interval = 3600  # seconds between metadata validation checks (1 hour)
+    last_metadata_check = 0.0
 
     try:
         while True:
@@ -595,6 +628,14 @@ async def run_monitor(config: dict):
                         logger.info('Reconciliation corrected %d device(s)', total_corrected)
                     else:
                         logger.info('Reconciliation: all devices in sync')
+
+                # Periodic metadata validation: check areas_of_interest against HFC districts
+                if time.monotonic() - last_metadata_check >= metadata_interval:
+                    last_metadata_check = time.monotonic()
+                    try:
+                        await _validate_areas_of_interest(api_client, all_monitors)
+                    except Exception:
+                        logger.debug('Error during metadata validation', exc_info=True)
 
             except Exception:
                 logger.exception('Error during poll cycle')
