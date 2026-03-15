@@ -118,7 +118,10 @@ On a machine that can SSH to the device (or on the device itself if Python is av
     "device_open_proxy": true,
     "channels": "919,4370-4383",
     "reconnect_delay": 5,
-    "max_reconnect_delay": 60
+    "max_reconnect_delay": 60,
+    "latitude": 32.0853,
+    "longitude": 34.7818,
+    "areas_of_interest": ["תל אביב - יפו"]
 }
 ```
 
@@ -135,6 +138,20 @@ python -m red_alert.integrations.inputs.cbs --config cbs-config.json
 | `message_id_map` | Custom CBS message ID to state mapping (optional) | see below |
 | `reconnect_delay` | Initial reconnect delay in seconds if qmicli exits | `5` |
 | `max_reconnect_delay` | Maximum reconnect delay (exponential backoff cap) | `60` |
+| `latitude` | Latitude of the LTE device's physical location | `null` |
+| `longitude` | Longitude of the LTE device's physical location | `null` |
+| `areas_of_interest` | City/area names the device's cell coverage maps to | `[]` |
+
+## Device Location
+
+Unlike the HTTP API which returns per-city alert data, Cell Broadcast alerts are received based on the cell tower's coverage area - the message itself does not specify which cities are affected. To map a received CBS alert to the correct areas of interest (for downstream consumers that filter by area), you must define where the LTE device is physically located.
+
+There are two ways to specify location, and they can be used together:
+
+- **`latitude` / `longitude`** - the device's geographic coordinates. Can be used to resolve the nearest matching cities from `city_data.json`.
+- **`areas_of_interest`** - explicit list of city/area names (matching the names used throughout red-alert) that the device's cell tower coverage maps to. This is the simpler option when you know which areas your cell tower covers.
+
+If neither is set, CBS alerts will be treated as applying to all areas (no filtering).
 
 ## CBS Channel IDs
 

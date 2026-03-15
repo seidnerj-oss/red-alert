@@ -52,6 +52,35 @@ class TestCbsAlertMonitor:
         msg = CbsMessage(serial_number=0x0000, message_id=9999, dcs=0x59, total_pages=1, pages={1: '00410042'})
         assert monitor.classify_message(msg) == AlertState.ROUTINE
 
+    def test_default_areas_of_interest_empty(self):
+        monitor = CbsAlertMonitor(qmicli_path='/tmp/qmicli', device='/dev/cdc-wdm0')
+        assert monitor.areas_of_interest == []
+
+    def test_areas_of_interest_from_config(self):
+        monitor = CbsAlertMonitor(
+            qmicli_path='/tmp/qmicli',
+            device='/dev/cdc-wdm0',
+            areas_of_interest=['תל אביב - יפו', 'חולון'],
+        )
+        assert monitor.areas_of_interest == ['תל אביב - יפו', 'חולון']
+
+    def test_location_not_set(self):
+        monitor = CbsAlertMonitor(qmicli_path='/tmp/qmicli', device='/dev/cdc-wdm0')
+        assert monitor.location is None
+
+    def test_location_from_config(self):
+        monitor = CbsAlertMonitor(
+            qmicli_path='/tmp/qmicli',
+            device='/dev/cdc-wdm0',
+            latitude=32.0853,
+            longitude=34.7818,
+        )
+        assert monitor.location == (32.0853, 34.7818)
+
+    def test_location_requires_both_lat_lon(self):
+        monitor = CbsAlertMonitor(qmicli_path='/tmp/qmicli', device='/dev/cdc-wdm0', latitude=32.0)
+        assert monitor.location is None
+
     def test_custom_message_id_map(self):
         custom_map = {919: AlertState.ALERT}
         monitor = CbsAlertMonitor(qmicli_path='/tmp/qmicli', device='/dev/cdc-wdm0', message_id_map=custom_map)

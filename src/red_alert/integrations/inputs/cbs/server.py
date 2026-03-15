@@ -49,6 +49,9 @@ DEFAULT_CONFIG: dict = {
     'message_id_map': None,
     'reconnect_delay': 5,
     'max_reconnect_delay': 60,
+    'latitude': None,
+    'longitude': None,
+    'areas_of_interest': [],
 }
 
 
@@ -63,6 +66,9 @@ class CbsAlertMonitor:
         message_id_map: dict[int, AlertState] | None = None,
         on_state_change=None,
         on_message=None,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        areas_of_interest: list[str] | None = None,
     ):
         self._qmicli_path = qmicli_path
         self._device = device
@@ -74,10 +80,23 @@ class CbsAlertMonitor:
         self._assembler = CbsMessageAssembler()
         self._state = AlertState.ROUTINE
         self._previous_state = AlertState.ROUTINE
+        self._latitude = latitude
+        self._longitude = longitude
+        self._areas_of_interest = areas_of_interest or []
 
     @property
     def alert_state(self) -> AlertState:
         return self._state
+
+    @property
+    def areas_of_interest(self) -> list[str]:
+        return self._areas_of_interest
+
+    @property
+    def location(self) -> tuple[float, float] | None:
+        if self._latitude is not None and self._longitude is not None:
+            return (self._latitude, self._longitude)
+        return None
 
     def classify_message(self, message: CbsMessage) -> AlertState:
         """Map a CBS message ID to an AlertState."""
@@ -168,15 +187,24 @@ async def run_monitor(config: dict):
         message_id_map=message_id_map,
         on_state_change=on_state_change,
         on_message=on_message,
+        latitude=cfg.get('latitude'),
+        longitude=cfg.get('longitude'),
+        areas_of_interest=cfg.get('areas_of_interest', []),
     )
 
     delay = cfg['reconnect_delay']
     max_delay = cfg['max_reconnect_delay']
 
+    areas = cfg.get('areas_of_interest', [])
+    lat, lon = cfg.get('latitude'), cfg.get('longitude')
+    location_desc = f'lat={lat}, lon={lon}' if lat is not None and lon is not None else 'not set'
+
     logger.info(
-        'Starting CBS monitor: device=%s, qmicli=%s',
+        'Starting CBS monitor: device=%s, qmicli=%s, location=%s, areas=%s',
         cfg['device'],
         cfg['qmicli_path'],
+        location_desc,
+        areas or 'all',
     )
 
     while True:
