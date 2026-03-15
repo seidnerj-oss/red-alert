@@ -28,6 +28,20 @@ logger = logging.getLogger('red_alert.unifi')
 
 HEX_COLOR_PATTERN = re.compile(r'^#(?:[0-9a-fA-F]{3}){1,2}$')
 
+HEX_COLOR_NAMES = {
+    '#FF0000': 'Red',
+    '#00FF00': 'Green',
+    '#FFFF00': 'Yellow',
+    '#FFFFFF': 'White',
+}
+
+
+def _color_label(color_hex: str) -> str:
+    """Return 'hex (Name)' if the color has a known name, otherwise just 'hex'."""
+    name = HEX_COLOR_NAMES.get(color_hex.upper())
+    return f'{color_hex} ({name})' if name else color_hex
+
+
 # Backend availability
 _HAS_AIOUNIFI = False
 _HAS_PYUNIFIAPI = False
@@ -377,7 +391,7 @@ class UnifiLedController:
                 color=color_hex,
             )
             await self._send_request(request)
-            logger.info('LED set on %s: on=%s, color=%s, brightness=%d', mac, on, color_hex, brightness)
+            logger.info('LED set on %s: on=%s, color=%s, brightness=%d', mac, on, _color_label(color_hex), brightness)
         except Exception as e:
             logger.error('Error setting LED on %s: %s', mac, e)
 
