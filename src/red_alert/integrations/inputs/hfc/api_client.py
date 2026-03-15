@@ -178,6 +178,86 @@ class HomeFrontCommandApiClient:
         self._log('Extended history unavailable, falling back to 24h endpoint.', level='WARNING')
         return await self._get_24h_alert_history()
 
+    async def get_recent_alerts_from_history(self, max_age_seconds: int = 120) -> list[dict]:
+        """Fetch recent alerts from history, grouped into live-alert-format dicts.
+
+        This is a fallback for when the live endpoint returns empty but alerts may
+        have been broadcast. The history endpoint has latency (~30-60s), so this
+        catches alerts that the live endpoint pulse was too brief to capture.
+
+        Each returned dict has the same shape as a live alert:
+            {"cat": "1", "title": "...", "data": ["city1", "city2"], "alertDate": "..."}
+
+        Args:
+            max_age_seconds: Only include history entries newer than this many seconds ago.
+
+        Returns a list of grouped alert dicts, or an empty list on failure.
+        """
+        from red_alert.core.constants import HISTORY_CATEGORY_TO_LIVE
+
+        history = await self.get_extended_alert_history(hours_back=1)
+        if not history:
+            return []
+
+        now = datetime.now()
+        cutoff = now - timedelta(seconds=max_age_seconds)
+
+        # Group history entries by (alertDate rounded to minute, category) into alert groups
+        groups: dict[str, dict] = {}
+        for entry in history:
+            if not isinstance(entry, dict):
+                continue
+            alert_date_str = entry.get('alertDate', '')
+            if not alert_date_str:
+                continue
+
+            try:
+                # History dates are ISO format: "2024-01-15T10:30:45"
+                alert_dt = datetime.fromisoformat(alert_date_str.replace('Z', '').split('+')[0])
+            except (ValueError, TypeError):
+                continue
+
+            if alert_dt < cutoff:
+                continue
+
+            # Use matrix_id (= live cat) if available, fall back to HISTORY_CATEGORY_TO_LIVE
+            matrix_id = entry.get('matrix_id')
+            hist_cat = entry.get('category')
+            if matrix_id is not None:
+                try:
+                    live_cat = int(matrix_id)
+                except (ValueError, TypeError):
+                    live_cat = 0
+            elif hist_cat is not None:
+                try:
+                    live_cat = HISTORY_CATEGORY_TO_LIVE.get(int(hist_cat), 0)
+                except (ValueError, TypeError):
+                    live_cat = 0
+            else:
+                live_cat = 0
+
+            title = entry.get('category_desc', entry.get('title', ''))
+            city = entry.get('data', '')
+            # Group key: minute-level timestamp + category
+            group_key = f'{alert_dt.strftime("%Y-%m-%dT%H:%M")}:{live_cat}'
+
+            if group_key not in groups:
+                groups[group_key] = {
+                    'cat': str(live_cat),
+                    'title': title,
+                    'data': [],
+                    'alertDate': alert_date_str,
+                }
+
+            if city and city not in groups[group_key]['data']:
+                groups[group_key]['data'].append(city)
+
+        # Sort by alertDate descending (most recent first)
+        result = sorted(groups.values(), key=lambda g: g.get('alertDate', ''), reverse=True)
+        if result:
+            self._log(f'History fallback: found {len(result)} recent alert group(s) within {max_age_seconds}s.')
+        return result
+
     async def get_extended_alert_history(self, hours_back: int = 24):
         """Fetch alert history from the extended alerts-history.oref.org.il endpoint.
 

@@ -632,3 +632,99 @@ class TestGetGlobalConfig:
 
         result = await api.get_global_config()
         assert result is None
+
+
+class TestGetRecentAlertsFromHistory:
+    @pytest.mark.asyncio
+    async def test_groups_history_entries_into_live_format(self, api_urls, mock_logger):
+        from datetime import datetime
+
+        now = datetime.now()
+        recent_date = now.strftime('%Y-%m-%dT%H:%M:%S')
+        history = [
+            {'alertDate': recent_date, 'category': 1, 'category_desc': 'ירי רקטות וטילים', 'data': 'תל אביב', 'matrix_id': 1},
+            {'alertDate': recent_date, 'category': 1, 'category_desc': 'ירי רקטות וטילים', 'data': 'רמת גן', 'matrix_id': 1},
+        ]
+        resp = _make_response(json.dumps(history).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_recent_alerts_from_history(max_age_seconds=300)
+        assert len(result) == 1
+        assert result[0]['cat'] == '1'
+        assert 'תל אביב' in result[0]['data']
+        assert 'רמת גן' in result[0]['data']
+        assert result[0]['title'] == 'ירי רקטות וטילים'
+
+    @pytest.mark.asyncio
+    async def test_filters_old_entries(self, api_urls, mock_logger):
+        history = [
+            {'alertDate': '2020-01-01T00:00:00', 'category': 1, 'category_desc': 'Old alert', 'data': 'City', 'matrix_id': 1},
+        ]
+        resp = _make_response(json.dumps(history).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_recent_alerts_from_history(max_age_seconds=120)
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_uses_matrix_id_over_category(self, api_urls, mock_logger):
+        from datetime import datetime
+
+        now = datetime.now()
+        recent_date = now.strftime('%Y-%m-%dT%H:%M:%S')
+        history = [
+            {'alertDate': recent_date, 'category': 8, 'category_desc': 'Flash', 'data': 'City', 'matrix_id': 10},
+        ]
+        resp = _make_response(json.dumps(history).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_recent_alerts_from_history(max_age_seconds=300)
+        assert len(result) == 1
+        assert result[0]['cat'] == '10'
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_category_mapping(self, api_urls, mock_logger):
+        from datetime import datetime
+
+        now = datetime.now()
+        recent_date = now.strftime('%Y-%m-%dT%H:%M:%S')
+        history = [
+            {'alertDate': recent_date, 'category': 8, 'category_desc': 'Flash', 'data': 'City'},
+        ]
+        resp = _make_response(json.dumps(history).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_recent_alerts_from_history(max_age_seconds=300)
+        assert len(result) == 1
+        assert result[0]['cat'] == '10'
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_api_failure(self, api_urls, mock_logger):
+        client = AsyncMock()
+        client.get = AsyncMock(side_effect=httpx.TransportError('timeout'))
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_recent_alerts_from_history()
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_deduplicates_cities_in_group(self, api_urls, mock_logger):
+        from datetime import datetime
+
+        now = datetime.now()
+        recent_date = now.strftime('%Y-%m-%dT%H:%M:%S')
+        history = [
+            {'alertDate': recent_date, 'category': 1, 'category_desc': 'Missiles', 'data': 'City A', 'matrix_id': 1},
+            {'alertDate': recent_date, 'category': 1, 'category_desc': 'Missiles', 'data': 'City A', 'matrix_id': 1},
+        ]
+        resp = _make_response(json.dumps(history).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_recent_alerts_from_history(max_age_seconds=300)
+        assert len(result) == 1
+        assert result[0]['data'].count('City A') == 1

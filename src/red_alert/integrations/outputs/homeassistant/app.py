@@ -1226,6 +1226,22 @@ class RedAlert(Hass):
         try:
             is_alert_active = isinstance(live_data, dict) and live_data.get('data')
 
+            # History fallback: if live is empty and we're in the early idle window
+            # (first 3 idle polls after a gap), check history for alerts we may have missed.
+            # The history endpoint has ~30-60s latency but catches brief live pulses.
+            if not is_alert_active and not api_error and self.last_alert_time is None and 1 <= self.no_active_alerts_polls <= 3:
+                try:
+                    recent = await self.api_client.get_recent_alerts_from_history(max_age_seconds=120)
+                    if recent:
+                        live_data = recent[0]
+                        is_alert_active = isinstance(live_data, dict) and live_data.get('data')
+                        if is_alert_active:
+                            self.log(
+                                f'{log_prefix} History fallback: processing missed alert (cat={live_data.get("cat")}, {len(live_data.get("data", []))} cities)'
+                            )
+                except Exception as e:
+                    self.log(f'{log_prefix} History fallback check failed: {e}', level='DEBUG')
+
             # Check for explicit all-clear signal (category 13) before processing as alert
             if is_alert_active:
                 cat_raw = live_data.get('cat', '0') if isinstance(live_data, dict) else '0'
