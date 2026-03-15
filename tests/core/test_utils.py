@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from red_alert.core.utils import check_bom, parse_datetime_str, standardize_name
+from red_alert.core.utils import check_bom, detect_and_decode, parse_datetime_str, standardize_name
 
 
 class TestStandardizeName:
@@ -47,6 +47,45 @@ class TestCheckBom:
 
     def test_multiple_bom(self):
         assert check_bom('\ufeff\ufeffhello') == 'hello'
+
+    def test_strips_nul_characters(self):
+        assert check_bom('hel\x00lo') == 'hello'
+
+    def test_strips_bom_and_nul(self):
+        assert check_bom('\ufeffhel\x00lo') == 'hello'
+
+    def test_no_nul_passthrough(self):
+        assert check_bom('hello') == 'hello'
+
+
+class TestDetectAndDecode:
+    def test_utf8_plain(self):
+        assert detect_and_decode(b'hello') == 'hello'
+
+    def test_utf8_bom(self):
+        assert detect_and_decode(b'\xef\xbb\xbfhello') == 'hello'
+
+    def test_utf16_le_bom(self):
+        data = b'\xff\xfeh\x00e\x00l\x00l\x00o\x00'
+        assert detect_and_decode(data) == 'hello'
+
+    def test_utf16_be_bom(self):
+        data = b'\xfe\xff\x00h\x00e\x00l\x00l\x00o'
+        assert detect_and_decode(data) == 'hello'
+
+    def test_utf8_hebrew(self):
+        text = 'שלום'
+        assert detect_and_decode(text.encode('utf-8')) == text
+
+    def test_utf8_bom_hebrew(self):
+        text = 'שלום'
+        data = b'\xef\xbb\xbf' + text.encode('utf-8')
+        assert detect_and_decode(data) == text
+
+    def test_latin1_fallback(self):
+        data = bytes([0xC0, 0xC1, 0xFE])
+        result = detect_and_decode(data)
+        assert isinstance(result, str)
 
 
 class TestParseDatetimeStr:

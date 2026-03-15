@@ -6,7 +6,7 @@ from typing import Literal, overload
 
 import httpx
 
-from red_alert.core.utils import check_bom
+from red_alert.core.utils import check_bom, detect_and_decode
 
 ALERTS_HISTORY_REFERER = 'https://alerts-history.oref.org.il/'
 ALERTS_HISTORY_BASE = 'https://alerts-history.oref.org.il'
@@ -85,10 +85,7 @@ class HomeFrontCommandApiClient:
             async def _do_fetch():
                 resp = await self._client.get(url, headers=headers)
                 resp.raise_for_status()
-                try:
-                    return resp.content.decode('utf-8-sig')
-                except UnicodeDecodeError:
-                    return resp.content.decode('utf-8')
+                return detect_and_decode(resp.content)
 
             text = await self._fetch_with_retries(_do_fetch)
             if not text or not text.strip():
@@ -128,11 +125,7 @@ class HomeFrontCommandApiClient:
                 content_type = resp.headers.get('Content-Type', '')
                 if 'application/json' not in content_type:
                     self._log(f'Warning: Expected JSON content type, got {content_type}', level='WARNING')
-                try:
-                    return resp.content.decode('utf-8-sig')
-                except UnicodeDecodeError:
-                    self._log('Failed decoding with utf-8-sig, trying utf-8.', level='DEBUG')
-                    return resp.content.decode('utf-8')
+                return detect_and_decode(resp.content)
 
             text = await self._fetch_with_retries(_do_fetch)
 
@@ -200,10 +193,7 @@ class HomeFrontCommandApiClient:
             async def _do_fetch():
                 resp = await self._client.get(url, headers={'Referer': ALERTS_HISTORY_REFERER})
                 resp.raise_for_status()
-                try:
-                    return resp.content.decode('utf-8-sig')
-                except UnicodeDecodeError:
-                    return resp.content.decode('utf-8')
+                return detect_and_decode(resp.content)
 
             text = await self._fetch_with_retries(_do_fetch)
             if not text or not text.strip():
@@ -240,10 +230,7 @@ class HomeFrontCommandApiClient:
             async def _do_fetch():
                 resp = await self._client.get(url)
                 resp.raise_for_status()
-                try:
-                    return resp.content.decode('utf-8-sig')
-                except UnicodeDecodeError:
-                    return resp.content.decode('utf-8')
+                return detect_and_decode(resp.content)
 
             text = await self._fetch_with_retries(_do_fetch)
             if not text or not text.strip():
@@ -287,10 +274,7 @@ class HomeFrontCommandApiClient:
             async def _do_fetch():
                 resp = await self._client.get(url)
                 resp.raise_for_status()
-                try:
-                    return resp.content.decode('utf-8-sig')
-                except UnicodeDecodeError:
-                    return resp.content.decode('utf-8')
+                return detect_and_decode(resp.content)
 
             text = await self._fetch_with_retries(_do_fetch)
             if text is not None:

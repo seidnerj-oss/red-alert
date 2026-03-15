@@ -20,10 +20,30 @@ def standardize_name(name: str) -> str:
 
 
 def check_bom(text: str) -> str:
-    """Remove BOM if present."""
+    """Remove BOM and NUL characters if present."""
     if text.startswith('\ufeff'):
         text = text.lstrip('\ufeff')
+    if '\x00' in text:
+        text = text.replace('\x00', '')
     return text
+
+
+def detect_and_decode(data: bytes) -> str:
+    """Detect encoding from byte content and decode to string.
+
+    Handles UTF-8 with BOM, UTF-16-LE with BOM, and plain UTF-8.
+    Strips NUL characters that occasionally appear in HFC API responses.
+    """
+    if data[:3] == b'\xef\xbb\xbf':
+        return data.decode('utf-8-sig')
+    if data[:2] == b'\xff\xfe':
+        return data[2:].decode('utf-16-le')
+    if data[:2] == b'\xfe\xff':
+        return data[2:].decode('utf-16-be')
+    try:
+        return data.decode('utf-8')
+    except UnicodeDecodeError:
+        return data.decode('latin-1')
 
 
 def parse_datetime_str(ds: str) -> datetime | None:
