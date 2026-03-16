@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import random
 from datetime import datetime, timedelta
 from typing import Literal, overload
@@ -40,10 +41,10 @@ class HomeFrontCommandApiClient:
     The history endpoint normalizes to category=13 with matrix_id=10.
     """
 
-    def __init__(self, client: httpx.AsyncClient, urls: dict, logger):
+    def __init__(self, client: httpx.AsyncClient, urls: dict, logger: logging.Logger):
         self._client = client
         self._urls = urls
-        self._log = logger
+        self._logger = logger
         self._last_alert_id: str | None = None
 
     async def _fetch_with_retries(self, fetch_func, retries: int = 2):
@@ -53,10 +54,10 @@ class HomeFrontCommandApiClient:
                 return await fetch_func()
             except httpx.TransportError:
                 if attempt == retries:
-                    self._log(f'Network error after {retries + 1} attempts.', level='WARNING')
+                    self._logger.warning('Network error after %d attempts.', retries + 1)
                     raise
                 wait = 0.5 * (2**attempt) + random.uniform(0, 0.5)
-                self._log(f'Network error (attempt {attempt + 1}/{retries + 1}). Retrying in {wait:.2f}s.', level='DEBUG')
+                self._logger.debug(f'Network error (attempt {attempt + 1}/{retries + 1}). Retrying in {wait:.2f}s.')
                 await asyncio.sleep(wait)
 
     @overload
@@ -96,26 +97,26 @@ class HomeFrontCommandApiClient:
                 expected_type = list if expect_list else dict
                 if isinstance(data, expected_type):
                     if label:
-                        self._log(f'{label.capitalize()}: loaded {len(data)} entries.')
+                        self._logger.info(f'{label.capitalize()}: loaded {len(data)} entries.')
                     return data
-                self._log(f'{label.capitalize() if label else "Response"} is not a {expected_type.__name__}.', level='WARNING')
+                self._logger.warning(f'{label.capitalize() if label else "Response"} is not a {expected_type.__name__}.')
                 return None
             except json.JSONDecodeError as e:
-                self._log(f'Invalid JSON in {label or "response"}: {e}', level='WARNING')
+                self._logger.warning(f'Invalid JSON in {label or "response"}: {e}')
                 return None
         except httpx.HTTPStatusError as e:
-            self._log(f'HTTP error fetching {label or url}: Status {e.response.status_code}', level='WARNING')
+            self._logger.warning(f'HTTP error fetching {label or url}: Status {e.response.status_code}')
         except httpx.TransportError as e:
-            self._log(f'Network/Timeout error fetching {label or url}: {e}', level='WARNING')
+            self._logger.warning(f'Network/Timeout error fetching {label or url}: {e}')
         except Exception as e:
-            self._log(f'Unexpected error fetching {label or url}: {e.__class__.__name__} - {e}', level='ERROR', exc_info=True)
+            self._logger.error(f'Unexpected error fetching {label or url}: {e.__class__.__name__} - {e}', exc_info=True)
         return None
 
     async def get_live_alerts(self):
         """Fetch live alerts, return dict or None."""
         url = self._urls.get('live')
         if not url:
-            self._log('Live alerts URL not configured.', level='ERROR')
+            self._logger.error('Live alerts URL not configured.')
             return None
         try:
 
@@ -124,7 +125,7 @@ class HomeFrontCommandApiClient:
                 resp.raise_for_status()
                 content_type = resp.headers.get('Content-Type', '')
                 if 'application/json' not in content_type:
-                    self._log(f'Warning: Expected JSON content type, got {content_type}', level='WARNING')
+                    self._logger.warning(f'Warning: Expected JSON content type, got {content_type}')
                 return detect_and_decode(resp.content)
 
             text = await self._fetch_with_retries(_do_fetch)
@@ -141,7 +142,7 @@ class HomeFrontCommandApiClient:
                         cat = data.get('cat', '?')
                         title = data.get('title', '')
                         cities = data.get('data', [])
-                        self._log(f"Alert received: cat={cat}, title='{title}', {len(cities)} cities")
+                        self._logger.info(f"Alert received: cat={cat}, title='{title}', {len(cities)} cities")
                         self._last_alert_id = alert_id
                 elif self._last_alert_id is not None:
                     self._last_alert_id = None
@@ -149,15 +150,15 @@ class HomeFrontCommandApiClient:
             except json.JSONDecodeError as e:
                 log_text_preview = text[:1000].replace('\n', '\\n').replace('\r', '\\r')
                 if 'Expecting value: line 1 column 1 (char 0)' not in str(e):
-                    self._log(f"Invalid JSON in live alerts: {e}. Raw text preview: '{log_text_preview}...'", level='WARNING')
+                    self._logger.warning(f"Invalid JSON in live alerts: {e}. Raw text preview: '{log_text_preview}...'")
                 return None
 
         except httpx.HTTPStatusError as e:
-            self._log(f'HTTP error fetching live alerts: Status {e.response.status_code}', level='WARNING')
+            self._logger.warning(f'HTTP error fetching live alerts: Status {e.response.status_code}')
         except httpx.TransportError as e:
-            self._log(f'Network/Timeout error fetching live alerts: {e}', level='WARNING')
+            self._logger.warning(f'Network/Timeout error fetching live alerts: {e}')
         except Exception as e:
-            self._log(f'Unexpected error fetching live alerts: {e.__class__.__name__} - {e}', level='ERROR', exc_info=True)
+            self._logger.error(f'Unexpected error fetching live alerts: {e.__class__.__name__} - {e}', exc_info=True)
 
         return None
 
@@ -175,7 +176,7 @@ class HomeFrontCommandApiClient:
         if data is not None:
             return data
 
-        self._log('Extended history unavailable, falling back to 24h endpoint.', level='WARNING')
+        self._logger.warning('Extended history unavailable, falling back to 24h endpoint.')
         return await self._get_24h_alert_history()
 
     async def get_recent_alerts_from_history(self, max_age_seconds: int = 120) -> list[dict]:
@@ -255,7 +256,7 @@ class HomeFrontCommandApiClient:
         # Sort by alertDate descending (most recent first)
         result = sorted(groups.values(), key=lambda g: g.get('alertDate', ''), reverse=True)
         if result:
-            self._log(f'History fallback: found {len(result)} recent alert group(s) within {max_age_seconds}s.')
+            self._logger.info(f'History fallback: found {len(result)} recent alert group(s) within {max_age_seconds}s.')
         return result
 
     async def get_extended_alert_history(self, hours_back: int = 24):
@@ -282,19 +283,19 @@ class HomeFrontCommandApiClient:
                 text = check_bom(text)
                 data = json.loads(text)
                 if isinstance(data, list):
-                    self._log(f'Extended history: loaded {len(data)} entries for past {hours_back}h.')
+                    self._logger.info(f'Extended history: loaded {len(data)} entries for past {hours_back}h.')
                     return data
-                self._log('Extended history response is not a list.', level='WARNING')
+                self._logger.warning('Extended history response is not a list.')
                 return None
             except json.JSONDecodeError as e:
-                self._log(f'Invalid JSON in extended history: {e}', level='WARNING')
+                self._logger.warning(f'Invalid JSON in extended history: {e}')
                 return None
         except httpx.HTTPStatusError as e:
-            self._log(f'HTTP error fetching extended history: Status {e.response.status_code}', level='WARNING')
+            self._logger.warning(f'HTTP error fetching extended history: Status {e.response.status_code}')
         except httpx.TransportError as e:
-            self._log(f'Network/Timeout error fetching extended history: {e}', level='WARNING')
+            self._logger.warning(f'Network/Timeout error fetching extended history: {e}')
         except Exception as e:
-            self._log(f'Unexpected error fetching extended history: {e.__class__.__name__} - {e}', level='ERROR', exc_info=True)
+            self._logger.error(f'Unexpected error fetching extended history: {e.__class__.__name__} - {e}', exc_info=True)
         return None
 
     async def _get_24h_alert_history(self):
@@ -303,7 +304,7 @@ class HomeFrontCommandApiClient:
         prefers the extended endpoint."""
         url = self._urls.get('history')
         if not url:
-            self._log('History alerts URL not configured.', level='ERROR')
+            self._logger.error('History alerts URL not configured.')
             return None
         try:
 
@@ -320,18 +321,18 @@ class HomeFrontCommandApiClient:
                 data = json.loads(text)
                 if isinstance(data, list):
                     return data
-                self._log('History response is not a list', level='WARNING')
+                self._logger.warning('History response is not a list')
                 return None
             except json.JSONDecodeError as e:
                 log_text_preview = text[:5500].replace('\n', '\\n').replace('\r', '\\r')
-                self._log(f"Invalid JSON in history alerts: {e}. Raw text preview: '{log_text_preview}...'", level='WARNING')
+                self._logger.warning(f"Invalid JSON in history alerts: {e}. Raw text preview: '{log_text_preview}...'")
                 return None
         except httpx.HTTPStatusError as e:
-            self._log(f'HTTP error fetching history: Status {e.response.status_code}', level='WARNING')
+            self._logger.warning(f'HTTP error fetching history: Status {e.response.status_code}')
         except httpx.TransportError as e:
-            self._log(f'Network/Timeout error fetching history: {e}', level='WARNING')
+            self._logger.warning(f'Network/Timeout error fetching history: {e}')
         except Exception as e:
-            self._log(f'Unexpected error fetching history: {e}', level='ERROR', exc_info=True)
+            self._logger.error(f'Unexpected error fetching history: {e}', exc_info=True)
         return None
 
     async def get_districts(self, lang: str = 'he'):
@@ -361,11 +362,11 @@ class HomeFrontCommandApiClient:
                 text = check_bom(text)
             return text
         except httpx.HTTPStatusError as e:
-            self._log(f'HTTP error downloading file {url}: Status {e.response.status_code}', level='ERROR')
+            self._logger.error(f'HTTP error downloading file {url}: Status {e.response.status_code}')
         except httpx.TransportError as e:
-            self._log(f'Network/Timeout error downloading file {url}: {e}', level='ERROR')
+            self._logger.error(f'Network/Timeout error downloading file {url}: {e}')
         except Exception as e:
-            self._log(f'Unexpected error downloading file {url}: {e}', level='ERROR', exc_info=True)
+            self._logger.error(f'Unexpected error downloading file {url}: {e}', exc_info=True)
         return None
 
     async def get_alert_categories(self) -> list | None:

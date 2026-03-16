@@ -81,10 +81,6 @@ def _build_device_actions(actions_cfg: dict) -> dict[AlertState, DeviceAction | 
     return result
 
 
-def _log_adapter(msg, level='INFO', **kwargs):
-    getattr(logger, level.lower(), logger.info)(msg)
-
-
 class HomepodAlertMonitor:
     """Polls the Home Front Command API and controls HomePod audio based on alert state."""
 
@@ -142,8 +138,8 @@ async def run_monitor(config: dict):
         return
 
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
-    api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
-    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'), hold_seconds=cfg.get('hold_seconds'), logger=_log_adapter)
+    api_client = HomeFrontCommandApiClient(http_client, API_URLS, logger)
+    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'), hold_seconds=cfg.get('hold_seconds'), logger=logger)
 
     devices: list[tuple[HomepodController, dict[AlertState, DeviceAction | None]]] = []
     for dev_cfg in cfg['devices']:

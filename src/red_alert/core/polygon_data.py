@@ -134,7 +134,11 @@ class PolygonDataManager:
             return False
 
     async def _fetch_segments(self) -> list[dict] | None:
-        """Fetch the segments list from the HFC backend."""
+        """Fetch the segments list from the HFC backend.
+
+        The API may return either a flat list of segments or a dict with
+        a "segments" key containing a dict keyed by segment ID.
+        """
         try:
             resp = await self._client.get(SEGMENTS_URL)
             resp.raise_for_status()
@@ -142,7 +146,16 @@ class PolygonDataManager:
             if isinstance(data, list):
                 self._logger.info('Fetched %d segments from HFC backend.', len(data))
                 return data
-            self._logger.warning('Segments response is not a list.')
+            if isinstance(data, dict):
+                segments = data.get('segments')
+                if isinstance(segments, dict):
+                    segment_list = list(segments.values())
+                    self._logger.info('Fetched %d segments from HFC backend.', len(segment_list))
+                    return segment_list
+                if isinstance(segments, list):
+                    self._logger.info('Fetched %d segments from HFC backend.', len(segments))
+                    return segments
+            self._logger.warning('Unexpected segments response format: %s', type(data).__name__)
             return None
         except httpx.HTTPStatusError as e:
             self._logger.warning('HTTP error fetching segments: %s', e.response.status_code)

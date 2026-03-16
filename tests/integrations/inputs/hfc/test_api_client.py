@@ -71,7 +71,7 @@ class TestGetLiveAlerts:
         api = HomeFrontCommandApiClient(client, {}, mock_logger)
         result = await api.get_live_alerts()
         assert result is None
-        mock_logger.assert_called()
+        mock_logger.error.assert_called()
 
     @pytest.mark.asyncio
     async def test_handles_bom_in_response(self, api_urls, mock_logger):
@@ -140,7 +140,7 @@ class TestAlertReceivedLogging:
         api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
 
         await api.get_live_alerts()
-        msgs = [call.args[0] for call in mock_logger.call_args_list]
+        msgs = [call.args[0] for call in mock_logger.info.call_args_list]
         assert any('Alert received' in m and 'cat=1' in m and '2 cities' in m for m in msgs)
 
     @pytest.mark.asyncio

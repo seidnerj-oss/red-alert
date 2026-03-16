@@ -51,10 +51,6 @@ DEFAULT_CONFIG: dict = {
 }
 
 
-def _log_adapter(msg, level='INFO', **kwargs):
-    getattr(logger, level.lower(), logger.info)(msg)
-
-
 def format_alert_message(data: dict, state: AlertState) -> str:
     """Format an alert notification as Telegram HTML."""
     cat = 0
@@ -144,8 +140,8 @@ async def run_monitor(config: dict):
         return
 
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
-    api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
-    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'), hold_seconds=cfg.get('hold_seconds'), logger=_log_adapter)
+    api_client = HomeFrontCommandApiClient(http_client, API_URLS, logger)
+    state_tracker = AlertStateTracker(areas_of_interest=cfg.get('areas_of_interest'), hold_seconds=cfg.get('hold_seconds'), logger=logger)
     bot = TelegramBot(token=cfg['bot_token'], chat_id=cfg['chat_id'])
 
     monitor = TelegramAlertMonitor(api_client, bot, state_tracker)

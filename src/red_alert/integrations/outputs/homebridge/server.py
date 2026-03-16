@@ -51,11 +51,6 @@ DEFAULT_CONFIG = {
 }
 
 
-def _log_adapter(msg, level='INFO', **kwargs):
-    """Adapt Python logging to the core logger interface (accepts level as keyword)."""
-    getattr(logger, level.lower(), logger.info)(msg)
-
-
 class AlertMonitor:
     """Polls the Home Front Command API and tracks current alert state."""
 
@@ -179,8 +174,8 @@ def create_app(config: dict | None = None) -> web.Application:
 
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
 
-    api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
-    monitor = AlertMonitor(api_client, areas_of_interest=cfg.get('areas_of_interest'), hold_seconds=cfg.get('hold_seconds'), logger=_log_adapter)
+    api_client = HomeFrontCommandApiClient(http_client, API_URLS, logger)
+    monitor = AlertMonitor(api_client, areas_of_interest=cfg.get('areas_of_interest'), hold_seconds=cfg.get('hold_seconds'), logger=logger)
 
     app = web.Application()
     app['monitor'] = monitor

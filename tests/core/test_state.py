@@ -485,12 +485,15 @@ class TestAlertTime:
 
 
 class TestLogging:
-    """Verify that AlertStateTracker emits structured log messages via its logger callback."""
+    """Verify that AlertStateTracker emits structured log messages via its logger."""
 
     def _make_tracker(self, **kwargs):
         mock_logger = MagicMock()
         tracker = AlertStateTracker(logger=mock_logger, hold_seconds={'alert': 0, 'pre_alert': 0, 'all_clear': 0}, **kwargs)
         return tracker, mock_logger
+
+    def _get_info_msgs(self, log):
+        return [call.args[0] for call in log.info.call_args_list]
 
     def test_no_logger_does_not_crash(self):
         tracker = AlertStateTracker()
@@ -500,76 +503,76 @@ class TestLogging:
     def test_logs_transition_to_alert(self):
         tracker, log = self._make_tracker()
         tracker.update({'cat': '1', 'data': ['City A'], 'title': 'Rockets'})
-        log.assert_called()
-        msgs = [call.args[0] for call in log.call_args_list]
+        log.info.assert_called()
+        msgs = self._get_info_msgs(log)
         assert any('routine -> alert' in m for m in msgs)
         assert any('cat=1' in m and 'Rockets' in m for m in msgs)
 
     def test_logs_transition_to_routine(self):
         tracker, log = self._make_tracker()
         tracker.update({'cat': '1', 'data': ['City A']})
-        log.reset_mock()
+        log.info.reset_mock()
         tracker.update(None)
-        log.assert_called()
-        msgs = [call.args[0] for call in log.call_args_list]
+        log.info.assert_called()
+        msgs = self._get_info_msgs(log)
         assert any('alert -> routine' in m for m in msgs)
 
     def test_logs_transition_to_pre_alert(self):
         tracker, log = self._make_tracker()
         tracker.update({'cat': '14', 'data': ['City A'], 'title': 'Warning'})
-        msgs = [call.args[0] for call in log.call_args_list]
+        msgs = self._get_info_msgs(log)
         assert any('routine -> pre_alert' in m for m in msgs)
 
     def test_logs_transition_to_all_clear(self):
         tracker, log = self._make_tracker()
         tracker.update({'cat': '13', 'data': ['City A']})
-        msgs = [call.args[0] for call in log.call_args_list]
+        msgs = self._get_info_msgs(log)
         assert any('routine -> all_clear' in m for m in msgs)
 
     def test_no_log_when_state_unchanged(self):
         tracker, log = self._make_tracker()
         tracker.update(None)  # ROUTINE -> ROUTINE
-        log.assert_not_called()
+        log.info.assert_not_called()
 
     def test_logs_area_match(self):
         tracker, log = self._make_tracker(areas_of_interest=['City A'])
         tracker.update({'cat': '1', 'data': ['City A', 'City B']})
-        msgs = [call.args[0] for call in log.call_args_list]
+        msgs = self._get_info_msgs(log)
         assert any('Area match' in m and 'City A' in m for m in msgs)
 
     def test_logs_area_filtered(self):
         tracker, log = self._make_tracker(areas_of_interest=['City X'])
         tracker.update({'cat': '1', 'data': ['City A', 'City B']})
-        msgs = [call.args[0] for call in log.call_args_list]
+        msgs = self._get_info_msgs(log)
         assert any('Alert filtered' in m for m in msgs)
 
     def test_logs_hold_expiry(self):
         tracker = AlertStateTracker(logger=MagicMock(), hold_seconds={'alert': 30, 'pre_alert': 0, 'all_clear': 0})
-        mock_logger = tracker._log
+        mock_logger = tracker._logger
         tracker.update({'cat': '1', 'data': ['City A']})
-        mock_logger.reset_mock()
+        mock_logger.info.reset_mock()
 
         with patch('red_alert.core.state.time') as mock_time:
             mock_time.monotonic.return_value = tracker._state_entered_time + 31.0
             tracker.update(None)
 
-        msgs = [call.args[0] for call in mock_logger.call_args_list]
+        msgs = self._get_info_msgs(mock_logger)
         assert any('Hold expired' in m and 'alert' in m for m in msgs)
 
     def test_city_preview_truncated(self):
         tracker, log = self._make_tracker()
         cities = [f'City {i}' for i in range(10)]
         tracker.update({'cat': '1', 'data': cities, 'title': 'Rockets'})
-        msgs = [call.args[0] for call in log.call_args_list]
+        msgs = self._get_info_msgs(log)
         transition_msg = next(m for m in msgs if 'routine -> alert' in m)
         assert '+5 more' in transition_msg
 
     def test_alert_to_all_clear_logs_transition(self):
         tracker, log = self._make_tracker()
         tracker.update({'cat': '1', 'data': ['City A']})
-        log.reset_mock()
+        log.info.reset_mock()
         tracker.update({'cat': '13', 'data': ['City A']})
-        msgs = [call.args[0] for call in log.call_args_list]
+        msgs = self._get_info_msgs(log)
         assert any('alert -> all_clear' in m for m in msgs)
 
     def test_area_filtered_only_logged_once(self):
@@ -578,7 +581,7 @@ class TestLogging:
         tracker.update({'cat': '1', 'data': ['City A']})
         tracker.update({'cat': '1', 'data': ['City A']})
         tracker.update({'cat': '1', 'data': ['City A']})
-        filtered_msgs = [call.args[0] for call in log.call_args_list if 'Alert filtered' in call.args[0]]
+        filtered_msgs = [call.args[0] for call in log.info.call_args_list if 'Alert filtered' in call.args[0]]
         assert len(filtered_msgs) == 1
 
     def test_area_match_only_logged_once(self):
@@ -587,7 +590,7 @@ class TestLogging:
         tracker.update({'cat': '1', 'data': ['City A']})
         tracker.update({'cat': '1', 'data': ['City A']})
         tracker.update({'cat': '1', 'data': ['City A']})
-        match_msgs = [call.args[0] for call in log.call_args_list if 'Area match' in call.args[0]]
+        match_msgs = [call.args[0] for call in log.info.call_args_list if 'Area match' in call.args[0]]
         assert len(match_msgs) == 1
 
     def test_area_log_resets_after_empty(self):
@@ -596,7 +599,7 @@ class TestLogging:
         tracker.update({'cat': '1', 'data': ['City A']})  # filtered, logged
         tracker.update(None)  # empty, resets
         tracker.update({'cat': '1', 'data': ['City A']})  # filtered again, should log again
-        filtered_msgs = [call.args[0] for call in log.call_args_list if 'Alert filtered' in call.args[0]]
+        filtered_msgs = [call.args[0] for call in log.info.call_args_list if 'Alert filtered' in call.args[0]]
         assert len(filtered_msgs) == 2
 
 

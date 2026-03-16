@@ -19,8 +19,8 @@ timers bridge these gaps so downstream consumers maintain the correct state.
 """
 
 import enum
+import logging
 import time
-from collections.abc import Callable
 
 from red_alert.core.utils import standardize_name
 
@@ -71,7 +71,7 @@ class AlertStateTracker:
         self,
         areas_of_interest: list[str] | None = None,
         hold_seconds: dict[str, float] | None = None,
-        logger: Callable | None = None,
+        logger: logging.Logger | None = None,
     ):
         """
         Args:
@@ -80,7 +80,7 @@ class AlertStateTracker:
                 ('alert', 'pre_alert', 'all_clear'). When the API goes empty, the
                 current state is held for this duration before returning to ROUTINE.
                 Default: alert/pre_alert=1800 (30min), all_clear=300 (5min). ROUTINE never has a hold.
-            logger: Optional logging callback with signature ``logger(msg, level='INFO')``.
+            logger: Optional logger instance.
         """
         self._areas = [standardize_name(a) for a in (areas_of_interest or [])]
         merged = {**DEFAULT_HOLD_SECONDS, **(hold_seconds or {})}
@@ -92,13 +92,12 @@ class AlertStateTracker:
         self._state_entered_time: float | None = None
         self.state = AlertState.ROUTINE
         self.alert_data: dict | None = None
-        self._log = logger
+        self._logger = logger
         self._last_area_result: bool | None = None
 
-    def _emit(self, msg: str, level: str = 'INFO') -> None:
-        """Emit a log message via the optional logger callback."""
-        if self._log:
-            self._log(msg, level=level)
+    def _log(self, msg: str) -> None:
+        if self._logger:
+            self._logger.info(msg)
 
     def update(self, data: dict | None, alert_time: float | None = None) -> AlertState:
         """Classify alert data and return the new state.
@@ -168,7 +167,7 @@ class AlertStateTracker:
     def _log_transition(self, old_state: AlertState, data: dict | None) -> None:
         """Log a state transition with relevant context."""
         if self.state == AlertState.ROUTINE:
-            self._emit(f'State: {old_state.value} -> routine')
+            self._log(f'State: {old_state.value} -> routine')
         elif data and isinstance(data, dict):
             cat = data.get('cat', '?')
             title = data.get('title', '')
@@ -176,9 +175,9 @@ class AlertStateTracker:
             city_preview = ', '.join(str(c) for c in cities[:5])
             if len(cities) > 5:
                 city_preview += f' ... (+{len(cities) - 5} more)'
-            self._emit(f"State: {old_state.value} -> {self.state.value} (cat={cat}, title='{title}', cities=[{city_preview}])")
+            self._log(f"State: {old_state.value} -> {self.state.value} (cat={cat}, title='{title}', cities=[{city_preview}])")
         else:
-            self._emit(f'State: {old_state.value} -> {self.state.value}')
+            self._log(f'State: {old_state.value} -> {self.state.value}')
 
     def _set_state(self, state: AlertState, data: dict):
         """Set a non-ROUTINE state and record/reset the hold timer."""
@@ -194,7 +193,7 @@ class AlertStateTracker:
                 elapsed = time.monotonic() - self._state_entered_time
                 if elapsed < hold:
                     return
-                self._emit(f'Hold expired for {self.state.value} after {elapsed:.1f}s')
+                self._log(f'Hold expired for {self.state.value} after {elapsed:.1f}s')
 
         self.state = AlertState.ROUTINE
         self.alert_data = None
@@ -209,9 +208,9 @@ class AlertStateTracker:
         if matched != self._last_area_result:
             if matched:
                 matching = [c for c, n in zip(cities, alert_names) if n in self._areas]
-                self._emit(f'Area match: {matching}')
+                self._log(f'Area match: {matching}')
             else:
-                self._emit(f'Alert filtered: cities {cities[:10]} did not match configured areas')
+                self._log(f'Alert filtered: cities {cities[:10]} did not match configured areas')
             self._last_area_result = matched
         return matched
 

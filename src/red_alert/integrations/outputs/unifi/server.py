@@ -305,20 +305,6 @@ def _normalize_config(config: dict) -> list[tuple[dict, list[dict]]]:
     return [(connection, [monitor_cfg])]
 
 
-def _log_adapter(msg, level='INFO', **kwargs):
-    """Adapt Python logging to the core logger interface."""
-    getattr(logger, level.lower(), logger.info)(msg)
-
-
-def _prefixed_log_adapter(prefix: str):
-    """Create a log adapter that prepends a prefix to each message."""
-
-    def adapter(msg, level='INFO', **kwargs):
-        getattr(logger, level.lower(), logger.info)(f'{prefix}{msg}')
-
-    return adapter
-
-
 class UnifiAlertMonitor:
     """Polls the Home Front Command API and controls UniFi AP LEDs based on alert state."""
 
@@ -560,7 +546,7 @@ def _build_monitors_for_controller(
         device_led_states = _build_device_led_states(led_states, device_macs, device_overrides) if device_overrides else None
         device_schedules = _build_device_schedules(device_overrides) if device_overrides else None
 
-        log_fn = _prefixed_log_adapter(f'[{name}] ') if multi_monitor else _log_adapter
+        log_fn = logger.getChild(name) if multi_monitor else logger
         state_tracker = AlertStateTracker(
             areas_of_interest=mon_cfg.get('areas_of_interest'),
             hold_seconds=mon_cfg.get('hold_seconds'),
@@ -622,7 +608,7 @@ async def run_monitor(config: dict):
 
     # Single HTTP client and API client (shared across all controllers)
     http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
-    api_client = HomeFrontCommandApiClient(http_client, API_URLS, _log_adapter)
+    api_client = HomeFrontCommandApiClient(http_client, API_URLS, logger)
 
     # Build LED controllers and monitors for each controller group
     led_controllers: list[UnifiLedController] = []
