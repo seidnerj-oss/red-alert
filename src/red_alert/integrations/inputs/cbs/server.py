@@ -339,8 +339,12 @@ async def run_monitor(config: dict):
 
     from red_alert.integrations.inputs.cbs.history import CbsHistory
 
+    history_path = cfg.get('history_path')
+    if not history_path:
+        raise ValueError('history_path is required in CBS config (or will be auto-set when using --config)')
+
     history = CbsHistory(
-        path=cfg.get('history_path'),
+        path=history_path,
         max_age_seconds=cfg.get('history_max_age', 3600),
     )
 

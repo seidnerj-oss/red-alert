@@ -408,6 +408,7 @@ class TestRunMonitorIntegration:
             'latitude': 32.0853,
             'longitude': 34.7818,
             'polygon_cache_path': str(tmp_path / 'polygons.json'),
+            'history_path': str(tmp_path / 'cbs_history.json'),
         }
 
         with (
@@ -477,6 +478,7 @@ class TestBridgeIntegration:
             'longitude': 34.7818,
             'lte_host': '192.168.1.100',
             'polygon_cache_path': str(tmp_path / 'polygons.json'),
+            'history_path': str(tmp_path / 'cbs_history.json'),
             'health_check_interval': 0,
         }
 
@@ -510,6 +512,7 @@ class TestBridgeIntegration:
             'longitude': 34.7818,
             'lte_host': '192.168.1.100',
             'polygon_cache_path': str(tmp_path / 'polygons.json'),
+            'history_path': str(tmp_path / 'cbs_history.json'),
         }
 
         with (
@@ -532,6 +535,7 @@ class TestBridgeIntegration:
             'latitude': 32.0853,
             'longitude': 34.7818,
             'polygon_cache_path': str(tmp_path / 'polygons.json'),
+            'history_path': str(tmp_path / 'cbs_history.json'),
         }
 
         with (
@@ -564,6 +568,7 @@ class TestBridgeIntegration:
             'longitude': 34.7818,
             'lte_host': '192.168.1.100',
             'polygon_cache_path': str(tmp_path / 'polygons.json'),
+            'history_path': str(tmp_path / 'cbs_history.json'),
             'health_check_interval': 0,
         }
 

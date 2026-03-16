@@ -18,15 +18,14 @@ from red_alert.integrations.inputs.cbs.parser import CbsMessage
 
 logger = logging.getLogger('red_alert.cbs.history')
 
-DEFAULT_HISTORY_PATH = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'data', 'cbs_history.json')
 DEFAULT_MAX_AGE_SECONDS = 3600
 
 
 class CbsHistory:
     """Persists CBS messages to a local JSON file for state recovery on startup."""
 
-    def __init__(self, path: str | None = None, max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS):
-        self._path = path or DEFAULT_HISTORY_PATH
+    def __init__(self, path: str, max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS):
+        self._path = path
         self._max_age = max_age_seconds
         self._entries: list[dict] = []
         self._load()

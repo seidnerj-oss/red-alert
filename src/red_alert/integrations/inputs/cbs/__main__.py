@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 
 from red_alert.integrations.inputs.cbs.server import run_monitor
@@ -26,6 +27,11 @@ def main():
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f'Error loading config file: {e}', file=sys.stderr)
         sys.exit(1)
+
+    # Default history_path to sit alongside the config file
+    if not config.get('history_path'):
+        config_dir = os.path.dirname(os.path.abspath(args.config))
+        config['history_path'] = os.path.join(config_dir, 'cbs_history.json')
 
     logging.basicConfig(
         level=logging.INFO,
