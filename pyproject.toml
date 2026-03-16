@@ -26,6 +26,9 @@ unifi = [
 homepod = [
     "pyatv",
 ]
+cbs = [
+    "asyncssh",
+]
 
 [dependency-groups]
 dev = [

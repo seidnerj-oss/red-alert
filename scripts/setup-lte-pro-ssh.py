@@ -46,6 +46,82 @@ from pyunifiapi.ssh.session import SSHSession
 logger = logging.getLogger(__name__)
 
 
+def build_controller_config(
+    *,
+    host: str | None = None,
+    device_id: str | None = None,
+    username: str,
+    password: str,
+    port: int = 443,
+    site: str = 'default',
+    totp_secret: str | None = None,
+) -> ControllerConfig | CloudConfig:
+    """Build a UniFi controller config for either direct or cloud connection.
+
+    Args:
+        host: Controller hostname/IP for direct connection.
+        device_id: Cloud device ID for cloud connection.
+        username: Controller username or SSO email.
+        password: Controller password or SSO password.
+        port: Controller port (default: 443).
+        site: Controller site (default: default).
+        totp_secret: TOTP secret for 2FA (required for cloud).
+
+    Returns:
+        A ControllerConfig (direct) or CloudConfig (cloud).
+
+    Raises:
+        ValueError: If neither host nor device_id is provided, or if
+            device_id is used without totp_secret.
+    """
+    if not host and not device_id:
+        raise ValueError('Either host (direct) or device_id (cloud) must be provided')
+
+    if device_id:
+        if not totp_secret:
+            raise ValueError('totp_secret is required for cloud connections')
+        return CloudConfig(
+            username=username,
+            password=password,
+            device_id=device_id,
+            totp_secret=totp_secret,
+            site=site,
+        )
+
+    return ControllerConfig(
+        host=host,
+        username=username,
+        password=password,
+        port=port,
+        site=site,
+        totp_secret=totp_secret,
+    )
+
+
+def read_pubkey(path: str | Path) -> str:
+    """Read and validate an SSH public key file.
+
+    Args:
+        path: Path to the public key file.
+
+    Returns:
+        The public key string.
+
+    Raises:
+        FileNotFoundError: If the file doesn't exist.
+        ValueError: If the file doesn't look like a public key.
+    """
+    pubkey_path = Path(path).expanduser()
+    if not pubkey_path.exists():
+        raise FileNotFoundError(f'Public key file not found: {pubkey_path}')
+
+    pubkey = pubkey_path.read_text().strip()
+    if not pubkey.startswith(('ssh-', 'ecdsa-', 'sk-')):
+        raise ValueError(f'Does not look like a public key: {pubkey[:40]}...')
+
+    return pubkey
+
+
 async def setup_ssh(
     controller_config: ControllerConfig | CloudConfig,
     device_mac: str,
@@ -108,37 +184,29 @@ def main() -> None:
         format='%(asctime)s %(levelname)s %(name)s: %(message)s',
     )
 
-    pubkey_path = Path(args.pubkey).expanduser()
-    if not pubkey_path.exists():
-        print(f'Error: public key file not found: {pubkey_path}', file=sys.stderr)
+    try:
+        pubkey = read_pubkey(args.pubkey)
+    except (FileNotFoundError, ValueError) as e:
+        print(f'Error: {e}', file=sys.stderr)
         sys.exit(1)
 
-    pubkey = pubkey_path.read_text().strip()
-    if not pubkey.startswith(('ssh-', 'ecdsa-', 'sk-')):
-        print(f'Error: does not look like a public key: {pubkey[:40]}...', file=sys.stderr)
-        sys.exit(1)
-
-    if args.device_id:
-        if not args.totp_secret:
-            print('Error: --totp-secret is required for cloud connections', file=sys.stderr)
-            sys.exit(1)
-        controller_config: ControllerConfig | CloudConfig = CloudConfig(
-            username=args.username,
-            password=args.password,
-            device_id=args.device_id,
-            totp_secret=args.totp_secret,
-            site=args.site,
-        )
-        print(f'Connecting via cloud to controller {args.device_id[:30]}...')
-    else:
-        controller_config = ControllerConfig(
+    try:
+        controller_config = build_controller_config(
             host=args.host,
+            device_id=args.device_id,
             username=args.username,
             password=args.password,
             port=args.port,
             site=args.site,
             totp_secret=args.totp_secret,
         )
+    except ValueError as e:
+        print(f'Error: {e}', file=sys.stderr)
+        sys.exit(1)
+
+    if args.device_id:
+        print(f'Connecting via cloud to controller {args.device_id[:30]}...')
+    else:
         print(f'Connecting directly to controller at {args.host}...')
 
     asyncio.run(setup_ssh(controller_config, args.mac, pubkey))

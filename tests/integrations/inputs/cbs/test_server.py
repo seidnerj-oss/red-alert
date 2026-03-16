@@ -11,6 +11,7 @@ from red_alert.integrations.inputs.cbs.parser import CbsMessage
 from red_alert.integrations.inputs.cbs.server import (
     DEFAULT_MESSAGE_ID_MAP,
     CbsAlertMonitor,
+    _create_bridge,
     _resolve_location,
     _resolve_via_centroids,
     run_monitor,
@@ -420,6 +421,163 @@ class TestRunMonitorIntegration:
                 pass
 
         assert 'תל אביב - יפו' in captured_monitor.get('areas', [])
+
+
+class TestBridgeIntegration:
+    """Tests for bridge mode integration in run_monitor."""
+
+    def test_create_bridge_returns_none_without_lte_host(self):
+        cfg = {'device': '/dev/cdc-wdm0'}
+        assert _create_bridge(cfg) is None
+
+    def test_create_bridge_returns_none_when_lte_host_is_none(self):
+        cfg = {'device': '/dev/cdc-wdm0', 'lte_host': None}
+        assert _create_bridge(cfg) is None
+
+    def test_create_bridge_returns_bridge_when_lte_host_set(self):
+        cfg = {
+            'device': '/dev/cdc-wdm0',
+            'lte_host': '192.168.1.100',
+            'bridge_port': 18222,
+        }
+        bridge = _create_bridge(cfg)
+        assert bridge is not None
+        assert bridge.lte_host == '192.168.1.100'
+        assert bridge.bridge_port == 18222
+        assert bridge.device == '/dev/cdc-wdm0'
+
+    def test_create_bridge_passes_ssh_config(self):
+        cfg = {
+            'device': '/dev/cdc-wdm0',
+            'lte_host': '192.168.1.100',
+            'ssh_key_path': '/home/user/.ssh/id_ed25519',
+            'ssh_username': 'admin',
+            'socat_remote_binary': '/cache/socat-mips',
+        }
+        bridge = _create_bridge(cfg)
+        assert bridge is not None
+        assert bridge._ssh_key_path == '/home/user/.ssh/id_ed25519'
+        assert bridge._ssh_username == 'admin'
+
+    @pytest.mark.asyncio
+    async def test_run_monitor_bridge_mode_calls_ensure_bridge(self, tmp_path):
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
+
+        mock_bridge = MagicMock()
+        mock_bridge.lte_host = '192.168.1.100'
+        mock_bridge.bridge_port = 18222
+        mock_bridge.ensure_bridge = AsyncMock(return_value=True)
+        mock_bridge.configure_cbs = AsyncMock(return_value=True)
+        mock_bridge.close = AsyncMock()
+
+        config = {
+            'latitude': 32.0853,
+            'longitude': 34.7818,
+            'lte_host': '192.168.1.100',
+            'polygon_cache_path': str(tmp_path / 'polygons.json'),
+            'health_check_interval': 0,
+        }
+
+        with (
+            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.integrations.inputs.cbs.server._create_bridge', return_value=mock_bridge),
+            patch.object(CbsAlertMonitor, 'run_subprocess', new_callable=AsyncMock, side_effect=KeyboardInterrupt),
+        ):
+            try:
+                await run_monitor(config)
+            except (KeyboardInterrupt, Exception):
+                pass
+
+        mock_bridge.ensure_bridge.assert_called()
+        mock_bridge.configure_cbs.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_monitor_bridge_failure_raises(self, tmp_path):
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
+
+        mock_bridge = MagicMock()
+        mock_bridge.lte_host = '192.168.1.100'
+        mock_bridge.bridge_port = 18222
+        mock_bridge.ensure_bridge = AsyncMock(return_value=False)
+        mock_bridge.close = AsyncMock()
+
+        config = {
+            'latitude': 32.0853,
+            'longitude': 34.7818,
+            'lte_host': '192.168.1.100',
+            'polygon_cache_path': str(tmp_path / 'polygons.json'),
+        }
+
+        with (
+            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.integrations.inputs.cbs.server._create_bridge', return_value=mock_bridge),
+            pytest.raises(RuntimeError, match='Failed to establish socat bridge'),
+        ):
+            await run_monitor(config)
+
+        mock_bridge.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_monitor_no_bridge_when_lte_host_absent(self, tmp_path):
+        """Backward compat: no bridge when lte_host is not configured."""
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
+
+        config = {
+            'latitude': 32.0853,
+            'longitude': 34.7818,
+            'polygon_cache_path': str(tmp_path / 'polygons.json'),
+        }
+
+        with (
+            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch.object(CbsAlertMonitor, 'run_subprocess', new_callable=AsyncMock, side_effect=KeyboardInterrupt),
+            patch('red_alert.integrations.inputs.cbs.server._create_bridge', return_value=None) as mock_create,
+        ):
+            try:
+                await run_monitor(config)
+            except (KeyboardInterrupt, Exception):
+                pass
+
+        mock_create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_monitor_bridge_closes_on_exit(self, tmp_path):
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
+
+        mock_bridge = MagicMock()
+        mock_bridge.lte_host = '192.168.1.100'
+        mock_bridge.bridge_port = 18222
+        mock_bridge.ensure_bridge = AsyncMock(return_value=True)
+        mock_bridge.configure_cbs = AsyncMock(return_value=True)
+        mock_bridge.close = AsyncMock()
+
+        config = {
+            'latitude': 32.0853,
+            'longitude': 34.7818,
+            'lte_host': '192.168.1.100',
+            'polygon_cache_path': str(tmp_path / 'polygons.json'),
+            'health_check_interval': 0,
+        }
+
+        with (
+            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.integrations.inputs.cbs.server._create_bridge', return_value=mock_bridge),
+            patch.object(CbsAlertMonitor, 'run_subprocess', new_callable=AsyncMock, side_effect=KeyboardInterrupt),
+        ):
+            try:
+                await run_monitor(config)
+            except (KeyboardInterrupt, Exception):
+                pass
+
+        mock_bridge.close.assert_called_once()
 
 
 class TestFixtureIntegration:

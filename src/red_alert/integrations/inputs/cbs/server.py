@@ -64,6 +64,12 @@ DEFAULT_CONFIG: dict = {
     'city_data_path': None,
     'location_radius_km': 5.0,
     'polygon_cache_path': None,
+    'lte_host': None,
+    'bridge_port': 18222,
+    'ssh_key_path': None,
+    'ssh_username': None,
+    'socat_remote_binary': None,
+    'health_check_interval': 300,
 }
 
 
@@ -216,7 +222,7 @@ async def _resolve_location(cfg: dict) -> list[str]:
         return polygon_cities
 
     raise ValueError(
-        f'Device coordinates ({lat_f}, {lon_f}) did not resolve to any known cities. ' f'Set areas_of_interest explicitly or verify coordinates.'
+        f'Device coordinates ({lat_f}, {lon_f}) did not resolve to any known cities. Set areas_of_interest explicitly or verify coordinates.'
     )
 
 
@@ -288,6 +294,38 @@ async def _periodic_polygon_refresh(cfg: dict):
             logger.warning('Error during polygon refresh: %s', e)
 
 
+def _create_bridge(cfg: dict):
+    """Create a CbsBridge if bridge mode is configured (lte_host is set)."""
+    lte_host = cfg.get('lte_host')
+    if not lte_host:
+        return None
+
+    from red_alert.integrations.inputs.cbs.bridge import CbsBridge
+
+    return CbsBridge(
+        lte_host=lte_host,
+        bridge_port=cfg.get('bridge_port', 18222),
+        device=cfg['device'],
+        ssh_key_path=cfg.get('ssh_key_path'),
+        ssh_username=cfg.get('ssh_username'),
+        socat_remote_binary=cfg.get('socat_remote_binary'),
+    )
+
+
+async def _periodic_health_check(bridge, qmicli_path: str, interval: int):
+    """Periodically check bridge health and log status."""
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            status = await bridge.health_check(qmicli_path)
+            if status['lte_bridge'] and status['local_bridge']:
+                logger.info('Bridge health check: OK (CBS channels: %s)', status.get('cbs_channels', 'unknown'))
+            else:
+                logger.warning('Bridge health check: LTE=%s, local=%s', status['lte_bridge'], status['local_bridge'])
+        except Exception as e:
+            logger.warning('Bridge health check error: %s', e)
+
+
 async def run_monitor(config: dict):
     """Main entry point: run CBS monitor with reconnection logic."""
     cfg = {**DEFAULT_CONFIG, **config}
@@ -325,21 +363,45 @@ async def run_monitor(config: dict):
     has_coords = lat is not None and lon is not None
     location_desc = f'lat={lat}, lon={lon}' if has_coords else 'not set'
 
+    bridge = _create_bridge(cfg)
+    bridge_mode = bridge is not None
+
     logger.info(
-        'Starting CBS monitor: device=%s, qmicli=%s, location=%s, areas=%s',
+        'Starting CBS monitor: device=%s, qmicli=%s, location=%s, areas=%s, bridge=%s',
         cfg['device'],
         cfg['qmicli_path'],
         location_desc,
         areas or 'all',
+        f'{bridge.lte_host}:{bridge.bridge_port}' if bridge else 'disabled',
     )
 
     refresh_task = None
+    health_check_task = None
+
     if has_coords:
         refresh_task = asyncio.create_task(_periodic_polygon_refresh(cfg))
 
     try:
+        if bridge:
+            if not await bridge.ensure_bridge():
+                raise RuntimeError('Failed to establish socat bridge to LTE device')
+
+            logger.info('Configuring CBS channels via bridge...')
+            if not await bridge.configure_cbs(cfg['qmicli_path'], cfg['channels']):
+                logger.warning('CBS channel configuration failed - monitor may not receive alerts')
+
+            health_interval = cfg.get('health_check_interval', 300)
+            if health_interval > 0:
+                health_check_task = asyncio.create_task(_periodic_health_check(bridge, cfg['qmicli_path'], health_interval))
+
         while True:
             try:
+                if bridge_mode and not await bridge.ensure_bridge():
+                    logger.error('Bridge is down, waiting %ds before retry...', delay)
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, max_delay)
+                    continue
+
                 returncode = await monitor.run_subprocess()
                 if returncode == 0:
                     delay = cfg['reconnect_delay']
@@ -350,9 +412,13 @@ async def run_monitor(config: dict):
             await asyncio.sleep(delay)
             delay = min(delay * 2, max_delay)
     finally:
-        if refresh_task:
-            refresh_task.cancel()
-            try:
-                await refresh_task
-            except asyncio.CancelledError:
-                pass
+        for task in (refresh_task, health_check_task):
+            if task:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+        if bridge:
+            await bridge.close()

@@ -4,20 +4,50 @@ red-alert can receive emergency alerts directly from the cellular network via Ce
 
 ## How It Works
 
-1. A patched `qmicli` binary monitors the QMI modem's WMS (Wireless Messaging Service) for CBS indications
+Two deployment modes are supported:
+
+### Direct mode (qmicli on the LTE device)
+
+1. A patched `qmicli` binary runs directly on the LTE device
 2. The red-alert CBS integration spawns `qmicli --wms-monitor` as a subprocess and parses its output
 3. Multi-page CBS messages are reassembled and decoded from UCS-2 into text
 4. CBS message IDs are mapped to alert states: 4370=PRE_ALERT, 4371-4372=ALERT, 4373=ALL_CLEAR
 5. State change callbacks can trigger notifications (Telegram, etc.)
 
+### Bridge mode (qmicli on a separate monitoring host)
+
+In bridge mode, qmicli runs on a separate machine (Raspberry Pi, Mac, Linux server, etc.) and communicates with the LTE device's QMI modem over a TCP bridge using socat:
+
+```
+LTE Device (<lte-device-ip>)                   Monitoring Host (Pi, Mac, etc.)
+  qmi-proxy (stock, always running)               socat (apt/brew, persistent)
+       |                                               |
+  socat (MIPS, deployed via SSH)                  ABSTRACT-LISTEN:qmi-proxy
+  TCP-LISTEN:18222 <--------network-------->      TCP:<lte-device-ip>:18222
+  ABSTRACT-CONNECT:qmi-proxy                           |
+                                                  qmicli --wms-monitor (aarch64/darwin)
+                                                    local subprocess
+                                                       |
+                                                  CbsAlertMonitor (Python)
+```
+
+This eliminates the need for any patched binary on the LTE device - only a stock `socat` binary is deployed. The monitoring host runs the patched qmicli natively (aarch64 or darwin build).
+
 Each CBS message contains the alert text in Hebrew, English, Arabic, and Russian.
 
 ## Prerequisites
 
+### Direct mode
 - A device with a QMI-capable LTE modem (tested on UniFi LTE Backup Pro with Sierra Wireless WP7607)
 - SSH access to the device (see [UniFi LTE Backup Pro SSH setup guide](CBS-UNIFI-LTE-PRO-SSH.md))
 - Docker on your build machine (for cross-compiling qmicli)
 - Python 3.14+
+
+### Bridge mode (additional)
+- A monitoring host (Raspberry Pi, Mac, Linux server) with network access to the LTE device
+- `socat` installed on the monitoring host (`apt install socat` or `brew install socat`)
+- `asyncssh` Python package: `pip install red-alert[cbs]`
+- SSH access to the LTE device (automated via `scripts/setup-lte-pro-ssh.py`)
 
 ## Hardware: UniFi LTE Backup Pro
 
@@ -110,7 +140,7 @@ When a real alert is broadcast, you'll see output like:
 
 On a machine that can SSH to the device (or on the device itself if Python is available):
 
-**`cbs-config.json`:**
+**`cbs-config.json` (direct mode):**
 ```json
 {
     "qmicli_path": "/tmp/qmicli",
@@ -144,6 +174,106 @@ python -m red_alert.integrations.inputs.cbs --config cbs-config.json
 | `city_data_path` | Path to `city_data.json` for centroid fallback resolution (optional) | runtime cache |
 | `location_radius_km` | Radius in km for centroid fallback resolution | `5.0` |
 | `polygon_cache_path` | Path to polygon data cache file (optional) | `data/polygon_cache.json` |
+
+## Bridge Mode
+
+Bridge mode runs qmicli on a separate monitoring host instead of on the LTE device itself. This is the recommended setup for the UniFi LTE Backup Pro, since it avoids running patched binaries on the constrained MIPS device.
+
+### Automated setup
+
+The `scripts/setup-cbs.py` script automates the entire bridge setup:
+
+```bash
+pip install asyncssh pyunifiapi
+
+python scripts/setup-cbs.py \
+    --lte-host <lte-device-ip> \
+    --controller-host <controller-ip> \
+    --controller-username admin \
+    --controller-password <pass> \
+    --device-mac <lte-device-mac> \
+    --ssh-key ~/.ssh/id_ed25519
+```
+
+**What the setup script does:**
+
+1. **Builds qmicli** - clones [qmicli-cbs](https://github.com/seidnerj/qmicli-cbs) and runs Docker cross-compilation (aarch64 + MIPS + darwin)
+2. **Downloads socat** - fetches a MIPS socat binary from the LEDE 17.01.6 package repository for deployment to the LTE device
+3. **Sets up the monitoring host** - checks socat is installed, prints instructions for deploying qmicli
+4. **Enables SSH on the LTE device** - uses the `setup-lte-pro-ssh.py` script to inject an SSH key and start dropbear via the UniFi controller's WebRTC debug terminal
+5. **Provisions the LTE device** - deploys socat via SSH, starts the TCP bridge
+6. **Configures CBS** - runs qmicli through the bridge to set channels and enable CBS reception
+
+Individual steps can be re-run independently:
+
+```bash
+python scripts/setup-cbs.py --build-only
+python scripts/setup-cbs.py --setup-host-only
+python scripts/setup-cbs.py --enable-ssh-only [controller args]
+python scripts/setup-cbs.py --provision-lte-only --lte-host <ip> --ssh-key ~/.ssh/id_ed25519
+```
+
+### After LTE device reboot
+
+The LTE device's dropbear SSH server and socat bridge do not survive reboots. Re-run:
+
+```bash
+python scripts/setup-cbs.py --enable-ssh-only \
+    --controller-host <controller-ip> \
+    --controller-username admin \
+    --controller-password <pass> \
+    --device-mac <lte-device-mac> \
+    --ssh-key ~/.ssh/id_ed25519
+
+python scripts/setup-cbs.py --provision-lte-only \
+    --lte-host <lte-device-ip> \
+    --ssh-key ~/.ssh/id_ed25519
+```
+
+Or re-run the full setup (idempotent - skips already-completed steps).
+
+### Bridge mode config
+
+**`cbs-bridge-config.json`:**
+```json
+{
+    "qmicli_path": "/usr/local/bin/qmicli-cbs",
+    "device": "/dev/cdc-wdm0",
+    "device_open_proxy": true,
+    "channels": "919,4370-4383",
+    "lte_host": "<lte-device-ip>",
+    "bridge_port": 18222,
+    "ssh_key_path": "~/.ssh/id_ed25519",
+    "ssh_username": "root",
+    "health_check_interval": 300,
+    "latitude": 32.0853,
+    "longitude": 34.7818,
+    "areas_of_interest": ["תל אביב - יפו"]
+}
+```
+
+```bash
+python -m red_alert.integrations.inputs.cbs --config cbs-bridge-config.json
+```
+
+Setting `lte_host` activates bridge mode. The monitor will:
+- Ensure the socat bridge is running on both the LTE device and locally before starting qmicli
+- Configure CBS channels through the bridge on first connection
+- Run periodic health checks (every `health_check_interval` seconds)
+- Re-verify the bridge before restarting qmicli after any exit
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `lte_host` | LTE device hostname/IP (enables bridge mode when set) | `null` |
+| `bridge_port` | TCP port for the socat bridge | `18222` |
+| `ssh_key_path` | Path to SSH private key for LTE device access | `null` |
+| `ssh_username` | SSH username on the LTE device | `null` |
+| `socat_remote_binary` | Local path to socat binary for auto-deployment to LTE device | `null` |
+| `health_check_interval` | Seconds between bridge health checks (0 to disable) | `300` |
+
+### Runtime behavior
+
+When the bridge is down, the CBS monitor logs an error directing you to re-run the setup script. The runtime bridge manager (`CbsBridge`) can restart socat on both sides if it crashes, but it cannot re-enable SSH on the LTE device after a reboot - that requires the setup script with controller credentials.
 
 ## Device Location
 
@@ -226,7 +356,11 @@ The two sources complement each other well. The API provides structured data wit
 
 ## Technical Details
 
-The CBS integration uses only Python stdlib modules (`asyncio.subprocess`, `dataclasses`, `re`). No additional pip packages are required. The `qmicli` binary handles all QMI protocol communication with the modem.
+In direct mode, the CBS integration uses only Python stdlib modules (`asyncio.subprocess`, `dataclasses`, `re`). No additional pip packages are required.
+
+In bridge mode, the `asyncssh` package is required for SSH communication with the LTE device (install via `pip install red-alert[cbs]`). The setup script additionally requires `pyunifiapi` for enabling SSH via the UniFi controller.
+
+The `qmicli` binary handles all QMI protocol communication with the modem.
 
 The patched qmicli commands added for CBS:
 - `--wms-set-event-report` - enables MT message event reporting via QMI_WMS_SET_EVENT_REPORT
