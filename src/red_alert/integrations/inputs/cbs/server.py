@@ -11,6 +11,7 @@ Usage:
 import asyncio
 import logging
 import os
+import time
 
 import httpx
 
@@ -70,6 +71,8 @@ DEFAULT_CONFIG: dict = {
     'ssh_username': None,
     'socat_remote_binary': None,
     'health_check_interval': 300,
+    'history_path': None,
+    'history_max_age': 3600,
 }
 
 
@@ -334,12 +337,20 @@ async def run_monitor(config: dict):
     if cfg.get('message_id_map'):
         message_id_map = {int(k): AlertState(v) for k, v in cfg['message_id_map'].items()}
 
+    from red_alert.integrations.inputs.cbs.history import CbsHistory
+
+    history = CbsHistory(
+        path=cfg.get('history_path'),
+        max_age_seconds=cfg.get('history_max_age', 3600),
+    )
+
     async def on_state_change(old: AlertState, new: AlertState, message: CbsMessage):
         text_preview = message.text[:100] if message.text else ''
         logger.info('Alert state: %s -> %s | %s', old.value, new.value, text_preview)
 
     async def on_message(message: CbsMessage, state: AlertState):
         logger.info('Message text:\n%s', message.text)
+        history.record(message, state)
 
     areas = await _resolve_location(cfg)
 
@@ -354,6 +365,15 @@ async def run_monitor(config: dict):
         longitude=cfg.get('longitude'),
         areas_of_interest=areas,
     )
+
+    # Seed initial state from history (CBS has no external history endpoint)
+    latest = history.get_latest_state()
+    if latest:
+        state, timestamp = latest
+        if state != AlertState.ROUTINE:
+            monitor._state = state
+            age = time.time() - timestamp
+            logger.info('Startup: restored CBS state %s from history (%.0fs ago)', state.value, age)
 
     delay = cfg['reconnect_delay']
     max_delay = cfg['max_reconnect_delay']
