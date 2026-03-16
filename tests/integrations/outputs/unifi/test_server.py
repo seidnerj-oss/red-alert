@@ -939,3 +939,28 @@ class TestSchedule:
             mock_dt.time = datetime.time
             cfg = monitor._state_cfg(AlertState.ROUTINE, 'aa:bb:cc:dd:ee:ff')
             assert cfg['brightness'] == 100
+
+
+class TestStartupHistorySeed:
+    """Tests for seeding initial state from history on startup."""
+
+    @pytest.mark.asyncio
+    async def test_startup_seeds_alert_from_history(self):
+        """When history has a recent alert, startup should seed ALERT state."""
+        monitor, _, led, state_tracker = TestUpdate._make_monitor(TestUpdate())
+        state_tracker.update = lambda data: AlertState.ALERT if data and data.get('cat') == '1' else AlertState.ROUTINE
+
+        history_alert = {'cat': '1', 'title': 'ירי רקטות וטילים', 'data': ['כפר סבא'], 'alertDate': '2026-03-16T22:21:10'}
+        await monitor.update(history_alert)
+        assert led.set_led.called
+        led.set_led.assert_called_with(on=True, color_hex='#FF0000', brightness=100)
+
+    @pytest.mark.asyncio
+    async def test_startup_stays_routine_when_no_history(self):
+        """When history is empty, startup should remain ROUTINE."""
+        monitor, _, led, state_tracker = TestUpdate._make_monitor(TestUpdate())
+        state_tracker.update = lambda data: AlertState.ROUTINE
+
+        await monitor.update(None)
+        assert led.set_led.called
+        led.set_led.assert_called_with(on=True, color_hex='#FFFFFF', brightness=100)

@@ -690,6 +690,21 @@ async def run_monitor(config: dict):
     for ctrl in led_controllers:
         await ctrl.connect()
 
+    # Seed initial state from history to avoid starting in ROUTINE during an active alert.
+    # The live endpoint only shows alerts during the ~30-60s siren pulse. If we start (or
+    # restart) after the pulse ends but before the hold window expires, we'd incorrectly
+    # show ROUTINE. History gives us the full picture.
+    try:
+        max_hold = max((m._state._hold.get(AlertState.ALERT, 0) for m in all_monitors), default=1800)
+        recent = await api_client.get_recent_alerts_from_history(max_age_seconds=int(max_hold))
+        if recent:
+            for alert_data in recent:
+                for monitor in all_monitors:
+                    await monitor.update(alert_data)
+            logger.info('Startup: seeded initial state from %d recent history alert(s)', len(recent))
+    except Exception:
+        logger.debug('Startup: history check failed, starting from live data', exc_info=True)
+
     reconcile_interval = 60  # seconds between LED state reconciliation checks
     last_reconcile = 0.0
     metadata_interval = 3600  # seconds between metadata validation checks (1 hour)
