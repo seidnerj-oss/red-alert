@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Full CBS bridge provisioning script.
+"""CBS bridge infrastructure provisioning script.
 
-Automates building qmicli, downloading socat, deploying both to the correct
-hosts, enabling SSH on the LTE device, and configuring CBS channels.
+Builds and positions all binaries needed for the CBS socat bridge, and enables
+SSH on the LTE device. Does NOT start any services or configure CBS channels -
+that's handled at runtime by CbsBridge.
 
 This is designed for a remote QMI modem setup where qmicli runs on a local
 monitoring host (Raspberry Pi, Mac, etc.) and communicates with the LTE device's
@@ -36,8 +37,8 @@ Usage:
     # Individual steps:
     python scripts/setup-cbs.py --build-only
     python scripts/setup-cbs.py --setup-host-only
-    python scripts/setup-cbs.py --enable-ssh-only  # re-run after LTE device reboot
-    python scripts/setup-cbs.py --provision-lte-only  # deploy socat + configure CBS
+    python scripts/setup-cbs.py --enable-ssh-only   # re-run after LTE device reboot
+    python scripts/setup-cbs.py --deploy-lte-only   # deploy socat binary to LTE device
 """
 
 from __future__ import annotations
@@ -72,13 +73,10 @@ logger = logging.getLogger('setup-cbs')
 SOCAT_IPK_URL = 'https://downloads.openwrt.org/releases/17.01.6/packages/mips_24kc/packages/socat_1.7.3.1-1_mips_24kc.ipk'
 SOCAT_IPK_SHA256 = None  # Set after first verified download
 
-DEFAULT_BRIDGE_PORT = 18222
 SOCAT_REMOTE_PATH = '/tmp/socat'
-QMICLI_REMOTE_DEVICE = '/dev/cdc-wdm0'
 
 CACHE_DIR = Path.home() / '.cache' / 'red-alert'
 QMICLI_CBS_REPO = 'https://github.com/seidnerj/qmicli-cbs.git'
-
 
 VALID_ARCHS = ('aarch64', 'darwin', 'mips')
 
@@ -320,22 +318,23 @@ async def enable_lte_ssh(
     logger.info('SSH enabled on LTE device')
 
 
-# ---------- Step e: LTE device provisioning via SSH ----------
+# ---------- Step e: Deploy socat to LTE device ----------
 
 
-async def provision_lte_device(
+async def deploy_socat_to_lte(
     lte_host: str,
     socat_binary: Path,
-    bridge_port: int = DEFAULT_BRIDGE_PORT,
     ssh_key_path: str | None = None,
     ssh_username: str = 'root',
 ) -> None:
-    """Deploy socat and start the bridge on the LTE device via SSH.
+    """Deploy the socat binary to the LTE device via SSH.
+
+    Only deploys the binary - does NOT start it. The CbsBridge runtime
+    handles starting and managing the socat bridge process.
 
     Args:
         lte_host: LTE device hostname or IP.
         socat_binary: Path to the local socat MIPS binary to deploy.
-        bridge_port: TCP port for the socat bridge.
         ssh_key_path: Path to SSH private key.
         ssh_username: SSH username on the LTE device.
     """
@@ -351,109 +350,15 @@ async def provision_lte_device(
         logger.info('Connected to LTE device at %s via SSH', lte_host)
 
         result = await conn.run(f'test -x {SOCAT_REMOTE_PATH} && echo exists')
-        if result.stdout and 'exists' in result.stdout:
-            logger.info('socat already present on LTE device')
-        else:
-            logger.info('Deploying socat to LTE device...')
-            async with conn.start_sftp_client() as sftp:
-                await sftp.put(str(socat_binary), SOCAT_REMOTE_PATH)
-            await conn.run(f'chmod +x {SOCAT_REMOTE_PATH}')
-            logger.info('socat deployed to %s', SOCAT_REMOTE_PATH)
+        if result.stdout and 'exists' in str(result.stdout):
+            logger.info('socat already present on LTE device at %s', SOCAT_REMOTE_PATH)
+            return
 
-        result = await conn.run('ps w | grep "socat TCP-LISTEN" | grep -v grep')
-        if result.stdout and result.stdout.strip():
-            logger.info('socat bridge already running on LTE device')
-        else:
-            cmd = f'nohup {SOCAT_REMOTE_PATH} TCP-LISTEN:{bridge_port},reuseaddr,fork ABSTRACT-CONNECT:qmi-proxy > /dev/null 2>&1 &'
-            await conn.run(cmd)
-            await asyncio.sleep(0.5)
-
-            result = await conn.run('ps w | grep "socat TCP-LISTEN" | grep -v grep')
-            if result.stdout and result.stdout.strip():
-                logger.info('socat bridge started on port %d', bridge_port)
-            else:
-                raise RuntimeError('socat bridge failed to start on LTE device')
-
-
-# ---------- Step f: CBS configuration via bridge ----------
-
-
-async def configure_cbs(
-    lte_host: str,
-    bridge_port: int = DEFAULT_BRIDGE_PORT,
-    qmicli_path: str = '/usr/local/bin/qmicli-cbs',
-    device: str = QMICLI_REMOTE_DEVICE,
-    channels: str = '919,4370-4383',
-) -> None:
-    """Configure CBS channels on the modem via the socat bridge.
-
-    Starts a temporary local socat bridge, runs qmicli commands to configure
-    CBS, then tears down the local bridge.
-    """
-    socat_path = shutil.which('socat')
-    if not socat_path:
-        raise RuntimeError('socat not found in PATH')
-
-    local_socat = await asyncio.create_subprocess_exec(
-        socat_path,
-        'ABSTRACT-LISTEN:qmi-proxy,fork',
-        f'TCP:{lte_host}:{bridge_port}',
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.PIPE,
-    )
-
-    try:
-        await asyncio.sleep(0.5)
-
-        if local_socat.returncode is not None:
-            stderr = b''
-            if local_socat.stderr:
-                stderr = await local_socat.stderr.read()
-            raise RuntimeError(f'Local socat failed to start: {stderr.decode(errors="replace")}')
-
-        base_cmd = [qmicli_path, '-d', device, '--device-open-proxy']
-
-        commands = [
-            (f'--wms-set-cbs-channels={channels}', f'Setting CBS channels: {channels}'),
-            ('--wms-set-broadcast-activation', 'Activating CBS reception'),
-            ('--wms-set-event-report', 'Enabling event reporting'),
-        ]
-
-        for flag, desc in commands:
-            logger.info('%s', desc)
-            proc = await asyncio.create_subprocess_exec(
-                *base_cmd,
-                flag,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await proc.communicate()
-
-            if proc.returncode != 0:
-                raise RuntimeError(f'{desc} failed: {stderr.decode(errors="replace").strip()}')
-            logger.info('  %s', stdout.decode(errors='replace').strip())
-
-        logger.info('Verifying CBS channel configuration...')
-        proc = await asyncio.create_subprocess_exec(
-            *base_cmd,
-            '--wms-get-cbs-channels',
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-
-        if proc.returncode == 0:
-            logger.info('CBS channels configured:\n%s', stdout.decode(errors='replace').strip())
-        else:
-            logger.warning('Could not verify CBS channels: %s', stderr.decode(errors='replace').strip())
-
-    finally:
-        local_socat.terminate()
-        try:
-            await asyncio.wait_for(local_socat.wait(), timeout=5.0)
-        except asyncio.TimeoutError:
-            local_socat.kill()
-            await local_socat.wait()
+        logger.info('Deploying socat to LTE device...')
+        async with conn.start_sftp_client() as sftp:
+            await sftp.put(str(socat_binary), SOCAT_REMOTE_PATH)
+        await conn.run(f'chmod +x {SOCAT_REMOTE_PATH}')
+        logger.info('socat deployed to %s', SOCAT_REMOTE_PATH)
 
 
 # ---------- CLI ----------
@@ -461,7 +366,7 @@ async def configure_cbs(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description='CBS bridge provisioning - build, deploy, and configure the socat QMI proxy bridge.',
+        description='CBS bridge infrastructure provisioning - build, deploy, and position all binaries.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             'Examples:\n'
@@ -476,7 +381,7 @@ def main() -> None:
             '\n'
             '  After LTE device reboot:\n'
             '    python scripts/setup-cbs.py --enable-ssh-only [controller args]\n'
-            '    python scripts/setup-cbs.py --provision-lte-only --lte-host <ip> --ssh-key ~/.ssh/id_ed25519\n'
+            '    python scripts/setup-cbs.py --deploy-lte-only --lte-host <ip> --ssh-key ~/.ssh/id_ed25519\n'
         ),
     )
 
@@ -484,10 +389,9 @@ def main() -> None:
     step_group.add_argument('--build-only', action='store_true', help='Only build qmicli (step a)')
     step_group.add_argument('--setup-host-only', action='store_true', help='Only set up the local monitoring host (step c)')
     step_group.add_argument('--enable-ssh-only', action='store_true', help='Only enable SSH on the LTE device via controller (step d)')
-    step_group.add_argument('--provision-lte-only', action='store_true', help='Deploy socat + configure CBS on LTE device (steps e+f)')
+    step_group.add_argument('--deploy-lte-only', action='store_true', help='Only deploy socat binary to LTE device (step e)')
 
     parser.add_argument('--lte-host', help='LTE device hostname or IP')
-    parser.add_argument('--bridge-port', type=int, default=DEFAULT_BRIDGE_PORT, help=f'Bridge TCP port (default: {DEFAULT_BRIDGE_PORT})')
     parser.add_argument('--ssh-key', help='Path to SSH private key file (e.g., ~/.ssh/id_ed25519)')
     parser.add_argument('--ssh-username', default='root', help='SSH username on LTE device (default: root)')
     parser.add_argument('--ssh-pubkey', help='Path to SSH public key file (default: <ssh-key>.pub)')
@@ -513,7 +417,6 @@ def main() -> None:
         help='Target architecture for qmicli binary (default: auto-detect from current platform)',
     )
 
-    parser.add_argument('--channels', default='919,4370-4383', help='CBS channels to configure (default: 919,4370-4383)')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable debug logging')
 
     args = parser.parse_args()
@@ -535,8 +438,8 @@ def main() -> None:
         _step_enable_ssh(args)
         return
 
-    if args.provision_lte_only:
-        _step_provision_lte(args)
+    if args.deploy_lte_only:
+        _step_deploy_lte(args)
         return
 
     _full_setup(args)
@@ -592,10 +495,10 @@ def _step_enable_ssh(args) -> None:
     )
 
 
-def _step_provision_lte(args) -> None:
-    logger.info('=== Step e+f: Provision LTE device ===')
+def _step_deploy_lte(args) -> None:
+    logger.info('=== Step e: Deploy socat to LTE device ===')
     if not args.lte_host:
-        print('Error: --lte-host is required for --provision-lte-only', file=sys.stderr)
+        print('Error: --lte-host is required for --deploy-lte-only', file=sys.stderr)
         sys.exit(1)
 
     socat_binary = download_socat_mips()
@@ -604,23 +507,14 @@ def _step_provision_lte(args) -> None:
     if ssh_key:
         ssh_key = str(Path(ssh_key).expanduser())
 
-    async def _provision():
-        await provision_lte_device(
+    asyncio.run(
+        deploy_socat_to_lte(
             lte_host=args.lte_host,
             socat_binary=socat_binary,
-            bridge_port=args.bridge_port,
             ssh_key_path=ssh_key,
             ssh_username=args.ssh_username,
         )
-
-        await configure_cbs(
-            lte_host=args.lte_host,
-            bridge_port=args.bridge_port,
-            qmicli_path=args.qmicli_install_path,
-            channels=args.channels,
-        )
-
-    asyncio.run(_provision())
+    )
 
 
 def _full_setup(args) -> None:
@@ -640,27 +534,18 @@ def _full_setup(args) -> None:
         if ssh_key:
             ssh_key = str(Path(ssh_key).expanduser())
 
-        async def _provision():
-            await provision_lte_device(
+        asyncio.run(
+            deploy_socat_to_lte(
                 lte_host=args.lte_host,
                 socat_binary=socat_binary,
-                bridge_port=args.bridge_port,
                 ssh_key_path=ssh_key,
                 ssh_username=args.ssh_username,
             )
-
-            await configure_cbs(
-                lte_host=args.lte_host,
-                bridge_port=args.bridge_port,
-                qmicli_path=args.qmicli_install_path,
-                channels=args.channels,
-            )
-
-        asyncio.run(_provision())
+        )
     else:
-        logger.info('Skipping LTE provisioning (no --lte-host). Use --provision-lte-only later.')
+        logger.info('Skipping LTE deployment (no --lte-host). Use --deploy-lte-only later.')
 
-    logger.info('Setup complete!')
+    logger.info('Setup complete! Start the CBS monitor to bring up the bridge and configure channels.')
 
 
 if __name__ == '__main__':

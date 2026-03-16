@@ -195,14 +195,15 @@ python scripts/setup-cbs.py \
     --ssh-key ~/.ssh/id_ed25519
 ```
 
-**What the setup script does:**
+**What the setup script does (infrastructure only):**
 
 1. **Builds qmicli** - clones [qmicli-cbs](https://github.com/seidnerj/qmicli-cbs) and runs Docker cross-compilation (aarch64 + MIPS + darwin)
-2. **Downloads socat** - fetches a MIPS socat binary from the LEDE 17.01.6 package repository for deployment to the LTE device
+2. **Downloads socat** - fetches a MIPS socat binary from the LEDE 17.01.6 package repository
 3. **Sets up the monitoring host** - checks socat is installed, prints instructions for deploying qmicli
 4. **Enables SSH on the LTE device** - uses the `setup-lte-pro-ssh.py` script to inject an SSH key and start dropbear via the UniFi controller's WebRTC debug terminal
-5. **Provisions the LTE device** - deploys socat via SSH, starts the TCP bridge
-6. **Configures CBS** - runs qmicli through the bridge to set channels and enable CBS reception
+5. **Deploys socat** to the LTE device via SSH
+
+The setup script only positions binaries and enables SSH - it does **not** start the socat bridge or configure CBS channels. That's handled at runtime by `CbsBridge` when the CBS monitor starts.
 
 Individual steps can be re-run independently:
 
@@ -210,12 +211,12 @@ Individual steps can be re-run independently:
 python scripts/setup-cbs.py --build-only
 python scripts/setup-cbs.py --setup-host-only
 python scripts/setup-cbs.py --enable-ssh-only [controller args]
-python scripts/setup-cbs.py --provision-lte-only --lte-host <ip> --ssh-key ~/.ssh/id_ed25519
+python scripts/setup-cbs.py --deploy-lte-only --lte-host <ip> --ssh-key ~/.ssh/id_ed25519
 ```
 
 ### After LTE device reboot
 
-The LTE device's dropbear SSH server and socat bridge do not survive reboots. Re-run:
+The LTE device's dropbear SSH server and `/tmp` contents do not survive reboots. Re-run:
 
 ```bash
 python scripts/setup-cbs.py --enable-ssh-only \
@@ -225,7 +226,7 @@ python scripts/setup-cbs.py --enable-ssh-only \
     --device-mac <lte-device-mac> \
     --ssh-key ~/.ssh/id_ed25519
 
-python scripts/setup-cbs.py --provision-lte-only \
+python scripts/setup-cbs.py --deploy-lte-only \
     --lte-host <lte-device-ip> \
     --ssh-key ~/.ssh/id_ed25519
 ```
@@ -273,7 +274,13 @@ Setting `lte_host` activates bridge mode. The monitor will:
 
 ### Runtime behavior
 
-When the bridge is down, the CBS monitor logs an error directing you to re-run the setup script. The runtime bridge manager (`CbsBridge`) can restart socat on both sides if it crashes, but it cannot re-enable SSH on the LTE device after a reboot - that requires the setup script with controller credentials.
+When the CBS monitor starts in bridge mode, `CbsBridge` handles all operational work:
+- Starts the socat bridge on the LTE device (via SSH) and locally
+- Configures CBS channels through the bridge (set-cbs-channels, set-broadcast-activation, set-event-report)
+- Runs periodic health checks
+- Restarts socat on either side if it crashes
+
+If the LTE device was rebooted (SSH down, socat binary gone), `CbsBridge` cannot re-enable SSH or redeploy socat on its own - it logs a clear error directing you to re-run the setup script with `--enable-ssh-only` and `--deploy-lte-only`.
 
 ## Device Location
 
