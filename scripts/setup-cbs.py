@@ -282,6 +282,34 @@ def setup_monitoring_host(qmicli_binary: Path, install_path: str = '/usr/local/b
         print(f'  sudo chmod +x {install_path}')
 
 
+DEFAULT_SSH_KEY_PATH = Path.home() / '.ssh' / 'id_ed25519_lte'
+
+
+def ensure_ssh_keypair(key_path: Path | None = None) -> Path:
+    """Generate an SSH key pair for LTE device access if one doesn't exist.
+
+    Args:
+        key_path: Path for the private key. Defaults to ~/.ssh/id_ed25519_lte.
+
+    Returns:
+        Path to the private key file.
+    """
+    key_path = key_path or DEFAULT_SSH_KEY_PATH
+
+    if key_path.exists():
+        logger.info('SSH key already exists: %s', key_path)
+        return key_path
+
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    logger.info('Generating SSH key pair for LTE device access: %s', key_path)
+    subprocess.run(
+        ['ssh-keygen', '-t', 'ed25519', '-f', str(key_path), '-N', '', '-C', f'{key_path.stem}@{platform.node()}'],
+        check=True,
+    )
+    logger.info('SSH key pair generated: %s (public: %s.pub)', key_path, key_path)
+    return key_path
+
+
 # ---------- Step d: Enable SSH on LTE device ----------
 
 
@@ -392,7 +420,7 @@ def main() -> None:
     step_group.add_argument('--deploy-lte-only', action='store_true', help='Only deploy socat binary to LTE device (step e)')
 
     parser.add_argument('--lte-host', help='LTE device hostname or IP')
-    parser.add_argument('--ssh-key', help='Path to SSH private key file (e.g., ~/.ssh/id_ed25519)')
+    parser.add_argument('--ssh-key', help='Path to SSH private key for LTE device (default: auto-generate ~/.ssh/id_ed25519_lte)')
     parser.add_argument('--ssh-username', default='root', help='SSH username on LTE device (default: root)')
     parser.add_argument('--ssh-pubkey', help='Path to SSH public key file (default: <ssh-key>.pub)')
 
@@ -461,6 +489,16 @@ def _step_setup_host(args) -> None:
     setup_monitoring_host(qmicli, args.qmicli_install_path)
 
 
+def _resolve_ssh_key(args) -> Path:
+    """Resolve the SSH key path, generating a key pair if needed."""
+    if args.ssh_key:
+        key_path = Path(args.ssh_key).expanduser()
+        if not key_path.exists():
+            raise FileNotFoundError(f'SSH key not found: {key_path}')
+        return key_path
+    return ensure_ssh_keypair()
+
+
 def _step_enable_ssh(args) -> None:
     logger.info('=== Step d: Enable SSH on LTE device ===')
     if not args.device_mac:
@@ -473,12 +511,8 @@ def _step_enable_ssh(args) -> None:
         print('Error: --controller-username and --controller-password are required', file=sys.stderr)
         sys.exit(1)
 
-    ssh_pubkey = args.ssh_pubkey
-    if not ssh_pubkey and args.ssh_key:
-        ssh_pubkey = args.ssh_key + '.pub'
-    if not ssh_pubkey:
-        print('Error: --ssh-key or --ssh-pubkey is required', file=sys.stderr)
-        sys.exit(1)
+    ssh_key = _resolve_ssh_key(args)
+    ssh_pubkey = args.ssh_pubkey or str(ssh_key) + '.pub'
 
     asyncio.run(
         enable_lte_ssh(
@@ -502,16 +536,13 @@ def _step_deploy_lte(args) -> None:
         sys.exit(1)
 
     socat_binary = download_socat_mips()
-
-    ssh_key = args.ssh_key
-    if ssh_key:
-        ssh_key = str(Path(ssh_key).expanduser())
+    ssh_key = _resolve_ssh_key(args)
 
     asyncio.run(
         deploy_socat_to_lte(
             lte_host=args.lte_host,
             socat_binary=socat_binary,
-            ssh_key_path=ssh_key,
+            ssh_key_path=str(ssh_key),
             ssh_username=args.ssh_username,
         )
     )
@@ -524,21 +555,19 @@ def _full_setup(args) -> None:
     logger.info('=== Step c: Set up monitoring host ===')
     setup_monitoring_host(qmicli, args.qmicli_install_path)
 
+    ssh_key = _resolve_ssh_key(args)
+
     if args.device_mac and (args.controller_host or args.controller_device_id):
         _step_enable_ssh(args)
     else:
         logger.info('Skipping SSH enable (no controller/device-mac args). Use --enable-ssh-only later.')
 
     if args.lte_host:
-        ssh_key = args.ssh_key
-        if ssh_key:
-            ssh_key = str(Path(ssh_key).expanduser())
-
         asyncio.run(
             deploy_socat_to_lte(
                 lte_host=args.lte_host,
                 socat_binary=socat_binary,
-                ssh_key_path=ssh_key,
+                ssh_key_path=str(ssh_key),
                 ssh_username=args.ssh_username,
             )
         )
@@ -546,6 +575,7 @@ def _full_setup(args) -> None:
         logger.info('Skipping LTE deployment (no --lte-host). Use --deploy-lte-only later.')
 
     logger.info('Setup complete! Start the CBS monitor to bring up the bridge and configure channels.')
+    logger.info('SSH key for LTE device access: %s', ssh_key)
 
 
 if __name__ == '__main__':
