@@ -1,3 +1,4 @@
+import time
 from unittest.mock import MagicMock, patch
 
 from red_alert.core.state import ACTIVE_ALERT_CATEGORIES, ALL_CLEAR_CATEGORY, DEFAULT_HOLD_SECONDS, AlertState, AlertStateTracker
@@ -429,6 +430,58 @@ class TestHold:
             mock_time.monotonic.return_value = tracker._state_entered_time + 61.0
             result = tracker.update(None)
         assert result == AlertState.ROUTINE
+
+
+class TestAlertTime:
+    """Tests for alert_time parameter - anchoring holds to when alerts actually occurred."""
+
+    def test_alert_time_anchors_hold_to_past(self):
+        """When alert_time is in the past, hold timer starts from that time."""
+        tracker = AlertStateTracker(hold_seconds={'alert': 60})
+        past_time = time.monotonic() - 30.0
+        result = tracker.update({'cat': '1', 'data': ['City A']}, alert_time=past_time)
+        assert result == AlertState.ALERT
+        assert tracker._state_entered_time == past_time
+
+    def test_alert_time_expired_goes_to_routine(self):
+        """When alert_time is far enough in the past that hold expired, state is ROUTINE."""
+        tracker = AlertStateTracker(hold_seconds={'alert': 60})
+        past_time = time.monotonic() - 120.0
+        result = tracker.update({'cat': '1', 'data': ['City A']}, alert_time=past_time)
+        assert result == AlertState.ROUTINE
+
+    def test_alert_time_all_clear_still_within_hold(self):
+        """All-clear from 2 minutes ago with 5-minute hold should stay ALL_CLEAR."""
+        tracker = AlertStateTracker(hold_seconds={'all_clear': 300})
+        past_time = time.monotonic() - 120.0
+        result = tracker.update({'cat': '13', 'data': ['City A']}, alert_time=past_time)
+        assert result == AlertState.ALL_CLEAR
+
+    def test_alert_time_all_clear_hold_expired(self):
+        """All-clear from 6 minutes ago with 5-minute hold should be ROUTINE."""
+        tracker = AlertStateTracker(hold_seconds={'all_clear': 300})
+        past_time = time.monotonic() - 360.0
+        result = tracker.update({'cat': '13', 'data': ['City A']}, alert_time=past_time)
+        assert result == AlertState.ROUTINE
+
+    def test_alert_time_none_uses_current_time(self):
+        """When alert_time is None (normal operation), uses current time."""
+        tracker = AlertStateTracker(hold_seconds={'alert': 60})
+        before = time.monotonic()
+        tracker.update({'cat': '1', 'data': ['City A']})
+        after = time.monotonic()
+        assert before <= tracker._state_entered_time <= after
+
+    def test_multiple_history_alerts_most_recent_wins(self):
+        """When seeding with multiple history alerts, the most recent state applies."""
+        tracker = AlertStateTracker(hold_seconds={'alert': 1800, 'all_clear': 300})
+        now = time.monotonic()
+
+        tracker.update({'cat': '1', 'data': ['City A']}, alert_time=now - 600.0)
+        assert tracker.state == AlertState.ALERT
+
+        tracker.update({'cat': '13', 'data': ['City A']}, alert_time=now - 120.0)
+        assert tracker.state == AlertState.ALL_CLEAR
 
 
 class TestLogging:

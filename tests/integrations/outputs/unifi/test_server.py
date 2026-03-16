@@ -115,7 +115,7 @@ class TestUnifiAlertMonitor:
     async def test_poll_alert_sends_red(self):
         monitor, api_client, led, state_tracker = self._make_monitor()
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
-        state_tracker.update = lambda data: AlertState.ALERT
+        state_tracker.update = lambda data, **kw: AlertState.ALERT
         state = await monitor.poll()
         assert state == AlertState.ALERT
         led.set_led.assert_called_once_with(on=True, color_hex='#FF0000', brightness=100)
@@ -124,7 +124,7 @@ class TestUnifiAlertMonitor:
     async def test_poll_pre_alert_sends_yellow(self):
         monitor, api_client, led, state_tracker = self._make_monitor()
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
-        state_tracker.update = lambda data: AlertState.PRE_ALERT
+        state_tracker.update = lambda data, **kw: AlertState.PRE_ALERT
         state = await monitor.poll()
         assert state == AlertState.PRE_ALERT
         led.set_led.assert_called_once_with(on=True, color_hex='#FFFF00', brightness=100)
@@ -133,7 +133,7 @@ class TestUnifiAlertMonitor:
     async def test_poll_routine_sends_white(self):
         monitor, api_client, led, state_tracker = self._make_monitor()
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
-        state_tracker.update = lambda data: AlertState.ROUTINE
+        state_tracker.update = lambda data, **kw: AlertState.ROUTINE
         state = await monitor.poll()
         assert state == AlertState.ROUTINE
         led.set_led.assert_called_once_with(on=True, color_hex='#FFFFFF', brightness=100)
@@ -143,7 +143,7 @@ class TestUnifiAlertMonitor:
         led_states = _build_led_states({'routine': {'on': False}})
         monitor, api_client, led, state_tracker = self._make_monitor(led_states)
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
-        state_tracker.update = lambda data: AlertState.ROUTINE
+        state_tracker.update = lambda data, **kw: AlertState.ROUTINE
         await monitor.poll()
         led.set_led.assert_called_once_with(on=False, color_hex='#FFFFFF', brightness=100)
 
@@ -152,7 +152,7 @@ class TestUnifiAlertMonitor:
         led_states = _build_led_states({'alert': {'brightness': 50}})
         monitor, api_client, led, state_tracker = self._make_monitor(led_states)
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
-        state_tracker.update = lambda data: AlertState.ALERT
+        state_tracker.update = lambda data, **kw: AlertState.ALERT
         await monitor.poll()
         led.set_led.assert_called_once_with(on=True, color_hex='#FF0000', brightness=50)
 
@@ -160,7 +160,7 @@ class TestUnifiAlertMonitor:
     async def test_no_update_when_state_unchanged(self):
         monitor, api_client, led, state_tracker = self._make_monitor()
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
-        state_tracker.update = lambda data: AlertState.ROUTINE
+        state_tracker.update = lambda data, **kw: AlertState.ROUTINE
         await monitor.poll()
         await monitor.poll()
         led.set_led.assert_called_once()
@@ -176,7 +176,7 @@ class TestUnifiAlertMonitor:
         led_states = _build_led_states({'alert': {'blink': True}})
         monitor, api_client, led, state_tracker = self._make_monitor(led_states)
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
-        state_tracker.update = lambda data: AlertState.ALERT
+        state_tracker.update = lambda data, **kw: AlertState.ALERT
         await monitor.poll()
         led.locate.assert_called_once_with(enable=True)
         led.set_led.assert_called_once()
@@ -186,7 +186,7 @@ class TestUnifiAlertMonitor:
         led_states = _build_led_states({'alert': {'on': False, 'blink': True}})
         monitor, api_client, led, state_tracker = self._make_monitor(led_states)
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
-        state_tracker.update = lambda data: AlertState.ALERT
+        state_tracker.update = lambda data, **kw: AlertState.ALERT
         await monitor.poll()
         led.locate.assert_not_called()
 
@@ -197,12 +197,12 @@ class TestUnifiAlertMonitor:
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
 
         # Start blinking on alert
-        state_tracker.update = lambda data: AlertState.ALERT
+        state_tracker.update = lambda data, **kw: AlertState.ALERT
         await monitor.poll()
         led.locate.assert_called_with(enable=True)
 
         # Change to routine - locate should be disabled
-        state_tracker.update = lambda data: AlertState.ROUTINE
+        state_tracker.update = lambda data, **kw: AlertState.ROUTINE
         await monitor.poll()
         led.locate.assert_called_with(enable=False)
         assert led.locate.call_count == 2
@@ -274,7 +274,7 @@ class TestUnifiAlertMonitorPerDevice:
         monitor, api_client, led, state_tracker = self._make_monitor_with_overrides(macs, overrides)
 
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
-        state_tracker.update = lambda data: AlertState.ROUTINE
+        state_tracker.update = lambda data, **kw: AlertState.ROUTINE
         await monitor.poll()
 
         assert led.set_device_led.call_count == 2
@@ -289,7 +289,7 @@ class TestUnifiAlertMonitorPerDevice:
         monitor, api_client, led, state_tracker = self._make_monitor_with_overrides(macs, overrides)
 
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
-        state_tracker.update = lambda data: AlertState.ALERT
+        state_tracker.update = lambda data, **kw: AlertState.ALERT
         await monitor.poll()
 
         assert led.set_device_led.call_count == 2
@@ -608,7 +608,7 @@ class TestUpdate:
     @pytest.mark.asyncio
     async def test_update_alert_sends_red(self):
         monitor, _, led, state_tracker = self._make_monitor()
-        state_tracker.update = lambda data: AlertState.ALERT
+        state_tracker.update = lambda data, **kw: AlertState.ALERT
         state = await monitor.update({'cat': '1', 'data': ['city']})
         assert state == AlertState.ALERT
         led.set_led.assert_called_once_with(on=True, color_hex='#FF0000', brightness=100)
@@ -616,7 +616,7 @@ class TestUpdate:
     @pytest.mark.asyncio
     async def test_update_routine_sends_white(self):
         monitor, _, led, state_tracker = self._make_monitor()
-        state_tracker.update = lambda data: AlertState.ROUTINE
+        state_tracker.update = lambda data, **kw: AlertState.ROUTINE
         state = await monitor.update(None)
         assert state == AlertState.ROUTINE
         led.set_led.assert_called_once_with(on=True, color_hex='#FFFFFF', brightness=100)
@@ -625,14 +625,14 @@ class TestUpdate:
     async def test_update_no_api_call(self):
         """update() must not call get_live_alerts - data is pre-fetched."""
         monitor, api_client, _, state_tracker = self._make_monitor()
-        state_tracker.update = lambda data: AlertState.ROUTINE
+        state_tracker.update = lambda data, **kw: AlertState.ROUTINE
         await monitor.update(None)
         api_client.get_live_alerts.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_update_no_change_skips_led(self):
         monitor, _, led, state_tracker = self._make_monitor()
-        state_tracker.update = lambda data: AlertState.ROUTINE
+        state_tracker.update = lambda data, **kw: AlertState.ROUTINE
         await monitor.update(None)
         await monitor.update(None)
         led.set_led.assert_called_once()
@@ -642,7 +642,7 @@ class TestUpdate:
         """poll() fetches data then calls update() logic."""
         monitor, api_client, led, state_tracker = self._make_monitor()
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
-        state_tracker.update = lambda data: AlertState.ALERT
+        state_tracker.update = lambda data, **kw: AlertState.ALERT
         state = await monitor.poll()
         assert state == AlertState.ALERT
         api_client.get_live_alerts.assert_called_once()
@@ -691,8 +691,8 @@ class TestMultiMonitor:
         )
 
         # Home sees alert, Bedroom sees routine
-        trackers[0].update = lambda data: AlertState.ALERT
-        trackers[1].update = lambda data: AlertState.ROUTINE
+        trackers[0].update = lambda data, **kw: AlertState.ALERT
+        trackers[1].update = lambda data, **kw: AlertState.ROUTINE
 
         data = {'cat': '1', 'data': ['kfar saba']}
         state_home = await monitors[0].update(data)
@@ -711,8 +711,8 @@ class TestMultiMonitor:
             ]
         )
 
-        trackers[0].update = lambda data: AlertState.ALERT
-        trackers[1].update = lambda data: AlertState.ROUTINE
+        trackers[0].update = lambda data, **kw: AlertState.ALERT
+        trackers[1].update = lambda data, **kw: AlertState.ROUTINE
 
         await monitors[0].update(None)
         await monitors[1].update(None)
@@ -748,8 +748,8 @@ class TestMultiMonitor:
             ]
         )
 
-        trackers[0].update = lambda data: AlertState.ROUTINE
-        trackers[1].update = lambda data: AlertState.ROUTINE
+        trackers[0].update = lambda data, **kw: AlertState.ROUTINE
+        trackers[1].update = lambda data, **kw: AlertState.ROUTINE
 
         await monitors[0].update(None)
         await monitors[1].update(None)
@@ -775,8 +775,8 @@ class TestMultiMonitor:
             ]
         )
 
-        trackers[0].update = lambda data: AlertState.ALERT
-        trackers[1].update = lambda data: AlertState.ROUTINE
+        trackers[0].update = lambda data, **kw: AlertState.ALERT
+        trackers[1].update = lambda data, **kw: AlertState.ROUTINE
 
         await monitors[0].update(None)
         await monitors[1].update(None)
@@ -796,14 +796,14 @@ class TestMultiMonitor:
         )
 
         # Both start routine
-        trackers[0].update = lambda data: AlertState.ROUTINE
-        trackers[1].update = lambda data: AlertState.ROUTINE
+        trackers[0].update = lambda data, **kw: AlertState.ROUTINE
+        trackers[1].update = lambda data, **kw: AlertState.ROUTINE
         await monitors[0].update(None)
         await monitors[1].update(None)
         led.set_device_led.reset_mock()
 
         # Only Home goes to alert
-        trackers[0].update = lambda data: AlertState.ALERT
+        trackers[0].update = lambda data, **kw: AlertState.ALERT
         await monitors[0].update(None)
         await monitors[1].update(None)
 
@@ -822,7 +822,7 @@ class TestMultiMonitor:
             ]
         )
 
-        trackers[0].update = lambda data: AlertState.ALERT
+        trackers[0].update = lambda data, **kw: AlertState.ALERT
         await monitors[0].update(None)
 
         assert led.set_device_led.call_count == 2
@@ -948,7 +948,7 @@ class TestStartupHistorySeed:
     async def test_startup_seeds_alert_from_history(self):
         """When history has a recent alert, startup should seed ALERT state."""
         monitor, _, led, state_tracker = TestUpdate._make_monitor(TestUpdate())
-        state_tracker.update = lambda data: AlertState.ALERT if data and data.get('cat') == '1' else AlertState.ROUTINE
+        state_tracker.update = lambda data, **kw: AlertState.ALERT if data and data.get('cat') == '1' else AlertState.ROUTINE
 
         history_alert = {'cat': '1', 'title': 'ירי רקטות וטילים', 'data': ['כפר סבא'], 'alertDate': '2026-03-16T22:21:10'}
         await monitor.update(history_alert)
@@ -959,7 +959,7 @@ class TestStartupHistorySeed:
     async def test_startup_stays_routine_when_no_history(self):
         """When history is empty, startup should remain ROUTINE."""
         monitor, _, led, state_tracker = TestUpdate._make_monitor(TestUpdate())
-        state_tracker.update = lambda data: AlertState.ROUTINE
+        state_tracker.update = lambda data, **kw: AlertState.ROUTINE
 
         await monitor.update(None)
         assert led.set_led.called

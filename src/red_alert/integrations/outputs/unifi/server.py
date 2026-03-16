@@ -426,16 +426,17 @@ class UnifiAlertMonitor:
         else:
             await self._led.locate(enable=enable)
 
-    async def update(self, data: dict | None) -> AlertState:
+    async def update(self, data: dict | None, alert_time: float | None = None) -> AlertState:
         """Classify pre-fetched alert data and update LED state.
 
         Args:
             data: Parsed JSON from the alerts API, or None if no alert.
+            alert_time: Optional monotonic timestamp of when the alert occurred (for history seeding).
 
         Returns:
             The current AlertState after classification.
         """
-        state = self._state.update(data)
+        state = self._state.update(data, alert_time=alert_time)
 
         if state != self._current_alert_state:
             self._current_alert_state = state
@@ -698,9 +699,24 @@ async def run_monitor(config: dict):
         max_hold = max((m._state._hold.get(AlertState.ALERT, 0) for m in all_monitors), default=1800)
         recent = await api_client.get_recent_alerts_from_history(max_age_seconds=int(max_hold))
         if recent:
+            now_mono = time.monotonic()
+            now_wall = datetime.datetime.now()
             for alert_data in recent:
+                # Convert alertDate to a monotonic timestamp so hold timers
+                # are anchored to when the alert actually happened, not now
+                alert_time = None
+                alert_date_str = alert_data.get('alertDate', '')
+                if alert_date_str:
+                    try:
+                        alert_dt = datetime.datetime.fromisoformat(alert_date_str.replace('Z', '').split('+')[0])
+                        age_seconds = (now_wall - alert_dt).total_seconds()
+                        if age_seconds > 0:
+                            alert_time = now_mono - age_seconds
+                    except (ValueError, TypeError):
+                        pass
+
                 for monitor in all_monitors:
-                    await monitor.update(alert_data)
+                    await monitor.update(alert_data, alert_time=alert_time)
             logger.info('Startup: seeded initial state from %d recent history alert(s)', len(recent))
     except Exception:
         logger.debug('Startup: history check failed, starting from live data', exc_info=True)

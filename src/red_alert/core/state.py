@@ -100,11 +100,15 @@ class AlertStateTracker:
         if self._log:
             self._log(msg, level=level)
 
-    def update(self, data: dict | None) -> AlertState:
+    def update(self, data: dict | None, alert_time: float | None = None) -> AlertState:
         """Classify alert data and return the new state.
 
         Args:
             data: Parsed JSON from the alerts API, or None if no alert.
+            alert_time: Optional monotonic timestamp of when the alert originally occurred.
+                When provided (e.g., from history on startup), the hold timer is anchored
+                to this time instead of now. If the hold has already expired, the state
+                transitions directly to ROUTINE.
 
         Returns:
             The current AlertState after classification.
@@ -116,9 +120,15 @@ class AlertStateTracker:
             self._last_area_result = None
         else:
             self._classify(data)
+            if alert_time is not None and self.state != AlertState.ROUTINE:
+                self._state_entered_time = alert_time
 
         if self.state != old_state:
             self._log_transition(old_state, data)
+
+        # If seeded with a past alert_time, the hold may already be expired
+        if alert_time is not None and self.state != AlertState.ROUTINE:
+            self._handle_empty()
 
         return self.state
 
