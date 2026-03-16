@@ -231,7 +231,7 @@ async def _resolve_via_polygons(lat: float, lon: float, cfg: dict) -> list[str] 
     cache_path = cfg.get('polygon_cache_path') or _DEFAULT_POLYGON_CACHE_PATH
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            polygon_mgr = PolygonDataManager(client, cache_path, logger.info)
+            polygon_mgr = PolygonDataManager(client, cache_path, logger)
             if await polygon_mgr.load():
                 cities = polygon_mgr.find_cities_at_point(lat, lon)
                 if cities:
@@ -285,7 +285,7 @@ async def _periodic_polygon_refresh(cfg: dict):
         await asyncio.sleep(POLYGON_REFRESH_INTERVAL)
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                polygon_mgr = PolygonDataManager(client, cache_path, logger.info)
+                polygon_mgr = PolygonDataManager(client, cache_path, logger)
                 if await polygon_mgr.refresh():
                     logger.info('Polygon data refreshed successfully.')
                 else:

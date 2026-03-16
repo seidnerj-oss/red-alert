@@ -9,6 +9,7 @@ Data source (geo-blocked outside Israel):
 """
 
 import json
+import logging
 import os
 
 import httpx
@@ -52,10 +53,10 @@ class PolygonDataManager:
     local JSON file for offline use.
     """
 
-    def __init__(self, http_client: httpx.AsyncClient, cache_path: str, logger):
+    def __init__(self, http_client: httpx.AsyncClient, cache_path: str, logger: logging.Logger):
         self._client = http_client
         self._cache_path = cache_path
-        self._log = logger
+        self._logger = logger
         self._polygons: dict[str, list[list[list[float]]]] = {}
 
     @property
@@ -68,11 +69,11 @@ class PolygonDataManager:
             self._save_cache()
             return True
 
-        self._log('API fetch failed, attempting to load polygon data from cache.', level='WARNING')
+        self._logger.warning('API fetch failed, attempting to load polygon data from cache.')
         if self._load_cache():
             return True
 
-        self._log('No polygon data available (API and cache both failed).', level='WARNING')
+        self._logger.warning('No polygon data available (API and cache both failed).')
         return False
 
     async def refresh(self) -> bool:
@@ -80,7 +81,7 @@ class PolygonDataManager:
         if await self._fetch_from_api():
             self._save_cache()
             return True
-        self._log('Polygon data refresh failed.', level='WARNING')
+        self._logger.warning('Polygon data refresh failed.')
         return False
 
     def find_cities_at_point(self, lat: float, lon: float) -> list[str]:
@@ -122,14 +123,14 @@ class PolygonDataManager:
                     failed += 1
 
             if fetched == 0:
-                self._log('No polygons fetched from API.', level='WARNING')
+                self._logger.warning('No polygons fetched from API.')
                 return False
 
             self._polygons = polygons
-            self._log(f'Loaded {fetched} city polygons from API ({failed} failed).')
+            self._logger.info('Loaded %d city polygons from API (%d failed).', fetched, failed)
             return True
         except Exception as e:
-            self._log(f'Error fetching polygon data from API: {e}', level='WARNING')
+            self._logger.warning('Error fetching polygon data from API: %s', e)
             return False
 
     async def _fetch_segments(self) -> list[dict] | None:
@@ -139,16 +140,16 @@ class PolygonDataManager:
             resp.raise_for_status()
             data = resp.json()
             if isinstance(data, list):
-                self._log(f'Fetched {len(data)} segments from HFC backend.')
+                self._logger.info('Fetched %d segments from HFC backend.', len(data))
                 return data
-            self._log('Segments response is not a list.', level='WARNING')
+            self._logger.warning('Segments response is not a list.')
             return None
         except httpx.HTTPStatusError as e:
-            self._log(f'HTTP error fetching segments: {e.response.status_code}', level='WARNING')
+            self._logger.warning('HTTP error fetching segments: %s', e.response.status_code)
         except httpx.TransportError as e:
-            self._log(f'Network error fetching segments: {e}', level='WARNING')
+            self._logger.warning('Network error fetching segments: %s', e)
         except Exception as e:
-            self._log(f'Error fetching segments: {e}', level='WARNING')
+            self._logger.warning('Error fetching segments: %s', e)
         return None
 
     async def _fetch_polygon(self, segment_id) -> list[list[list[float]]] | None:
@@ -171,9 +172,9 @@ class PolygonDataManager:
             os.makedirs(os.path.dirname(self._cache_path), exist_ok=True)
             with open(self._cache_path, 'w', encoding='utf-8') as f:
                 json.dump(self._polygons, f, ensure_ascii=False)
-            self._log(f'Polygon data cached to {self._cache_path}.')
+            self._logger.info('Polygon data cached to %s.', self._cache_path)
         except Exception as e:
-            self._log(f'Error saving polygon cache: {e}', level='WARNING')
+            self._logger.warning('Error saving polygon cache: %s', e)
 
     def _load_cache(self) -> bool:
         """Load polygon data from the cache file."""
@@ -182,7 +183,7 @@ class PolygonDataManager:
                 data = json.load(f)
             if isinstance(data, dict) and data:
                 self._polygons = data
-                self._log(f'Loaded {len(data)} city polygons from cache.')
+                self._logger.info('Loaded %d city polygons from cache.', len(data))
                 return True
         except (FileNotFoundError, json.JSONDecodeError, OSError):
             pass
