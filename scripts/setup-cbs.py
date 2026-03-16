@@ -94,12 +94,29 @@ def _get_qmicli_binary_name(arch: str | None = None) -> str:
         return 'qmicli-aarch64'
     if system == 'darwin':
         return 'qmicli-darwin'
-    raise ValueError(
-        f'Unsupported platform: {system}/{machine}. ' f'Use --arch to specify a target explicitly. Valid options: {", ".join(VALID_ARCHS)}'
-    )
+    raise ValueError(f'Unsupported platform: {system}/{machine}. Use --arch to specify a target explicitly. Valid options: {", ".join(VALID_ARCHS)}')
 
 
 # ---------- Step a: Build qmicli ----------
+
+
+def _ensure_build_prerequisites(arch: str | None) -> None:
+    """Ensure build tools are installed for the target platform."""
+    resolved_arch = arch or _get_qmicli_binary_name().removeprefix('qmicli-')
+    system = platform.system().lower()
+
+    if resolved_arch in ('mips', 'aarch64'):
+        if not shutil.which('docker'):
+            raise RuntimeError('Docker is required for cross-compilation. Install Docker Desktop: https://www.docker.com/products/docker-desktop/')
+
+    if resolved_arch == 'darwin' or system == 'darwin':
+        missing = [tool for tool in ('meson', 'ninja') if not shutil.which(tool)]
+        if missing:
+            if system == 'darwin' and shutil.which('brew'):
+                logger.info('Installing missing build tools via brew: %s', ', '.join(missing))
+                subprocess.run(['brew', 'install'] + missing, check=True)
+            else:
+                raise RuntimeError(f'Missing build tools: {", ".join(missing)}. Install with: brew install meson ninja')
 
 
 def build_qmicli(qmicli_cbs_path: Path | None = None, arch: str | None = None) -> Path:
@@ -112,6 +129,8 @@ def build_qmicli(qmicli_cbs_path: Path | None = None, arch: str | None = None) -
     Returns:
         Path to the built qmicli binary for the target platform.
     """
+    _ensure_build_prerequisites(arch)
+
     if qmicli_cbs_path is None:
         qmicli_cbs_path = CACHE_DIR / 'qmicli-cbs'
         if not qmicli_cbs_path.exists():
