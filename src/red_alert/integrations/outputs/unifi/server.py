@@ -328,7 +328,6 @@ class UnifiAlertMonitor:
         self._device_schedules = device_schedules or {}
         self._name = name
         self._current_alert_state: AlertState | None = None
-        self._locating = False
         self._active_schedule_key: str | None = None
 
     @property
@@ -429,20 +428,15 @@ class UnifiAlertMonitor:
 
             cfg = self._state_cfg(state)
             should_blink = cfg['blink'] and cfg['on']
-            blink_changed = should_blink != self._locating
             color_hex = rgb_to_hex(*cfg['color'])
             blink_label = ', blink' if should_blink else ''
             logger.info('%s -> %s: %s brightness=%d%s', self._name, state.value, _color_label(color_hex), cfg['brightness'], blink_label)
 
-            # Apply LED color and blink concurrently to avoid visible gap
-            if blink_changed:
-                self._locating = should_blink
-                await asyncio.gather(
-                    self._apply_led_state(state),
-                    self._apply_locate(should_blink),
-                )
-            else:
-                await self._apply_led_state(state)
+            # Always apply full state (color + brightness + blink) on every transition
+            await asyncio.gather(
+                self._apply_led_state(state),
+                self._apply_locate(should_blink),
+            )
 
         return state
 
@@ -473,6 +467,7 @@ class UnifiAlertMonitor:
             expected_brightness = cfg['brightness']
             expected_on = cfg['on']
             expected_status = 'on' if expected_on else 'off'
+            expected_blink = cfg['blink'] and expected_on
 
             device = self._led._controller.devices.get(mac)
             if device is None:
@@ -481,19 +476,32 @@ class UnifiAlertMonitor:
             actual_color = (device.raw.get('led_override_color') or '#FFFFFF').upper()
             actual_brightness = device.raw.get('led_override_color_brightness', 100)
             actual_status = device.raw.get('led_override', 'on')
+            actual_blink = device.raw.get('locating', False)
 
-            if actual_color != expected_color or actual_brightness != expected_brightness or actual_status != expected_status:
+            if (
+                actual_color != expected_color
+                or actual_brightness != expected_brightness
+                or actual_status != expected_status
+                or actual_blink != expected_blink
+            ):
+                blink_label = ', blink' if expected_blink else ''
                 logger.warning(
-                    'Reconcile %s: expected %s/%s/%d, actual %s/%s/%d - correcting',
+                    'Reconcile %s: expected %s/%s/%d%s, actual %s/%s/%d%s - correcting',
                     mac,
                     expected_status,
                     expected_color,
                     expected_brightness,
+                    blink_label,
                     actual_status,
                     actual_color,
                     actual_brightness,
+                    ', blink' if actual_blink else '',
                 )
                 await self._led.set_device_led(mac, on=expected_on, color_hex=expected_color, brightness=expected_brightness)
+                if self._device_macs:
+                    await self._led.locate_device(mac, expected_blink)
+                else:
+                    await self._led.locate(enable=expected_blink)
                 corrected += 1
 
         return corrected

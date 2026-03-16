@@ -183,12 +183,13 @@ class TestUnifiAlertMonitor:
 
     @pytest.mark.asyncio
     async def test_blink_not_enabled_when_led_off(self):
+        """When LED is off, blink config is ignored - locate explicitly disabled."""
         led_states = _build_led_states({'alert': {'on': False, 'blink': True}})
         monitor, api_client, led, state_tracker = self._make_monitor(led_states)
         api_client.get_live_alerts = AsyncMock(return_value={'data': []})
         state_tracker.update = lambda data, **kw: AlertState.ALERT
         await monitor.poll()
-        led.locate.assert_not_called()
+        led.locate.assert_called_once_with(enable=False)
 
     @pytest.mark.asyncio
     async def test_blink_disabled_on_state_change(self):
@@ -781,8 +782,11 @@ class TestMultiMonitor:
         await monitors[0].update(None)
         await monitors[1].update(None)
 
-        # Home should use locate_device (per-device), not locate (bulk)
-        led.locate_device.assert_called_once_with('aa:bb:cc:dd:ee:ff', True)
+        # Both monitors send locate on state transition: Home enables (alert with blink=True),
+        # Bedroom disables (routine has no blink)
+        assert led.locate_device.call_count == 2
+        led.locate_device.assert_any_call('aa:bb:cc:dd:ee:ff', True)
+        led.locate_device.assert_any_call('11:22:33:44:55:66', False)
         led.locate.assert_not_called()
 
     @pytest.mark.asyncio
