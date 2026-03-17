@@ -115,11 +115,31 @@ class TestDeploySocatToLte:
 
 class TestEnsureLteBridge:
     @pytest.mark.asyncio
-    async def test_returns_true_when_already_running(self):
+    async def test_fresh_start_kills_and_restarts(self):
         bridge = CbsBridge(lte_host='192.168.1.100')
 
-        with patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=True):
+        exists_result = MagicMock()
+        exists_result.stdout = 'exists'
+
+        with (
+            patch.object(bridge, '_kill_lte_socat', new_callable=AsyncMock) as mock_kill,
+            patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=True),
+            patch.object(bridge, '_ssh_run', new_callable=AsyncMock, side_effect=[exists_result, MagicMock()]),
+        ):
             assert await bridge.ensure_lte_bridge() is True
+            mock_kill.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_skips_kill_when_already_established(self):
+        bridge = CbsBridge(lte_host='192.168.1.100')
+        bridge._fresh_start = False
+
+        with (
+            patch.object(bridge, '_kill_lte_socat', new_callable=AsyncMock) as mock_kill,
+            patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=True),
+        ):
+            assert await bridge.ensure_lte_bridge() is True
+            mock_kill.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_starts_bridge_when_socat_present(self):
@@ -128,14 +148,13 @@ class TestEnsureLteBridge:
         exists_result = MagicMock()
         exists_result.stdout = 'exists'
 
-        start_result = MagicMock()
-        start_result.exit_status = 0
-
         with (
-            patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, side_effect=[False, True]),
-            patch.object(bridge, '_ssh_run', new_callable=AsyncMock, side_effect=[exists_result, start_result]),
+            patch.object(bridge, '_kill_lte_socat', new_callable=AsyncMock),
+            patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=True),
+            patch.object(bridge, '_ssh_run', new_callable=AsyncMock, side_effect=[exists_result, MagicMock()]),
         ):
             assert await bridge.ensure_lte_bridge() is True
+            assert bridge._fresh_start is False
 
     @pytest.mark.asyncio
     async def test_fails_when_socat_not_found(self):
@@ -145,7 +164,7 @@ class TestEnsureLteBridge:
         not_exists_result.stdout = ''
 
         with (
-            patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=False),
+            patch.object(bridge, '_kill_lte_socat', new_callable=AsyncMock),
             patch.object(bridge, '_ssh_run', new_callable=AsyncMock, return_value=not_exists_result),
         ):
             assert await bridge.ensure_lte_bridge() is False
@@ -157,13 +176,11 @@ class TestEnsureLteBridge:
         exists_result = MagicMock()
         exists_result.stdout = 'exists'
 
-        start_result = MagicMock()
-        start_result.exit_status = 0
-
         with (
-            patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, side_effect=[False, True]),
+            patch.object(bridge, '_kill_lte_socat', new_callable=AsyncMock),
+            patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=True),
             patch.object(bridge, '_deploy_socat_to_lte', new_callable=AsyncMock, return_value=True),
-            patch.object(bridge, '_ssh_run', new_callable=AsyncMock, side_effect=[exists_result, start_result]),
+            patch.object(bridge, '_ssh_run', new_callable=AsyncMock, side_effect=[exists_result, MagicMock()]),
         ):
             assert await bridge.ensure_lte_bridge() is True
 
@@ -172,7 +189,7 @@ class TestEnsureLteBridge:
         bridge = CbsBridge(lte_host='192.168.1.100', socat_remote_binary='/local/socat')
 
         with (
-            patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=False),
+            patch.object(bridge, '_kill_lte_socat', new_callable=AsyncMock),
             patch.object(bridge, '_deploy_socat_to_lte', new_callable=AsyncMock, return_value=False),
         ):
             assert await bridge.ensure_lte_bridge() is False

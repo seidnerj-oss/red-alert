@@ -54,6 +54,7 @@ class CbsBridge:
         self._ssh_username = ssh_username or 'root'
         self._socat_remote_binary = socat_remote_binary
         self._local_socat_proc: asyncio.subprocess.Process | None = None
+        self._fresh_start = True
 
     @property
     def lte_host(self) -> str:
@@ -116,15 +117,33 @@ class CbsBridge:
             logger.error('Failed to deploy socat to LTE device: %s', e)
             return False
 
+    async def _kill_lte_socat(self) -> None:
+        """Kill any existing socat process on the LTE device.
+
+        This forces the TCP connection to drop, which makes the LTE device's
+        qmi-proxy release any stale QMI client registrations. Without this,
+        a restart leaves a stale WMS client that blocks new qmicli connections
+        with InvalidClientId.
+        """
+        try:
+            await self._ssh_run('killall socat 2>/dev/null; true')
+            await asyncio.sleep(0.3)
+        except Exception as e:
+            logger.debug('Failed to kill LTE socat (may not have been running): %s', e)
+
     async def ensure_lte_bridge(self) -> bool:
         """Ensure the socat bridge is running on the LTE device.
 
-        Checks if socat is already running. If not, deploys the binary (if needed)
-        and starts the bridge process.
+        On first call (or after a failed reconnect), kills any existing socat
+        to clear stale QMI client registrations from a previous process, then
+        starts a fresh bridge. On subsequent calls where the bridge is already
+        running, returns immediately.
         """
-        if await self.check_lte_bridge():
+        if not self._fresh_start and await self.check_lte_bridge():
             logger.debug('LTE bridge already running')
             return True
+
+        await self._kill_lte_socat()
 
         if self._socat_remote_binary:
             if not await self._deploy_socat_to_lte():
@@ -145,6 +164,7 @@ class CbsBridge:
 
             if await self.check_lte_bridge():
                 logger.info('LTE bridge started on port %d', self._bridge_port)
+                self._fresh_start = False
                 return True
 
             logger.error('LTE bridge failed to start')
