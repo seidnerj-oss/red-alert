@@ -127,7 +127,7 @@ class CbsBridge:
         """
         try:
             await self._ssh_run('killall socat 2>/dev/null; true')
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(1.0)
         except Exception as e:
             logger.debug('Failed to kill LTE socat (may not have been running): %s', e)
 
@@ -180,6 +180,17 @@ class CbsBridge:
             return False
         return self._local_socat_proc.returncode is None
 
+    async def _kill_local_bridge(self) -> None:
+        """Kill the local socat bridge process if running."""
+        if self._local_socat_proc and self._local_socat_proc.returncode is None:
+            self._local_socat_proc.terminate()
+            try:
+                await asyncio.wait_for(self._local_socat_proc.wait(), timeout=3.0)
+            except asyncio.TimeoutError:
+                self._local_socat_proc.kill()
+                await self._local_socat_proc.wait()
+        self._local_socat_proc = None
+
     async def ensure_local_bridge(self) -> bool:
         """Start the local socat bridge if not running.
 
@@ -224,9 +235,15 @@ class CbsBridge:
     async def ensure_bridge(self) -> bool:
         """Ensure both LTE-side and local-side bridges are running.
 
-        Returns True if both sides are operational. This should be called
-        before starting qmicli and periodically during monitoring.
+        On first call, kills both sides to clear stale QMI client registrations
+        from a previous process. On subsequent calls, only restarts bridges that
+        are down.
+
+        Returns True if both sides are operational.
         """
+        if self._fresh_start:
+            await self._kill_local_bridge()
+
         if not await self.ensure_lte_bridge():
             logger.error(
                 'LTE-side bridge is down. If the LTE device was rebooted, re-run: '
