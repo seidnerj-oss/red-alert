@@ -24,7 +24,10 @@ unifi = [
     "pyotp",
 ]
 homepod = [
-    "pyatv",
+    # pyatv is NOT a direct dependency - it's invoked as a subprocess via
+    # atvremote under Python 3.13 (uv run --python 3.13 --with pyatv).
+    # This is because pyatv depends on pydantic-core which requires PyO3,
+    # and PyO3 does not support Python 3.14.
 ]
 cbs = [
     "asyncssh",
@@ -70,11 +73,10 @@ ignore_missing_imports = true
 [tool.basedpyright]
 pythonVersion = "3.14"
 typeCheckingMode = "standard"
-# appdaemon (homeassistant) and pyatv (homepod) depend on pydantic-core, which
-# can't build on Python 3.14 (PyO3 doesn't support it yet). Exclude these
-# integrations so basedpyright doesn't fail on unresolvable imports. Remove
-# once PyO3 adds 3.14 support and the packages can be installed.
-exclude = ["src/red_alert/integrations/outputs/homeassistant", "src/red_alert/integrations/outputs/homepod"]
+# appdaemon (homeassistant) depends on pydantic-core, which can't build on
+# Python 3.14 (PyO3 doesn't support it yet). Exclude it so basedpyright
+# doesn't fail on unresolvable imports. Remove once PyO3 adds 3.14 support.
+exclude = ["src/red_alert/integrations/outputs/homeassistant"]
 
 [tool.uv]
 required-version = ">=0.10"

@@ -145,7 +145,7 @@ async def run_monitor(config: dict):
     for dev_cfg in cfg['devices']:
         controller = HomepodController(
             identifier=dev_cfg['identifier'],
-            credentials=dev_cfg.get('credentials'),
+            host=dev_cfg.get('host'),
             name=dev_cfg.get('name'),
         )
         actions = _build_device_actions(dev_cfg.get('actions', {}))
