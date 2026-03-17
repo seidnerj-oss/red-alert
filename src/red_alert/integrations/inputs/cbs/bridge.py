@@ -128,7 +128,7 @@ class CbsBridge:
         """
         try:
             await self._ssh_run('killall socat qmicli qmi-proxy 2>/dev/null; true')
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(3.0)
         except Exception as e:
             logger.debug('Failed to kill LTE processes (may not have been running): %s', e)
 
