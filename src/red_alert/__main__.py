@@ -76,6 +76,21 @@ def _build_outputs(config: dict) -> list[AlertOutput]:
 
         outputs.append(TelegramOutput(config=outputs_cfg['telegram']))
 
+    if outputs_cfg.get('hue', {}).get('enabled', False):
+        from red_alert.integrations.outputs.hue.output import HueOutput
+
+        outputs.append(HueOutput(config=outputs_cfg['hue']))
+
+    if outputs_cfg.get('homebridge', {}).get('enabled', False):
+        from red_alert.integrations.outputs.homebridge.output import HomebridgeOutput
+
+        outputs.append(HomebridgeOutput(config=outputs_cfg['homebridge']))
+
+    if outputs_cfg.get('homepod', {}).get('enabled', False):
+        from red_alert.integrations.outputs.homepod.output import HomepodOutput
+
+        outputs.append(HomepodOutput(config=outputs_cfg['homepod']))
+
     return outputs
 
 
