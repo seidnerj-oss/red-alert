@@ -255,41 +255,23 @@ class CbsBridge:
 
         return True
 
-    async def health_check(self, qmicli_path: str) -> dict:
-        """Verify bridge connectivity and CBS configuration.
+    async def health_check(self) -> dict:
+        """Verify bridge connectivity.
+
+        Checks that both the LTE-side and local-side socat processes are running.
+
+        Previously this also ran ``qmicli --wms-get-cbs-channels`` to verify CBS
+        channel configuration. That was removed because QMI only allows one WMS
+        client at a time - the ``qmicli --wms-monitor`` subprocess already holds
+        it for the lifetime of the monitor, so a second qmicli instance always
+        fails with ``InvalidClientId`` and never returns useful output.
 
         Returns a dict with status of each component.
         """
-        status: dict = {
-            'lte_bridge': False,
-            'local_bridge': False,
-            'cbs_channels': None,
+        return {
+            'lte_bridge': await self.check_lte_bridge(),
+            'local_bridge': await self.check_local_bridge(),
         }
-
-        status['lte_bridge'] = await self.check_lte_bridge()
-        status['local_bridge'] = await self.check_local_bridge()
-
-        if status['lte_bridge'] and status['local_bridge']:
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    qmicli_path,
-                    '-d',
-                    self._device,
-                    '--device-open-proxy',
-                    '--wms-get-cbs-channels',
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await proc.communicate()
-
-                if proc.returncode == 0:
-                    status['cbs_channels'] = stdout.decode(errors='replace').strip()
-                else:
-                    status['cbs_channels'] = f'error: {stderr.decode(errors="replace").strip()}'
-            except Exception as e:
-                status['cbs_channels'] = f'error: {e}'
-
-        return status
 
     async def close(self) -> None:
         """Stop the local socat bridge process."""

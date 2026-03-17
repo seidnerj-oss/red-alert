@@ -151,9 +151,7 @@ class CbsInput(AlertInput):
 
                 health_interval = cfg.get('health_check_interval', 300)
                 if health_interval > 0:
-                    self._background_tasks.append(
-                        asyncio.create_task(_periodic_health_check(bridge, cfg.get('qmicli_path', '/tmp/qmicli'), health_interval))
-                    )
+                    self._background_tasks.append(asyncio.create_task(_periodic_health_check(bridge, health_interval)))
 
             while True:
                 try:

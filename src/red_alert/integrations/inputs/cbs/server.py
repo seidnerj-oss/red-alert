@@ -315,14 +315,14 @@ def _create_bridge(cfg: dict):
     )
 
 
-async def _periodic_health_check(bridge, qmicli_path: str, interval: int):
+async def _periodic_health_check(bridge, interval: int):
     """Periodically check bridge health and log status."""
     while True:
         await asyncio.sleep(interval)
         try:
-            status = await bridge.health_check(qmicli_path)
+            status = await bridge.health_check()
             if status['lte_bridge'] and status['local_bridge']:
-                logger.info('Bridge health check: OK (CBS channels: %s)', status.get('cbs_channels', 'unknown'))
+                logger.info('Bridge health check: OK')
             else:
                 logger.warning('Bridge health check: LTE=%s, local=%s', status['lte_bridge'], status['local_bridge'])
         except Exception as e:
@@ -416,7 +416,7 @@ async def run_monitor(config: dict):
 
             health_interval = cfg.get('health_check_interval', 300)
             if health_interval > 0:
-                health_check_task = asyncio.create_task(_periodic_health_check(bridge, cfg['qmicli_path'], health_interval))
+                health_check_task = asyncio.create_task(_periodic_health_check(bridge, health_interval))
 
         while True:
             try:

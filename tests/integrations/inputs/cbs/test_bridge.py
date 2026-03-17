@@ -340,50 +340,40 @@ class TestHealthCheck:
     async def test_reports_all_healthy(self):
         bridge = CbsBridge(lte_host='192.168.1.100')
 
-        mock_proc = MagicMock()
-        mock_proc.returncode = 0
-        mock_proc.communicate = AsyncMock(return_value=(b'Channels: 919,4370-4383', b''))
-
         with (
             patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=True),
             patch.object(bridge, 'check_local_bridge', new_callable=AsyncMock, return_value=True),
-            patch('asyncio.create_subprocess_exec', new_callable=AsyncMock, return_value=mock_proc),
         ):
-            status = await bridge.health_check('/usr/local/bin/qmicli')
+            status = await bridge.health_check()
 
         assert status['lte_bridge'] is True
         assert status['local_bridge'] is True
-        assert 'Channels: 919,4370-4383' in status['cbs_channels']
 
     @pytest.mark.asyncio
-    async def test_skips_cbs_check_when_bridge_down(self):
+    async def test_reports_lte_bridge_down(self):
         bridge = CbsBridge(lte_host='192.168.1.100')
 
         with (
             patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=False),
             patch.object(bridge, 'check_local_bridge', new_callable=AsyncMock, return_value=True),
         ):
-            status = await bridge.health_check('/usr/local/bin/qmicli')
+            status = await bridge.health_check()
 
         assert status['lte_bridge'] is False
-        assert status['cbs_channels'] is None
+        assert status['local_bridge'] is True
 
     @pytest.mark.asyncio
-    async def test_reports_cbs_check_error(self):
+    async def test_reports_local_bridge_down(self):
         bridge = CbsBridge(lte_host='192.168.1.100')
-
-        mock_proc = MagicMock()
-        mock_proc.returncode = 1
-        mock_proc.communicate = AsyncMock(return_value=(b'', b'device busy'))
 
         with (
             patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=True),
-            patch.object(bridge, 'check_local_bridge', new_callable=AsyncMock, return_value=True),
-            patch('asyncio.create_subprocess_exec', new_callable=AsyncMock, return_value=mock_proc),
+            patch.object(bridge, 'check_local_bridge', new_callable=AsyncMock, return_value=False),
         ):
-            status = await bridge.health_check('/usr/local/bin/qmicli')
+            status = await bridge.health_check()
 
-        assert 'error' in status['cbs_channels']
+        assert status['lte_bridge'] is True
+        assert status['local_bridge'] is False
 
 
 class TestClose:
