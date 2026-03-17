@@ -17,9 +17,12 @@ red-alert can play audio on Apple HomePod devices via AirPlay when alert state c
 ## Prerequisites
 
 - One or more Apple HomePod or HomePod mini devices on the local network
-- Python 3.14+ with [pyatv](https://github.com/postlund/pyatv) installed
-- Paired credentials for each device (obtained via `--pair`)
+- Python with [pyatv](https://github.com/postlund/pyatv) installed (see note below)
 - Audio files to play (local files or URLs)
+
+> **Python version note:** pyatv depends on pydantic-core, which uses PyO3 (a Rust-Python binding framework). As of March 2026, PyO3 does not support Python 3.14, so pyatv cannot be installed on 3.14. Use Python 3.13 for scanning and pairing. The credentials and identifiers obtained are portable and work from any Python version.
+
+> **Credentials may not be required.** If your HomePod's HomeKit settings allow "Anyone on the Same Network" for speaker access (Home app -> Home Settings -> Allow Speaker & TV Access), pyatv can connect and stream audio without pairing credentials. Test with `atvremote --id <IDENTIFIER> playing` first - if it connects, you can skip the pairing step entirely and omit `credentials` from the config.
 
 ## Setup
 
@@ -29,6 +32,12 @@ red-alert can play audio on Apple HomePod devices via AirPlay when alert state c
 git clone https://github.com/seidnerj/red-alert.git
 cd red-alert
 pip install ".[homepod]"
+```
+
+If using Python 3.14 where pyatv cannot build, use Python 3.13 for setup commands (scanning and pairing):
+
+```bash
+uv run --python 3.13 --no-project --with pyatv atvremote scan
 ```
 
 ### 2. Discover Devices
@@ -56,9 +65,11 @@ Found 2 device(s):
 
 Note the **Identifier** for each device you want to control.
 
-### 3. Pair with Each Device
+### 3. Pair with Each Device (Optional)
 
-Pair with a device to obtain credentials. You'll be prompted for a PIN displayed on the device or on your iOS device:
+> **Skip this step** if your HomePods allow "Anyone on the Same Network" in HomeKit speaker access settings. You can verify by running `atvremote --id <IDENTIFIER> playing` - if it shows the current playback state, credentials are not needed and you can omit the `credentials` field from your config.
+
+Pair with a device to obtain credentials. You'll be prompted for a PIN displayed on your iOS device:
 
 ```bash
 python -m red_alert.integrations.outputs.homepod --pair AABBCCDD-1122-3344-5566-778899AABBCC
@@ -72,6 +83,8 @@ Add this to your config.json device entry:
     "companion": "yyyyyyyyyyyy..."
   }
 ```
+
+> **Pairing troubleshooting:** If no PIN appears on your iPhone, the AirPlay pairing protocol may have changed with newer HomePod firmware. pyatv's `--protocol airplay` pairing may fail with `Connection Authorization Required` (HTTP 470) and `--protocol raop` may fail with `TlvValue.Salt`. In this case, rely on the credential-free approach above.
 
 Repeat for each HomePod you want to control.
 
@@ -154,7 +167,7 @@ python -m red_alert.integrations.outputs.homepod --config config.json
 | Parameter | Description | Required |
 |-----------|-------------|----------|
 | `identifier` | Device identifier from `--scan` | yes |
-| `credentials` | Protocol credentials from `--pair` | yes |
+| `credentials` | Protocol credentials from `--pair`. Not needed if HomeKit allows "Anyone on the Same Network" | no |
 | `name` | Human-readable name for logging | no |
 | `actions` | Per-state action configuration (see below) | no |
 
@@ -274,4 +287,4 @@ The integration uses [pyatv](https://github.com/postlund/pyatv) to communicate w
 - **Loop mode** monitors playback state via `metadata.playing()` and re-streams when the device goes idle
 - **Parallel execution** - all device actions are dispatched concurrently via `asyncio.gather`
 
-Supported credential protocols: `airplay`, `companion`, `raop`. Typically only `airplay` credentials are needed for audio streaming.
+Supported credential protocols: `airplay`, `companion`, `raop`. Typically only `airplay` credentials are needed for audio streaming. If HomeKit speaker access is set to "Anyone on the Same Network", no credentials are needed at all.
