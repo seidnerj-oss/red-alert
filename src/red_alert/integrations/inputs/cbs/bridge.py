@@ -118,15 +118,16 @@ class CbsBridge:
             return False
 
     async def _kill_lte_socat(self) -> None:
-        """Kill any existing socat and qmicli processes on the LTE device.
+        """Kill socat, qmicli, and qmi-proxy on the LTE device.
 
-        This forces the TCP bridge to drop and releases any stale QMI client
-        registrations on the modem's qmi-proxy. Without this, a restart
-        leaves a stale WMS client that blocks new qmicli connections with
-        InvalidClientId.
+        Killing qmi-proxy is necessary because it holds QMI client
+        registrations in memory. Even after socat and qmicli are killed,
+        qmi-proxy retains the stale WMS client slot and rejects new
+        connections with InvalidClientId. qmi-proxy auto-restarts on the
+        next qmicli connection via the device's init system.
         """
         try:
-            await self._ssh_run('killall socat qmicli 2>/dev/null; true')
+            await self._ssh_run('killall socat qmicli qmi-proxy 2>/dev/null; true')
             await asyncio.sleep(1.0)
         except Exception as e:
             logger.debug('Failed to kill LTE processes (may not have been running): %s', e)
