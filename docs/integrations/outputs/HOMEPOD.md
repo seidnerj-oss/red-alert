@@ -185,6 +185,29 @@ Each state (`alert`, `pre_alert`, `all_clear`, `routine`) can have an action:
 
 **Behavior when an entire state is omitted:** Playback is stopped (same as `"routine": {}`).
 
+## Stereo Pairs
+
+HomeKit stereo pairs do **not** automatically relay audio to both speakers. Streaming to one speaker in a stereo pair only plays on that speaker. To play on both, add each speaker as a separate device in the config:
+
+```json
+{
+    "devices": [
+        {
+            "name": "Living Room Left",
+            "identifier": "52:3C:36:2E:29:56",
+            "actions": { "alert": { "audio": "/path/to/siren.wav", "loop": true } }
+        },
+        {
+            "name": "Living Room Right",
+            "identifier": "4A:42:FD:C5:EA:B0",
+            "actions": { "alert": { "audio": "/path/to/siren.wav", "loop": true } }
+        }
+    ]
+}
+```
+
+Use `--scan` to find both identifiers - stereo pairs show up as two separate devices.
+
 ## Per-Device Configuration
 
 Each device is independently configurable. This allows different rooms to behave differently:
