@@ -44,7 +44,7 @@ class _MultiSourceMonitor:
             logger=logger.getChild(name),
         )
         self.name = name
-        self._current_merged_state = AlertState.ROUTINE
+        self._current_merged_state: AlertState | None = None
 
     async def handle_event(self, event: AlertEvent) -> None:
         """Route an event through the multi-source tracker and update LEDs on change."""

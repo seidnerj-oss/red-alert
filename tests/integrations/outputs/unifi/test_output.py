@@ -32,11 +32,23 @@ class TestMultiSourceMonitor:
         ms.monitor.update.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_no_update_when_state_unchanged(self):
+    async def test_first_event_always_triggers_update(self):
         ms = self._make_monitor()
 
         event1 = AlertEvent(source='hfc', state=AlertState.ROUTINE, data=None)
         await ms.handle_event(event1)
+        ms.monitor.update.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_no_update_when_state_unchanged_after_first(self):
+        ms = self._make_monitor()
+
+        event1 = AlertEvent(source='hfc', state=AlertState.ROUTINE, data=None)
+        await ms.handle_event(event1)
+        ms.monitor.update.reset_mock()
+
+        event2 = AlertEvent(source='hfc', state=AlertState.ROUTINE, data=None)
+        await ms.handle_event(event2)
         ms.monitor.update.assert_not_called()
 
     @pytest.mark.asyncio
@@ -61,7 +73,7 @@ class TestMultiSourceMonitor:
         event = self._make_event(cities=['תל אביב'])
         await ms.handle_event(event)
         assert ms.tracker.state == AlertState.ROUTINE
-        ms.monitor.update.assert_not_called()
+        ms.monitor.update.reset_mock()
 
         event = self._make_event(cities=['כפר סבא'])
         await ms.handle_event(event)
