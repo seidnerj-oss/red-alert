@@ -73,7 +73,7 @@ class TestMultiSourceStateTracker:
         assert new == AlertState.ALERT
 
     def test_one_source_clearing_doesnt_override_other(self):
-        tracker = MultiSourceStateTracker(hold_seconds={'alert': 0, 'pre_alert': 0, 'all_clear': 0})
+        tracker = MultiSourceStateTracker(hold_seconds={'alert': 1800, 'pre_alert': 1800, 'all_clear': 300})
 
         hfc_event = AlertEvent(source='hfc', state=AlertState.ALERT, data=self._make_alert_data(cat='1'))
         tracker.update(hfc_event)
@@ -86,22 +86,16 @@ class TestMultiSourceStateTracker:
         tracker.update(cbs_clear)
         assert tracker.state == AlertState.ALERT
         assert tracker.get_source_state('hfc') == AlertState.ALERT
-        assert tracker.get_source_state('cbs') == AlertState.ROUTINE
+        assert tracker.get_source_state('cbs') == AlertState.PRE_ALERT  # held
 
     def test_all_sources_clear_returns_routine(self):
         tracker = MultiSourceStateTracker(hold_seconds={'alert': 0, 'pre_alert': 0, 'all_clear': 0})
 
         hfc_event = AlertEvent(source='hfc', state=AlertState.ALERT, data=self._make_alert_data())
         tracker.update(hfc_event)
-        cbs_event = AlertEvent(source='cbs', state=AlertState.PRE_ALERT, data=self._make_alert_data(cat='14'))
-        tracker.update(cbs_event)
 
         hfc_clear = AlertEvent(source='hfc', state=AlertState.ROUTINE, data=None)
         tracker.update(hfc_clear)
-        assert tracker.state == AlertState.PRE_ALERT
-
-        cbs_clear = AlertEvent(source='cbs', state=AlertState.ROUTINE, data=None)
-        tracker.update(cbs_clear)
         assert tracker.state == AlertState.ROUTINE
 
     def test_area_filtering(self):

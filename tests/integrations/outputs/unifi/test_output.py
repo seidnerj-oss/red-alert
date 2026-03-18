@@ -70,7 +70,7 @@ class TestMultiSourceMonitor:
 
     @pytest.mark.asyncio
     async def test_cbs_clear_doesnt_override_hfc_alert(self):
-        ms = self._make_monitor()
+        ms = self._make_monitor(hold={'alert': 1800, 'pre_alert': 1800, 'all_clear': 300})
 
         hfc = self._make_event(source='hfc', state=AlertState.ALERT, cat='1')
         await ms.handle_event(hfc)

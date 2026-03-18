@@ -120,6 +120,10 @@ class MultiSourceStateTracker:
     def update(self, event: AlertEvent) -> tuple[AlertState, AlertState]:
         """Update the source's tracker and recompute merged state.
 
+        Also pokes all other source trackers with empty data so their hold
+        timers are checked. Without this, push-based sources (CBS) that stop
+        emitting events would never have their holds expire.
+
         Returns:
             Tuple of (old_merged_state, new_merged_state).
         """
@@ -127,6 +131,10 @@ class MultiSourceStateTracker:
 
         tracker = self._get_tracker(event.source)
         tracker.update(event.data, alert_time=event.alert_time)
+
+        for source, t in self._trackers.items():
+            if source != event.source:
+                t.update(None)
 
         new_merged = AlertState.ROUTINE
         merged_data = None
