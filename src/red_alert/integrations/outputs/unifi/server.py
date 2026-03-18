@@ -450,15 +450,13 @@ class UnifiAlertMonitor:
 
         Reads each device's current LED settings from the controller and compares
         with what the current alert state expects. Re-sends LED commands for any
-        device that doesn't match.
+        device that doesn't match. Uses the state tracker's current state as the
+        source of truth, so reconciliation works even before the first event.
 
         Returns:
             Number of devices that were corrected.
         """
-        if self._current_alert_state is None:
-            return 0
-
-        state = self._current_alert_state
+        state = self._current_alert_state if self._current_alert_state is not None else self._state.state
         corrected = 0
 
         for mac in self._iter_macs():
