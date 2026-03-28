@@ -184,13 +184,7 @@ class Orchestrator:
         self._periodic_tasks = periodic_tasks or []
 
     async def run(self) -> None:
-        for output in self._outputs:
-            try:
-                await output.start()
-                logger.info('Started output: %s', output.name)
-            except Exception:
-                logger.exception('Failed to start output: %s', output.name)
-                raise
+        await self._start_outputs()
 
         async def emit(event: AlertEvent) -> None:
             results = await asyncio.gather(
@@ -227,6 +221,27 @@ class Orchestrator:
                     await output.stop()
                 except Exception:
                     logger.debug('Error stopping output %s', output.name, exc_info=True)
+
+    async def _start_outputs(self) -> None:
+        """Start all outputs with retry on failure.
+
+        Retries with exponential backoff (10s, 20s, 40s, ... up to 5min).
+        This prevents a death spiral where auth failures (e.g., TOTP timing,
+        rate limiting) cause the process to crash and systemd restarts hammer
+        the controller repeatedly.
+        """
+        max_delay = 300
+        for output in self._outputs:
+            delay = 10
+            while True:
+                try:
+                    await output.start()
+                    logger.info('Started output: %s', output.name)
+                    break
+                except Exception as e:
+                    logger.warning('Failed to start output %s: %s - retrying in %ds', output.name, e, delay)
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, max_delay)
 
     @staticmethod
     async def _deliver(output: AlertOutput, event: AlertEvent) -> None:

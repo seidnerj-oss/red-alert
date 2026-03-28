@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -226,14 +226,26 @@ class TestOrchestrator:
         assert len(good_out.events) == 1
 
     @pytest.mark.asyncio
-    async def test_start_failure_raises(self):
+    async def test_start_failure_retries(self):
         inp = _DummyInput('hfc')
         out = _DummyOutput('bad')
-        out.start = AsyncMock(side_effect=ValueError('Connection failed'))
+        call_count = 0
+
+        async def fail_then_succeed():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ValueError('Connection failed')
+            out.started = True
+
+        out.start = fail_then_succeed
 
         orchestrator = Orchestrator([inp], [out])
-        with pytest.raises(ValueError, match='Connection failed'):
+        with patch('red_alert.core.orchestrator.asyncio.sleep', new_callable=AsyncMock):
             await orchestrator.run()
+
+        assert call_count == 3
+        assert out.started
 
     @pytest.mark.asyncio
     async def test_empty_inputs(self):
