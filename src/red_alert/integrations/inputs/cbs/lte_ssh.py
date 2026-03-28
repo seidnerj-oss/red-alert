@@ -95,6 +95,10 @@ async def enable_ssh(
     async with SSHSession(controller=controller_config, ssh=ssh_config) as ssh:
         logger.info('Connected to device %s via WebRTC debug terminal', device_mac)
 
+        # Wait for the login banner and initial shell prompt
+        banner = await ssh.read_until('# ', timeout=60.0)
+        logger.debug('Banner received (%d bytes)', len(banner))
+
         await ssh.execute(f'echo "{pubkey}" > /etc/dropbear/authorized_keys')
         await ssh.execute('chmod 600 /etc/dropbear/authorized_keys')
         logger.info('Public key written to /etc/dropbear/authorized_keys')
