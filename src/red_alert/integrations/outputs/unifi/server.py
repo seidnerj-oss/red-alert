@@ -754,7 +754,7 @@ async def run_monitor(config: dict):
                     if total_corrected:
                         logger.info('Reconciliation corrected %d device(s)', total_corrected)
                     else:
-                        logger.info('Reconciliation: all devices in sync')
+                        logger.debug('Reconciliation: all devices in sync')
 
                 # Periodic metadata validation: check areas_of_interest against HFC districts
                 if time.monotonic() - last_metadata_check >= metadata_interval:

@@ -187,7 +187,7 @@ class UnifiOutput(AlertOutput):
                 if total:
                     logger.info('Reconciliation corrected %d device(s)', total)
                 else:
-                    logger.info('Reconciliation: all devices in sync')
+                    logger.debug('Reconciliation: all devices in sync')
             except Exception:
                 logger.debug('Reconciliation cycle error', exc_info=True)
 
