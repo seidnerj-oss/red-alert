@@ -517,6 +517,25 @@ wheels = [
 ]
 
 [[package]]
+name = "libdatachannel-py"
+version = "2026.1.0.dev1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/d4/6c8ea084d0472f713df7422ee8eeb0c39bfc622ac2c05b1391f467ec9936/libdatachannel_py-2026.1.0.dev1-cp314-cp314-macosx_15_0_arm64.whl", hash = "sha256:71c367611d56ef1503f3c7aa515d41241162da3d8cc49c4a22458bca7c8ebf0a", size = 1212016, upload-time = "2026-02-06T06:22:48.258Z" },
+    { url = "https://files.pythonhosted.org/packages/87/df/e19db8e587ce3e107e9a7ad2dfdccff57d3f99909a1e59cfac2c9ca044da/libdatachannel_py-2026.1.0.dev1-cp314-cp314-macosx_26_0_arm64.whl", hash = "sha256:ac31af19ccc3b81410481692abfe89c78c21fc30741778c53c003ca6b088950a", size = 1224033, upload-time = "2026-02-06T06:22:49.298Z" },
+    { url = "https://files.pythonhosted.org/packages/f3/8d/d113c922391a220e2e366a2df1407f56fb6e0daa7a0f14d8fc6e59b83460/libdatachannel_py-2026.1.0.dev1-cp314-cp314-manylinux_2_35_aarch64.whl", hash = "sha256:4518fe94ffb58589fb454c57784a553233d99b45f9e2b4afb14a11918182f94c", size = 1637707, upload-time = "2026-02-06T06:22:46.154Z" },
+    { url = "https://files.pythonhosted.org/packages/24/94/6291d976d6b0c1074604e467f831b9ea12d89e9fc4dc0227a8fb88287a4f/libdatachannel_py-2026.1.0.dev1-cp314-cp314-manylinux_2_35_x86_64.whl", hash = "sha256:32eb2f3bc56ead25276d9b668b295e54e50c046994869604a8679f685a337e1a", size = 1717645, upload-time = "2026-02-06T06:22:44.018Z" },
+    { url = "https://files.pythonhosted.org/packages/16/fc/04f62f625eba09265c321101296560452b6164441ffdb66176e90750b0ba/libdatachannel_py-2026.1.0.dev1-cp314-cp314-manylinux_2_38_aarch64.whl", hash = "sha256:eacd6479b71d400cd04b24336c414824f38cda7c9b4070e75cf2c67fdb1506eb", size = 1645611, upload-time = "2026-02-06T06:22:43.814Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/7b/d2994afe8c18a11b25844b09c9ee62db28b0a8bfa5deae52f46c4998a5c8/libdatachannel_py-2026.1.0.dev1-cp314-cp314-manylinux_2_38_x86_64.whl", hash = "sha256:bb4e8439494da4b34b5b69bd9fd4724843bd29ff0628a666f6d00886e79e1d1f", size = 1750774, upload-time = "2026-02-06T06:22:41.786Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/c6/2cd6d1003ccccad75d0c6b8fc18e360906c02d23773699e9b480d785bf86/libdatachannel_py-2026.1.0.dev1-cp314-cp314t-macosx_15_0_arm64.whl", hash = "sha256:2fc660d7c545d59fae68990adfe6e0219be4249e60404795a7e36ffdc140087b", size = 1217762, upload-time = "2026-02-06T06:23:04.321Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/7a/d680bfb73c6728528952d8e85f9487a04efe8dc604fb98e375082da11144/libdatachannel_py-2026.1.0.dev1-cp314-cp314t-macosx_26_0_arm64.whl", hash = "sha256:0e3273c6872a651377bf194a1452ef40d24851c35c9b1f58c064245a8ef711d8", size = 1228732, upload-time = "2026-02-06T06:23:02.225Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/df/ddf4255cb9527e1021baf0724e21e79f95f3b1e251d7edd5ac2b59921e38/libdatachannel_py-2026.1.0.dev1-cp314-cp314t-manylinux_2_35_aarch64.whl", hash = "sha256:f4843e44469812754cf98c778cf03d2c31bb03c9893d408d87a61ac7bf74b5a6", size = 1646076, upload-time = "2026-02-06T06:22:49.153Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/03/93e2bb7b545e5abf2514e0338b81e7265a51dea8b9b855d6d6084a9a1468/libdatachannel_py-2026.1.0.dev1-cp314-cp314t-manylinux_2_35_x86_64.whl", hash = "sha256:a8ae254a42d604023edc64ad74ca6b6040a75a57155a815f71ef0f5a247a66d2", size = 1721757, upload-time = "2026-02-06T06:22:46.208Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/2c/0c8bc3876d527d3dc69dc7eec863591d223d4b89640a7e447b0fe729113b/libdatachannel_py-2026.1.0.dev1-cp314-cp314t-manylinux_2_38_aarch64.whl", hash = "sha256:0d6060c85b22857005212af674a7223bcc854c95c685a85009b0b72efd44a9c5", size = 1652005, upload-time = "2026-02-06T06:22:44.269Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/7d/cc039f265beee9b4f6878125451268d9c24d9f2495a9347e3cd0d56c7116/libdatachannel_py-2026.1.0.dev1-cp314-cp314t-manylinux_2_38_x86_64.whl", hash = "sha256:94448bbc7b4578713c4805f8971f6387c7bf57a9cf8ace31fa50fc3b4a66a1e6", size = 1756206, upload-time = "2026-02-06T06:22:46.079Z" },
+]
+
+[[package]]
 name = "librt"
 version = "0.8.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1033,6 +1052,7 @@ homebridge = [
 ]
 unifi = [
     { name = "aiounifi" },
+    { name = "libdatachannel-py" },
     { name = "pyotp" },
 ]
 
@@ -1054,6 +1074,7 @@ requires-dist = [
     { name = "appdaemon", marker = "extra == 'homeassistant'" },
     { name = "asyncssh", marker = "extra == 'cbs'" },
     { name = "httpx" },
+    { name = "libdatachannel-py", marker = "extra == 'unifi'", specifier = ">=2025.1.2.dev0" },
     { name = "pyotp", marker = "extra == 'unifi'" },
 ]
 provides-extras = ["homeassistant", "homebridge", "unifi", "homepod", "cbs"]
