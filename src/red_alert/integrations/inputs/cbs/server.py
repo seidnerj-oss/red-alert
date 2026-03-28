@@ -295,6 +295,8 @@ def _create_bridge(cfg: dict):
         ssh_key_path=cfg.get('ssh_key_path'),
         ssh_username=cfg.get('ssh_username'),
         socat_remote_binary=cfg.get('socat_remote_binary'),
+        lte_device_mac=cfg.get('lte_device_mac'),
+        unifi=cfg.get('unifi'),
     )
 
 

@@ -60,13 +60,7 @@ from pathlib import Path
 import asyncssh
 import httpx
 
-sys.path.insert(0, str(Path(__file__).parent))
-from importlib.util import module_from_spec, spec_from_file_location
-
-_ssh_setup_path = Path(__file__).parent / 'setup-lte-pro-ssh.py'
-_spec = spec_from_file_location('setup_lte_pro_ssh', _ssh_setup_path)
-setup_lte_pro_ssh = module_from_spec(_spec)
-_spec.loader.exec_module(setup_lte_pro_ssh)
+from red_alert.integrations.inputs.cbs import lte_ssh
 
 logger = logging.getLogger('setup-cbs')
 
@@ -329,9 +323,9 @@ async def enable_lte_ssh(
     Reuses the setup-lte-pro-ssh.py script's setup_ssh() function.
     Must be re-run after every LTE device reboot (dropbear doesn't persist).
     """
-    pubkey = setup_lte_pro_ssh.read_pubkey(ssh_pubkey_path)
+    pubkey = lte_ssh.read_pubkey(ssh_pubkey_path)
 
-    controller_config = setup_lte_pro_ssh.build_controller_config(
+    controller_config = lte_ssh.build_controller_config(
         host=controller_host,
         device_id=controller_device_id,
         username=controller_username,
@@ -342,7 +336,7 @@ async def enable_lte_ssh(
     )
 
     logger.info('Enabling SSH on LTE device %s via controller...', device_mac)
-    await setup_lte_pro_ssh.setup_ssh(controller_config, device_mac, pubkey)
+    await lte_ssh.enable_ssh(controller_config, device_mac, pubkey)
     logger.info('SSH enabled on LTE device')
 
 

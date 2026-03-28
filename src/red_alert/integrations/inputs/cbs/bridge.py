@@ -46,6 +46,8 @@ class CbsBridge:
         ssh_key_path: str | None = None,
         ssh_username: str | None = None,
         socat_remote_binary: str | None = None,
+        lte_device_mac: str | None = None,
+        unifi: dict | None = None,
     ):
         self._lte_host = lte_host
         self._bridge_port = bridge_port
@@ -55,6 +57,8 @@ class CbsBridge:
         self._socat_remote_binary = socat_remote_binary
         self._local_socat_proc: asyncio.subprocess.Process | None = None
         self._fresh_start = True
+        self._lte_device_mac = lte_device_mac
+        self._unifi = unifi or {}
 
     @property
     def lte_host(self) -> str:
@@ -79,10 +83,58 @@ class CbsBridge:
         return opts
 
     async def _ssh_run(self, command: str) -> asyncssh.SSHCompletedProcess:
-        """Run a command on the LTE device via SSH."""
+        """Run a command on the LTE device via SSH.
+
+        If SSH connection is refused (port 22 closed), attempts to re-enable SSH
+        on the LTE device via the UniFi controller's WebRTC debug terminal, then retries.
+        """
         opts = self._build_ssh_options()
-        async with asyncssh.connect(**opts) as conn:
-            return await conn.run(command)
+        try:
+            async with asyncssh.connect(**opts) as conn:
+                return await conn.run(command)
+        except OSError as e:
+            if 'Connect call failed' not in str(e) and 'Connection refused' not in str(e):
+                raise
+            if not await self._enable_lte_ssh():
+                raise
+            async with asyncssh.connect(**opts) as conn:
+                return await conn.run(command)
+
+    async def _enable_lte_ssh(self) -> bool:
+        """Re-enable SSH on the LTE device via the UniFi controller.
+
+        Uses the WebRTC debug terminal to write the SSH public key and start dropbear.
+        Requires a 'unifi' section in the CBS config with controller credentials,
+        plus lte_device_mac and ssh_key_path.
+        """
+        unifi = self._unifi
+        if not unifi.get('host') or not unifi.get('username') or not unifi.get('password') or not self._lte_device_mac:
+            logger.warning('Cannot auto-enable SSH: unifi controller credentials or lte_device_mac not configured in CBS config')
+            return False
+        if not self._ssh_key_path:
+            logger.warning('Cannot auto-enable SSH: ssh_key_path not configured')
+            return False
+
+        try:
+            from red_alert.integrations.inputs.cbs.lte_ssh import build_controller_config, enable_ssh, read_pubkey
+
+            pubkey_path = self._ssh_key_path + '.pub'
+            pubkey = read_pubkey(pubkey_path)
+            config = build_controller_config(
+                host=unifi.get('host'),
+                username=unifi['username'],
+                password=unifi['password'],
+                port=unifi.get('port', 443),
+                site=unifi.get('site', 'default'),
+                totp_secret=unifi.get('totp_secret'),
+            )
+            logger.info('SSH connection refused - re-enabling SSH on LTE device %s via controller', self._lte_device_mac)
+            await enable_ssh(config, self._lte_device_mac, pubkey)
+            await asyncio.sleep(3)
+            return True
+        except Exception as e:
+            logger.error('Failed to auto-enable SSH on LTE device: %s', e)
+            return False
 
     async def check_lte_bridge(self) -> bool:
         """Check if socat bridge is running on the LTE device."""
