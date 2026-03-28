@@ -257,12 +257,27 @@ class TestOrchestrator:
         assert len(out.events) == 0
 
     @pytest.mark.asyncio
-    async def test_input_error_stops_orchestrator(self):
+    async def test_single_input_error_stops_orchestrator(self):
         inp = _DummyInput('hfc', error=RuntimeError('Input crashed'))
         out = _DummyOutput('unifi')
         orchestrator = Orchestrator([inp], [out])
         await orchestrator.run()
         assert inp.stopped
+        assert out.stopped
+
+    @pytest.mark.asyncio
+    async def test_one_input_failure_continues_with_remaining(self):
+        event = AlertEvent(source='hfc', state=AlertState.ALERT, data={'cat': '1', 'title': 'Test', 'data': ['City'], 'desc': ''})
+        good_inp = _DummyInput('hfc', events=[event])
+        bad_inp = _DummyInput('cbs', error=RuntimeError('CBS crashed'))
+        out = _DummyOutput('unifi')
+
+        orchestrator = Orchestrator([good_inp, bad_inp], [out])
+        await orchestrator.run()
+
+        assert len(out.events) == 1
+        assert good_inp.stopped
+        assert bad_inp.stopped
         assert out.stopped
 
     @pytest.mark.asyncio

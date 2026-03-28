@@ -203,10 +203,16 @@ class Orchestrator:
         )
 
         try:
-            done, _ = await asyncio.wait(input_tasks, return_when=asyncio.FIRST_EXCEPTION)
-            for task in done:
-                if task.exception():
-                    logger.error('Input %s failed: %s', task.get_name(), task.exception())
+            remaining = set(input_tasks)
+            while remaining:
+                done, remaining = await asyncio.wait(remaining, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    if task.exception():
+                        logger.error('Input %s failed: %s', task.get_name(), task.exception())
+                    else:
+                        logger.info('Input %s exited cleanly', task.get_name())
+                if remaining:
+                    logger.info('Continuing with %d remaining input(s)', len(remaining))
         finally:
             for task in input_tasks + bg_tasks:
                 task.cancel()
