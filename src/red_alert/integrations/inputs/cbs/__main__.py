@@ -31,7 +31,7 @@ def main():
     # Default history_path to the data directory
     if not config.get('history_path'):
         config_dir = os.path.dirname(os.path.abspath(args.config))
-        config['history_path'] = os.path.join(config_dir, 'data', 'cbs_history.json')
+        config['history_path'] = os.path.join(config_dir, 'data', 'cbs_history_data.json')
 
     logging.basicConfig(
         level=logging.INFO,

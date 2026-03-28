@@ -125,7 +125,7 @@ class TestLoadData:
     async def test_loads_from_hfc_districts(self, manager, mock_api_client):
         mock_api_client.get_districts.return_value = SAMPLE_HFC_DISTRICTS
 
-        with patch.object(manager, '_overlay_polygon_centroids', new_callable=AsyncMock):
+        with patch.object(manager, '_fetch_polygons', new_callable=AsyncMock):
             result = await manager.load_data()
 
         assert result is True
@@ -174,7 +174,7 @@ class TestLoadData:
     async def test_saves_cache_after_hfc_load(self, manager, tmp_path, mock_api_client):
         mock_api_client.get_districts.return_value = SAMPLE_HFC_DISTRICTS
 
-        with patch.object(manager, '_overlay_polygon_centroids', new_callable=AsyncMock):
+        with patch.object(manager, '_fetch_polygons', new_callable=AsyncMock):
             await manager.load_data()
 
         cache_path = tmp_path / 'city_data.json'
@@ -199,7 +199,7 @@ class TestHfcDistricts:
     async def test_hfc_districts_without_polygons(self, manager, mock_api_client):
         mock_api_client.get_districts.return_value = SAMPLE_HFC_DISTRICTS
 
-        with patch.object(manager, '_overlay_polygon_centroids', new_callable=AsyncMock):
+        with patch.object(manager, '_fetch_polygons', new_callable=AsyncMock):
             result = await manager.load_data()
 
         assert result is True
@@ -220,7 +220,7 @@ class TestHfcDistricts:
         ]
         mock_api_client.get_districts.return_value = districts
 
-        with patch.object(manager, '_overlay_polygon_centroids', new_callable=AsyncMock):
+        with patch.object(manager, '_fetch_polygons', new_callable=AsyncMock):
             result = await manager.load_data()
 
         assert result is True
@@ -233,7 +233,7 @@ class TestHfcDistricts:
         districts = [{'label_he': 'כפר גלעדי', 'areaname': 'גליל עליון', 'migun_time': 0}]
         mock_api_client.get_districts.return_value = districts
 
-        with patch.object(manager, '_overlay_polygon_centroids', new_callable=AsyncMock):
+        with patch.object(manager, '_fetch_polygons', new_callable=AsyncMock):
             await manager.load_data()
 
         details = manager.get_city_details('כפר גלעדי')

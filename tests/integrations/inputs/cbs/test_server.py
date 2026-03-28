@@ -194,10 +194,11 @@ class TestLocationResolution:
         polygon_cache = tmp_path / 'polygons.json'
 
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {'dummy': [[]]}
         mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
 
-        with patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr):
+        with patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr):
             areas = await _resolve_location(
                 {
                     'latitude': 32.0853,
@@ -219,9 +220,10 @@ class TestLocationResolution:
         city_data_path.write_text(json.dumps(city_data), encoding='utf-8')
 
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=False)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {}
 
-        with patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr):
+        with patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr):
             areas = await _resolve_location(
                 {
                     'latitude': 32.0853,
@@ -245,10 +247,11 @@ class TestLocationResolution:
         city_data_path.write_text(json.dumps(city_data), encoding='utf-8')
 
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {'dummy': [[]]}
         mock_polygon_mgr.find_cities_at_point.return_value = []
 
-        with patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr):
+        with patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr):
             areas = await _resolve_location(
                 {
                     'latitude': 32.0853,
@@ -264,10 +267,11 @@ class TestLocationResolution:
     @pytest.mark.asyncio
     async def test_explicit_areas_take_precedence_over_coords(self, tmp_path):
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {'dummy': [[]]}
         mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
 
-        with patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr):
+        with patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr):
             areas = await _resolve_location(
                 {
                     'latitude': 32.0853,
@@ -282,13 +286,14 @@ class TestLocationResolution:
     @pytest.mark.asyncio
     async def test_warns_on_no_overlap(self, tmp_path, caplog):
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {'dummy': [[]]}
         mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
 
         import logging
 
         with (
-            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr),
             caplog.at_level(logging.WARNING, logger='red_alert.cbs'),
         ):
             await _resolve_location(
@@ -309,10 +314,11 @@ class TestLocationResolution:
         city_data_path.write_text(json.dumps(city_data), encoding='utf-8')
 
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=False)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {}
 
         with (
-            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr),
             pytest.raises(ValueError, match='did not resolve to any known cities'),
         ):
             await _resolve_location(
@@ -328,13 +334,14 @@ class TestLocationResolution:
     @pytest.mark.asyncio
     async def test_logs_overlap_confirmation(self, tmp_path, caplog):
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {'dummy': [[]]}
         mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - מרכז']
 
         import logging
 
         with (
-            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr),
             caplog.at_level(logging.INFO, logger='red_alert.cbs'),
         ):
             await _resolve_location(
@@ -395,7 +402,8 @@ class TestRunMonitorIntegration:
         captured_monitor = {}
 
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {'dummy': [[]]}
         mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
 
         original_init = CbsAlertMonitor.__init__
@@ -412,7 +420,7 @@ class TestRunMonitorIntegration:
         }
 
         with (
-            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr),
             patch.object(CbsAlertMonitor, 'run_subprocess', new_callable=AsyncMock, side_effect=KeyboardInterrupt),
             patch.object(CbsAlertMonitor, '__init__', lambda self, **kw: capture_init(self, **kw)),
         ):
@@ -463,7 +471,8 @@ class TestBridgeIntegration:
     @pytest.mark.asyncio
     async def test_run_monitor_bridge_mode_calls_ensure_bridge(self, tmp_path):
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {'dummy': [[]]}
         mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
 
         mock_bridge = MagicMock()
@@ -483,7 +492,7 @@ class TestBridgeIntegration:
         }
 
         with (
-            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr),
             patch('red_alert.integrations.inputs.cbs.server._create_bridge', return_value=mock_bridge),
             patch.object(CbsAlertMonitor, 'run_subprocess', new_callable=AsyncMock, side_effect=KeyboardInterrupt),
         ):
@@ -498,7 +507,8 @@ class TestBridgeIntegration:
     @pytest.mark.asyncio
     async def test_run_monitor_bridge_failure_raises(self, tmp_path):
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {'dummy': [[]]}
         mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
 
         mock_bridge = MagicMock()
@@ -516,7 +526,7 @@ class TestBridgeIntegration:
         }
 
         with (
-            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr),
             patch('red_alert.integrations.inputs.cbs.server._create_bridge', return_value=mock_bridge),
             pytest.raises(RuntimeError, match='Failed to establish socat bridge'),
         ):
@@ -528,7 +538,8 @@ class TestBridgeIntegration:
     async def test_run_monitor_no_bridge_when_lte_host_absent(self, tmp_path):
         """Backward compat: no bridge when lte_host is not configured."""
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {'dummy': [[]]}
         mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
 
         config = {
@@ -539,7 +550,7 @@ class TestBridgeIntegration:
         }
 
         with (
-            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr),
             patch.object(CbsAlertMonitor, 'run_subprocess', new_callable=AsyncMock, side_effect=KeyboardInterrupt),
             patch('red_alert.integrations.inputs.cbs.server._create_bridge', return_value=None) as mock_create,
         ):
@@ -553,7 +564,8 @@ class TestBridgeIntegration:
     @pytest.mark.asyncio
     async def test_run_monitor_bridge_closes_on_exit(self, tmp_path):
         mock_polygon_mgr = MagicMock()
-        mock_polygon_mgr.load = AsyncMock(return_value=True)
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {'dummy': [[]]}
         mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
 
         mock_bridge = MagicMock()
@@ -573,7 +585,7 @@ class TestBridgeIntegration:
         }
 
         with (
-            patch('red_alert.integrations.inputs.cbs.server.PolygonDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr),
             patch('red_alert.integrations.inputs.cbs.server._create_bridge', return_value=mock_bridge),
             patch.object(CbsAlertMonitor, 'run_subprocess', new_callable=AsyncMock, side_effect=KeyboardInterrupt),
         ):

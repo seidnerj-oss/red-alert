@@ -10,13 +10,11 @@ Usage:
 
 import asyncio
 import logging
-import os
 import time
 
 import httpx
 
 from red_alert.core.city_data import find_cities_near
-from red_alert.core.polygon_data import PolygonDataManager
 from red_alert.core.state import AlertState
 from red_alert.integrations.inputs.cbs.parser import CbsMessage, CbsMessageAssembler, CbsPageParser
 
@@ -46,10 +44,6 @@ DEFAULT_MESSAGE_ID_MAP: dict[int, AlertState] = {
     4382: AlertState.ROUTINE,
     4383: AlertState.ALERT,
 }
-
-_DEFAULT_POLYGON_CACHE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'data', 'polygon_cache.json')
-
-POLYGON_REFRESH_INTERVAL = 86400
 
 DEFAULT_CONFIG: dict = {
     'qmicli_path': '/tmp/qmicli',
@@ -231,12 +225,17 @@ async def _resolve_location(cfg: dict) -> list[str]:
 
 async def _resolve_via_polygons(lat: float, lon: float, cfg: dict) -> list[str] | None:
     """Try to resolve coordinates using polygon data. Returns None if polygon data is unavailable."""
-    cache_path = cfg.get('polygon_cache_path') or _DEFAULT_POLYGON_CACHE_PATH
+    from red_alert.core.city_data import CityDataManager, _DEFAULT_CITY_DATA_PATH
+    from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
+
+    city_data_path = cfg.get('city_data_path') or _DEFAULT_CITY_DATA_PATH
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            polygon_mgr = PolygonDataManager(client, cache_path, logger)
-            if await polygon_mgr.load():
-                cities = polygon_mgr.find_cities_at_point(lat, lon)
+            api_client = HomeFrontCommandApiClient(client, {}, logger)
+            city_mgr = CityDataManager(city_data_path, '', api_client, logger.info)
+            await city_mgr._fetch_polygons()
+            if city_mgr._polygons:
+                cities = city_mgr.find_cities_at_point(lat, lon)
                 if cities:
                     logger.info('Polygon resolution: found %d cities at (%.4f, %.4f): %s', len(cities), lat, lon, cities[:10])
                     return cities
@@ -279,22 +278,6 @@ def _validate_areas_overlap(lat: float, lon: float, areas: list[str], resolved: 
         )
     else:
         logger.info('Device coordinates confirm overlap with configured areas: %s', sorted(overlap))
-
-
-async def _periodic_polygon_refresh(cfg: dict):
-    """Periodically refresh polygon cache in the background."""
-    cache_path = cfg.get('polygon_cache_path') or _DEFAULT_POLYGON_CACHE_PATH
-    while True:
-        await asyncio.sleep(POLYGON_REFRESH_INTERVAL)
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                polygon_mgr = PolygonDataManager(client, cache_path, logger)
-                if await polygon_mgr.refresh():
-                    logger.info('Polygon data refreshed successfully.')
-                else:
-                    logger.warning('Polygon data refresh failed.')
-        except Exception as e:
-            logger.warning('Error during polygon refresh: %s', e)
 
 
 def _create_bridge(cfg: dict):
@@ -399,11 +382,7 @@ async def run_monitor(config: dict):
         f'{bridge.lte_host}:{bridge.bridge_port}' if bridge else 'disabled',
     )
 
-    refresh_task = None
     health_check_task = None
-
-    if has_coords:
-        refresh_task = asyncio.create_task(_periodic_polygon_refresh(cfg))
 
     try:
         if bridge:
@@ -436,7 +415,7 @@ async def run_monitor(config: dict):
             await asyncio.sleep(delay)
             delay = min(delay * 2, max_delay)
     finally:
-        for task in (refresh_task, health_check_task):
+        for task in (health_check_task,):
             if task:
                 task.cancel()
                 try:

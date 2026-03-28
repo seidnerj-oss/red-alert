@@ -76,11 +76,13 @@ class CityDataManager:
 
     def __init__(self, file_path: str, github_url: str, api_client, logger):
         self._local_file_path = file_path
+        self._polygon_data_path = os.path.join(os.path.dirname(file_path), 'polygon_data.json')
         self._github_url = github_url
         self._api_client = api_client
         self._log = logger
         self._city_data = None
         self._city_details_map: dict[str, dict] = {}
+        self._polygons: dict[str, list[list[list[float]]]] = {}
 
     async def load_data(self, force_download=False):
         """Load city data from HFC districts + polygon centroids, with cached fallback.
@@ -99,7 +101,7 @@ class CityDataManager:
             self._log(f'Error loading HFC districts: {e}', level='WARNING')
 
         if hfc_loaded:
-            await self._overlay_polygon_centroids()
+            await self._fetch_polygons()
             self._save_cache()
             self._build_city_details_map()
             return True
@@ -129,7 +131,7 @@ class CityDataManager:
                 return False
             if not self._process_hfc_districts(hfc_districts):
                 return False
-            await self._overlay_polygon_centroids()
+            await self._fetch_polygons()
             self._save_cache()
             self.get_city_details.cache_clear()
             self._build_city_details_map()
@@ -229,24 +231,23 @@ class CityDataManager:
             self._log(f'HFC districts: Skipped {skipped} invalid entries.', level='DEBUG')
         return True
 
-    async def _overlay_polygon_centroids(self):
-        """Fetch HFC polygon data and overlay centroid coordinates onto city data.
+    async def _fetch_polygons(self):
+        """Fetch HFC polygon data, store full polygons and overlay centroids.
 
         Fetches the segments list from the Meser Hadash backend, matches segments
         to districts by standardized name, fetches each segment's polygon in
-        parallel (with concurrency limit), and computes the centroid lat/long.
+        parallel (with concurrency limit). Stores full polygon rings for
+        point-in-polygon lookups and computes centroids for city_data coordinates.
         """
         from red_alert.core.polygon_data import POLYGON_URL_TEMPLATE, SEGMENTS_URL
-
-        if not self._city_data or 'areas' not in self._city_data:
-            return
 
         try:
             resp = await self._api_client._client.get(SEGMENTS_URL)
             resp.raise_for_status()
             seg_data = resp.json()
         except Exception as e:
-            self._log(f'Failed to fetch segments for coordinate overlay: {e}', level='WARNING')
+            self._log(f'Failed to fetch segments: {e}', level='WARNING')
+            self._load_polygon_data()
             return
 
         if isinstance(seg_data, dict) and 'segments' in seg_data:
@@ -257,24 +258,22 @@ class CityDataManager:
             segments = seg_data
         else:
             self._log('Unexpected segments response format.', level='WARNING')
+            self._load_polygon_data()
             return
 
         seg_by_name: dict[str, dict] = {}
+        seg_name_to_original: dict[str, str] = {}
         for seg in segments:
-            name = standardize_name(seg.get('cityName', seg.get('name', '')))
-            if name and ('id' in seg or 'segmentId' in seg):
-                seg_by_name[name] = seg
-
-        flat_cities: dict[str, dict] = {}
-        for area, cities in self._city_data['areas'].items():
-            if isinstance(cities, dict):
-                for std, entry in cities.items():
-                    flat_cities[std] = entry
+            original_name = seg.get('name') or seg.get('cityName', '')
+            std = standardize_name(original_name)
+            if std and ('id' in seg or 'segmentId' in seg):
+                seg_by_name[std] = seg
+                seg_name_to_original[std] = original_name
 
         sem = asyncio.Semaphore(20)
-        centroids: dict[str, tuple[float, float]] = {}
+        fetched_polygons: dict[str, list[list[list[float]]]] = {}
 
-        async def fetch_centroid(seg_id: str, std_name: str) -> None:
+        async def fetch_polygon(seg_id: str, original_name: str) -> None:
             async with sem:
                 try:
                     url = POLYGON_URL_TEMPLATE.format(segment_id=seg_id)
@@ -284,37 +283,92 @@ class CityDataManager:
                     data = resp.json()
                     rings = data.get('polygonPointList', [])
                     if rings and isinstance(rings[0], list) and rings[0]:
-                        coords = rings[0]
-                        lats = [p[0] for p in coords]
-                        lons = [p[1] for p in coords]
-                        centroids[std_name] = (round(sum(lats) / len(lats), 5), round(sum(lons) / len(lons), 5))
+                        fetched_polygons[original_name] = rings
                 except Exception:
                     pass
 
         tasks = []
-        for std_name in flat_cities:
-            if std_name in seg_by_name:
-                seg = seg_by_name[std_name]
-                seg_id = seg.get('segmentId') or seg.get('id')
-                if seg_id:
-                    tasks.append(fetch_centroid(str(seg_id), std_name))
+        for std, seg in seg_by_name.items():
+            seg_id = seg.get('segmentId') or seg.get('id')
+            if seg_id:
+                tasks.append(fetch_polygon(str(seg_id), seg_name_to_original[std]))
 
         if tasks:
-            self._log(f'Fetching {len(tasks)} polygon centroids for coordinate overlay...')
+            self._log(f'Fetching {len(tasks)} polygons...')
             await asyncio.gather(*tasks)
+
+        if fetched_polygons:
+            self._polygons = fetched_polygons
+            self._save_polygon_data()
+            self._log(f'Loaded {len(fetched_polygons)} polygons from API.')
+        else:
+            self._log('No polygons fetched from API, loading from cache.', level='WARNING')
+            self._load_polygon_data()
+
+        self._overlay_centroids_from_polygons()
+
+    def _overlay_centroids_from_polygons(self):
+        """Compute centroids from stored polygons and overlay onto city data."""
+        if not self._city_data or not self._polygons:
+            return
+
+        poly_by_std = {standardize_name(name): rings for name, rings in self._polygons.items()}
 
         overlaid = 0
         for area, cities in self._city_data['areas'].items():
             if not isinstance(cities, dict):
                 continue
             for std, entry in cities.items():
-                if std in centroids:
-                    entry['lat'] = centroids[std][0]
-                    entry['long'] = centroids[std][1]
+                rings = poly_by_std.get(std)
+                if rings and rings[0]:
+                    coords = rings[0]
+                    lats = [p[0] for p in coords]
+                    lons = [p[1] for p in coords]
+                    entry['lat'] = round(sum(lats) / len(lats), 5)
+                    entry['long'] = round(sum(lons) / len(lons), 5)
                     overlaid += 1
 
         total = sum(len(c) for c in self._city_data['areas'].values() if isinstance(c, dict))
         self._log(f'Polygon centroid overlay: {overlaid}/{total} cities with coordinates.')
+
+    def _save_polygon_data(self):
+        """Save full polygon data to disk."""
+        try:
+            os.makedirs(os.path.dirname(self._polygon_data_path), exist_ok=True)
+            with open(self._polygon_data_path, 'w', encoding='utf-8') as f:
+                json.dump(self._polygons, f, ensure_ascii=False)
+            self._log(f'Polygon data cached to {self._polygon_data_path}.')
+        except Exception as e:
+            self._log(f'Error saving polygon cache: {e}', level='WARNING')
+
+    def _load_polygon_data(self) -> bool:
+        """Load polygon data from disk."""
+        try:
+            with open(self._polygon_data_path, encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict) and data:
+                self._polygons = data
+                self._log(f'Loaded {len(data)} polygons from cache.')
+                return True
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            pass
+        return False
+
+    def find_cities_at_point(self, lat: float, lon: float) -> list[str]:
+        """Find all city names whose polygon contains the given point.
+
+        Returns city names (original Hebrew names from HFC) sorted alphabetically.
+        """
+        from red_alert.core.polygon_data import _point_in_polygon
+
+        results = []
+        for city_name, polygon_rings in self._polygons.items():
+            for ring in polygon_rings:
+                if _point_in_polygon(lat, lon, ring):
+                    results.append(city_name)
+                    break
+        results.sort()
+        return results
 
     def _process_cached_data(self, raw_data):
         """Process cached city data file into internal structure."""

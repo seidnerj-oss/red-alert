@@ -20,7 +20,6 @@ from red_alert.integrations.inputs.cbs.server import (
     CbsAlertMonitor,
     _resolve_location,
     _create_bridge,
-    _periodic_polygon_refresh,
     _periodic_health_check,
 )
 
@@ -120,13 +119,6 @@ class CbsInput(AlertInput):
                 data = _cbs_to_alert_dict(state, self._areas)
                 event = AlertEvent(source=SOURCE_NAME, state=state, data=data, alert_time=time.monotonic() - age)
                 await emit(event)
-
-        lat = cfg.get('latitude')
-        lon = cfg.get('longitude')
-        has_coords = lat is not None and lon is not None
-
-        if has_coords:
-            self._background_tasks.append(asyncio.create_task(_periodic_polygon_refresh(cfg)))
 
         bridge = _create_bridge(cfg)
         bridge_mode = bridge is not None
