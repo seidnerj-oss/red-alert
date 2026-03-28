@@ -1,11 +1,13 @@
+import asyncio
 import functools
 import json
 import math
 import os
 
-from red_alert.core.utils import check_bom, standardize_name
+from red_alert.core.utils import standardize_name
 
-# Default path to the ICBS city data cache file (fetched at runtime, not committed)
+# Default path to the city data cache file (generated from HFC sources, with a
+# committed fallback copy in the repo for when both HFC APIs are unavailable)
 _DEFAULT_CITY_DATA_PATH = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'city_data.json')
 
 
@@ -59,15 +61,15 @@ def find_cities_near(
 
 
 class CityDataManager:
-    """Manages city geographic data from HFC (Home Front Command) and ICBS (Israel Central Bureau of Statistics).
+    """Manages city geographic data from HFC (Home Front Command) sources.
 
-    Primary source: HFC GetDistricts endpoint - authoritative area groupings and shelter times (migun_time).
-    Secondary source: Static ICBS city_data.json - lat/long coordinates for GeoJSON mapping.
+    Primary source: HFC GetDistricts endpoint - city names, area groupings, shelter times (migun_time).
+    Coordinate source: HFC Meser Hadash polygon API - per-city polygon boundaries, from which
+    centroids are computed for lat/long coordinates.
 
-    The HFC area groupings (33 areas like "שרון", "דן") differ from the ICBS groupings
-    (31 areas like "גוש דן", "הכרמל"). The HFC groupings match the live alert system,
-    making them the preferred source. ICBS data is used only for lat/long coordinates
-    needed by the Home Assistant GeoJSON integration.
+    When both sources are available, the result is saved to disk as city_data.json. On subsequent
+    loads, the cached file is used as a fallback if the APIs are unavailable. A committed copy in
+    the repo (data/city_data.json) serves as the ultimate fallback.
     """
 
     def __init__(self, file_path: str, github_url: str, api_client, logger):
@@ -79,9 +81,13 @@ class CityDataManager:
         self._city_details_map: dict[str, dict] = {}
 
     async def load_data(self, force_download=False):
-        """Load city data. Prefers HFC districts (authoritative areas + shelter times)
-        with ICBS coordinates overlay. Falls back to ICBS-only if HFC is unavailable."""
-        # Step 1: Try HFC districts as primary source
+        """Load city data from HFC districts + polygon centroids, with cached fallback.
+
+        1. Fetch HFC districts (city names, areas, shelter times)
+        2. Fetch HFC polygon data and compute centroids for coordinates
+        3. Save result to disk as cache
+        4. Fall back to cached file if APIs are unavailable
+        """
         hfc_loaded = False
         try:
             hfc_districts = await self._api_client.get_districts()
@@ -90,30 +96,26 @@ class CityDataManager:
         except Exception as e:
             self._log(f'Error loading HFC districts: {e}', level='WARNING')
 
-        # Step 2: Load ICBS data (for coordinates overlay, or as full fallback)
-        icbs_data = self._load_icbs_file(force_download)
-        if icbs_data is None:
-            icbs_data = await self._download_icbs_file()
-
         if hfc_loaded:
-            if icbs_data:
-                self._overlay_icbs_coordinates(icbs_data)
+            await self._overlay_polygon_centroids()
+            self._save_cache()
             self._build_city_details_map()
             return True
 
-        # Fallback to ICBS-only
-        if icbs_data is not None and self._process_icbs_data(icbs_data):
-            self._log('Using ICBS city data as fallback (HFC districts unavailable).', level='WARNING')
+        # Fallback: load from cached file (generated or committed)
+        cached = self._load_cached_file(force_download)
+        if cached is not None and self._process_cached_data(cached):
+            self._log('Using cached city data (HFC districts unavailable).', level='WARNING')
             self._build_city_details_map()
             return True
 
-        self._log('CRITICAL: Failed to load city data from both HFC districts and ICBS file.', level='CRITICAL')
+        self._log('CRITICAL: Failed to load city data from HFC and cache.', level='CRITICAL')
         self._city_data = None
         self._city_details_map = {}
         return False
 
-    def _load_icbs_file(self, force_download):
-        """Load ICBS city data from local file. Returns raw data dict or None."""
+    def _load_cached_file(self, force_download):
+        """Load city data from local cached file. Returns raw data dict or None."""
         if force_download or not os.path.exists(self._local_file_path):
             return None
         try:
@@ -121,37 +123,22 @@ class CityDataManager:
                 loaded = json.load(f)
             if loaded and 'areas' in loaded:
                 return loaded
-            self._log('Local city data invalid or empty. Will attempt download.', level='WARNING')
+            self._log('Local city data invalid or empty.', level='WARNING')
         except (json.JSONDecodeError, OSError, Exception) as e:
-            self._log(f"Error reading local city data file '{self._local_file_path}': {e}. Will attempt download.", level='WARNING')
+            self._log(f"Error reading local city data file '{self._local_file_path}': {e}.", level='WARNING')
         return None
 
-    async def _download_icbs_file(self):
-        """Download ICBS city data from GitHub. Returns raw data dict or None."""
-        if not self._github_url:
-            return None
-        self._log('Downloading city data from GitHub.')
-        text = await self._api_client.download_file(self._github_url)
-        if not text:
-            self._log('Failed to download city data.', level='ERROR')
-            return None
+    def _save_cache(self):
+        """Save current city data to disk for fallback use."""
+        if not self._city_data or 'areas' not in self._city_data:
+            return
         try:
-            text = check_bom(text)
-            loaded = json.loads(text)
-            if not loaded or 'areas' not in loaded:
-                self._log("Downloaded city data is invalid (missing 'areas' key).", level='ERROR')
-                return None
-            try:
-                os.makedirs(os.path.dirname(self._local_file_path), exist_ok=True)
-                with open(self._local_file_path, 'w', encoding='utf-8-sig') as f:
-                    json.dump(loaded, f, ensure_ascii=False, indent=2)
-                self._log('City data downloaded and saved locally.')
-            except Exception as e:
-                self._log(f"Error saving city data locally to '{self._local_file_path}': {e}", level='ERROR')
-            return loaded
-        except json.JSONDecodeError as e:
-            self._log(f"Invalid city data JSON downloaded from '{self._github_url}': {e}", level='ERROR')
-        return None
+            os.makedirs(os.path.dirname(self._local_file_path), exist_ok=True)
+            with open(self._local_file_path, 'w', encoding='utf-8') as f:
+                json.dump(self._city_data, f, ensure_ascii=False, indent=2)
+            self._log(f'City data cached to {self._local_file_path}.')
+        except Exception as e:
+            self._log(f'Error saving city data cache: {e}', level='WARNING')
 
     def _process_hfc_districts(self, districts_list):
         """Process HFC GetDistricts response into internal city data structure.
@@ -217,108 +204,123 @@ class CityDataManager:
             self._log(f'HFC districts: Skipped {skipped} invalid entries.', level='DEBUG')
         return True
 
-    def _overlay_icbs_coordinates(self, icbs_data):
-        """Overlay lat/long coordinates from ICBS data onto HFC-sourced city data.
+    async def _overlay_polygon_centroids(self):
+        """Fetch HFC polygon data and overlay centroid coordinates onto city data.
 
-        Matches cities by standardized name. Only adds coordinates, does not
-        change area assignments or other HFC-sourced fields.
+        Fetches the segments list from the Meser Hadash backend, matches segments
+        to districts by standardized name, fetches each segment's polygon in
+        parallel (with concurrency limit), and computes the centroid lat/long.
         """
+        from red_alert.core.polygon_data import POLYGON_URL_TEMPLATE, SEGMENTS_URL
+
         if not self._city_data or 'areas' not in self._city_data:
             return
 
-        # Build a flat lookup from ICBS data: std_name -> {lat, long}
-        icbs_coords = {}
-        for area, cities in icbs_data.get('areas', {}).items():
-            if not isinstance(cities, dict):
-                continue
-            for city_name, details in cities.items():
-                if not isinstance(details, dict):
-                    continue
-                lat = details.get('lat')
-                lon = details.get('long')
-                if lat is not None and lon is not None:
-                    try:
-                        std = standardize_name(city_name)
-                        if std:
-                            icbs_coords[std] = {'lat': float(lat), 'long': float(lon)}
-                    except (ValueError, TypeError):
-                        pass
+        try:
+            resp = await self._api_client._client.get(SEGMENTS_URL)
+            resp.raise_for_status()
+            seg_data = resp.json()
+        except Exception as e:
+            self._log(f'Failed to fetch segments for coordinate overlay: {e}', level='WARNING')
+            return
 
-        # Overlay onto HFC data
+        if isinstance(seg_data, dict) and 'segments' in seg_data:
+            segments = seg_data['segments']
+            if isinstance(segments, dict):
+                segments = list(segments.values())
+        elif isinstance(seg_data, list):
+            segments = seg_data
+        else:
+            self._log('Unexpected segments response format.', level='WARNING')
+            return
+
+        seg_by_name: dict[str, dict] = {}
+        for seg in segments:
+            name = standardize_name(seg.get('cityName', seg.get('name', '')))
+            if name and ('id' in seg or 'segmentId' in seg):
+                seg_by_name[name] = seg
+
+        flat_cities: dict[str, dict] = {}
+        for area, cities in self._city_data['areas'].items():
+            if isinstance(cities, dict):
+                for std, entry in cities.items():
+                    flat_cities[std] = entry
+
+        sem = asyncio.Semaphore(20)
+        centroids: dict[str, tuple[float, float]] = {}
+
+        async def fetch_centroid(seg_id: str, std_name: str) -> None:
+            async with sem:
+                try:
+                    url = POLYGON_URL_TEMPLATE.format(segment_id=seg_id)
+                    resp = await self._api_client._client.get(url)
+                    if resp.status_code != 200:
+                        return
+                    data = resp.json()
+                    rings = data.get('polygonPointList', [])
+                    if rings and isinstance(rings[0], list) and rings[0]:
+                        coords = rings[0]
+                        lats = [p[0] for p in coords]
+                        lons = [p[1] for p in coords]
+                        centroids[std_name] = (round(sum(lats) / len(lats), 5), round(sum(lons) / len(lons), 5))
+                except Exception:
+                    pass
+
+        tasks = []
+        for std_name in flat_cities:
+            if std_name in seg_by_name:
+                seg = seg_by_name[std_name]
+                seg_id = seg.get('segmentId') or seg.get('id')
+                if seg_id:
+                    tasks.append(fetch_centroid(str(seg_id), std_name))
+
+        if tasks:
+            self._log(f'Fetching {len(tasks)} polygon centroids for coordinate overlay...')
+            await asyncio.gather(*tasks)
+
         overlaid = 0
         for area, cities in self._city_data['areas'].items():
             if not isinstance(cities, dict):
                 continue
-            for std, details in cities.items():
-                coords = icbs_coords.get(std)
-                if coords:
-                    details['lat'] = coords['lat']
-                    details['long'] = coords['long']
+            for std, entry in cities.items():
+                if std in centroids:
+                    entry['lat'] = centroids[std][0]
+                    entry['long'] = centroids[std][1]
                     overlaid += 1
 
-        self._log(f'ICBS coordinate overlay: Added coordinates to {overlaid} cities.')
+        total = sum(len(c) for c in self._city_data['areas'].values() if isinstance(c, dict))
+        self._log(f'Polygon centroid overlay: {overlaid}/{total} cities with coordinates.')
 
-    def _process_icbs_data(self, raw_data):
-        """Process raw ICBS city data into the internal structure. Used as fallback when HFC is unavailable."""
+    def _process_cached_data(self, raw_data):
+        """Process cached city data file into internal structure."""
         if not raw_data or 'areas' not in raw_data:
-            self._log("City data missing 'areas' key during processing.", level='ERROR')
+            self._log("City data missing 'areas' key.", level='ERROR')
             return False
         proc = {'areas': {}}
-        expected_keys_count = 0
-        processed_keys_count = 0
+        processed = 0
         for area, cities in raw_data['areas'].items():
-            if isinstance(cities, dict):
-                std_cities = {}
-                for city, details in cities.items():
-                    if not isinstance(details, dict):
-                        self._log(
-                            f"City data processing: Expected dict for city details of '{city}' in area '{area}', got {type(details)}. Skipping city.",
-                            level='WARNING',
-                        )
-                        continue
-                    expected_keys_count += 1
-                    std = standardize_name(city)
-                    if not std:
-                        self._log(f"City data processing: City '{city}' resulted in empty standardized name. Skipping.", level='WARNING')
-                        continue
+            if not isinstance(cities, dict):
+                continue
+            std_cities = {}
+            for city, details in cities.items():
+                if not isinstance(details, dict):
+                    continue
+                std = standardize_name(city)
+                if not std:
+                    continue
 
-                    entry = {'original_name': city}
-                    lat = details.get('lat')
-                    lon = details.get('long')
-                    try:
-                        if lat is not None and lon is not None:
-                            entry['lat'] = float(lat)
-                            entry['long'] = float(lon)
-                        elif lat is not None or lon is not None:
-                            self._log(
-                                f"City data processing: City '{city}' has partial coordinates (lat: {lat}, long: {lon}). Skipping coords.",
-                                level='DEBUG',
-                            )
-                    except (ValueError, TypeError):
-                        self._log(
-                            f"City data processing: Invalid coordinate types for city '{city}' (lat: {lat}, long: {lon}). Skipping coords.",
-                            level='WARNING',
-                        )
+                entry = {'original_name': details.get('original_name', city)}
+                for key in ('lat', 'long', 'migun_time'):
+                    if key in details:
+                        entry[key] = details[key]
 
-                    if std in std_cities:
-                        self._log(
-                            f"City data processing: Duplicate standardized name '{std}' found in area '{area}'. "
-                            f"Original names: '{std_cities[std]['original_name']}', '{city}'. Overwriting.",
-                            level='WARNING',
-                        )
-
-                    std_cities[std] = entry
-                    processed_keys_count += 1
-                proc['areas'][area] = std_cities
-            else:
-                self._log(f"City data processing: Expected dict for area '{area}', got {type(cities)}. Skipping area.", level='WARNING')
-                proc['areas'][area] = {}
+                std_cities[std] = entry
+                processed += 1
+            proc['areas'][area] = std_cities
+        if processed == 0:
+            return False
         self._city_data = proc
-        if expected_keys_count != processed_keys_count:
-            self._log(
-                f'City data processing: Mismatch - attempted {expected_keys_count} city entries, successfully processed {processed_keys_count}.',
-                level='WARNING',
-            )
+        self._log(f'Loaded {processed} cities from cache.')
         return True
 
     def _build_city_details_map(self):
