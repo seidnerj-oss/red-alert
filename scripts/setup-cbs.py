@@ -346,7 +346,7 @@ async def enable_lte_ssh(
 async def deploy_socat_to_lte(
     lte_host: str,
     socat_binary: Path,
-    ssh_key_path: str | None = None,
+    lte_device_ssh_key_path: str | None = None,
     ssh_username: str = 'root',
 ) -> None:
     """Deploy the socat binary to the LTE device via SSH.
@@ -357,7 +357,7 @@ async def deploy_socat_to_lte(
     Args:
         lte_host: LTE device hostname or IP.
         socat_binary: Path to the local socat MIPS binary to deploy.
-        ssh_key_path: Path to SSH private key.
+        lte_device_ssh_key_path: Path to SSH private key.
         ssh_username: SSH username on the LTE device.
     """
     ssh_opts: dict = {
@@ -365,8 +365,8 @@ async def deploy_socat_to_lte(
         'username': ssh_username,
         'known_hosts': None,
     }
-    if ssh_key_path:
-        ssh_opts['client_keys'] = [ssh_key_path]
+    if lte_device_ssh_key_path:
+        ssh_opts['client_keys'] = [lte_device_ssh_key_path]
 
     async with asyncssh.connect(**ssh_opts) as conn:
         logger.info('Connected to LTE device at %s via SSH', lte_host)
@@ -536,7 +536,7 @@ def _step_deploy_lte(args) -> None:
         deploy_socat_to_lte(
             lte_host=args.lte_host,
             socat_binary=socat_binary,
-            ssh_key_path=str(ssh_key),
+            lte_device_ssh_key_path=str(ssh_key),
             ssh_username=args.ssh_username,
         )
     )
@@ -561,7 +561,7 @@ def _full_setup(args) -> None:
             deploy_socat_to_lte(
                 lte_host=args.lte_host,
                 socat_binary=socat_binary,
-                ssh_key_path=str(ssh_key),
+                lte_device_ssh_key_path=str(ssh_key),
                 ssh_username=args.ssh_username,
             )
         )

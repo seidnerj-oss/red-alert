@@ -459,13 +459,13 @@ class TestBridgeIntegration:
         cfg = {
             'device': '/dev/cdc-wdm0',
             'lte_host': '192.168.1.100',
-            'ssh_key_path': '/home/user/.ssh/id_ed25519',
+            'lte_device_ssh_key_path': '/home/user/.ssh/id_ed25519',
             'ssh_username': 'admin',
             'socat_remote_binary': '/cache/socat-mips',
         }
         bridge = _create_bridge(cfg)
         assert bridge is not None
-        assert bridge._ssh_key_path == '/home/user/.ssh/id_ed25519'
+        assert bridge._lte_device_ssh_key_path == '/home/user/.ssh/id_ed25519'
         assert bridge._ssh_username == 'admin'
 
     @pytest.mark.asyncio

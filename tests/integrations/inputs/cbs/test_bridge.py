@@ -20,7 +20,7 @@ class TestCbsBridgeInit:
             lte_host='10.0.0.1',
             bridge_port=9999,
             device='/dev/cdc-wdm1',
-            ssh_key_path='/home/user/.ssh/id_ed25519',
+            lte_device_ssh_key_path='/home/user/.ssh/id_ed25519',
             ssh_username='admin',
             socat_remote_binary='/tmp/socat-mips',
         )

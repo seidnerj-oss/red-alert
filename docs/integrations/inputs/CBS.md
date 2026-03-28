@@ -244,7 +244,7 @@ Or re-run the full setup (idempotent - skips already-completed steps).
     "channels": "919,4370-4383",
     "lte_host": "<lte-device-ip>",
     "bridge_port": 18222,
-    "ssh_key_path": "~/.ssh/id_ed25519",
+    "lte_device_ssh_key_path": "~/.ssh/id_ed25519",
     "ssh_username": "root",
     "health_check_interval": 300,
     "latitude": 32.0853,
@@ -267,7 +267,7 @@ Setting `lte_host` activates bridge mode. The monitor will:
 |-----------|-------------|---------|
 | `lte_host` | LTE device hostname/IP (enables bridge mode when set) | `null` |
 | `bridge_port` | TCP port for the socat bridge | `18222` |
-| `ssh_key_path` | Path to SSH private key for LTE device access | `null` |
+| `lte_device_ssh_key_path` | Path to SSH private key for LTE device access | `null` |
 | `ssh_username` | SSH username on the LTE device | `null` |
 | `socat_remote_binary` | Local path to socat binary for auto-deployment to LTE device | `null` |
 | `health_check_interval` | Seconds between bridge health checks (0 to disable) | `300` |

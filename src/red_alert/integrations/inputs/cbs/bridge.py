@@ -43,7 +43,7 @@ class CbsBridge:
         lte_host: str,
         bridge_port: int = DEFAULT_BRIDGE_PORT,
         device: str = '/dev/cdc-wdm0',
-        ssh_key_path: str | None = None,
+        lte_device_ssh_key_path: str | None = None,
         ssh_username: str | None = None,
         socat_remote_binary: str | None = None,
         lte_device_mac: str | None = None,
@@ -52,7 +52,7 @@ class CbsBridge:
         self._lte_host = lte_host
         self._bridge_port = bridge_port
         self._device = device
-        self._ssh_key_path = ssh_key_path
+        self._lte_device_ssh_key_path = lte_device_ssh_key_path
         self._ssh_username = ssh_username or 'root'
         self._socat_remote_binary = socat_remote_binary
         self._local_socat_proc: asyncio.subprocess.Process | None = None
@@ -78,8 +78,8 @@ class CbsBridge:
             'username': self._ssh_username,
             'known_hosts': None,
         }
-        if self._ssh_key_path:
-            opts['client_keys'] = [self._ssh_key_path]
+        if self._lte_device_ssh_key_path:
+            opts['client_keys'] = [self._lte_device_ssh_key_path]
         return opts
 
     async def _ssh_run(self, command: str) -> asyncssh.SSHCompletedProcess:
@@ -105,20 +105,20 @@ class CbsBridge:
 
         Uses the WebRTC debug terminal to write the SSH public key and start dropbear.
         Requires a 'unifi' section in the CBS config with controller credentials,
-        plus lte_device_mac and ssh_key_path.
+        plus lte_device_mac and lte_device_ssh_key_path.
         """
         unifi = self._unifi
         if not unifi.get('host') or not unifi.get('username') or not unifi.get('password') or not self._lte_device_mac:
             logger.warning('Cannot auto-enable SSH: unifi controller credentials or lte_device_mac not configured in CBS config')
             return False
-        if not self._ssh_key_path:
-            logger.warning('Cannot auto-enable SSH: ssh_key_path not configured')
+        if not self._lte_device_ssh_key_path:
+            logger.warning('Cannot auto-enable SSH: lte_device_ssh_key_path not configured')
             return False
 
         try:
             from red_alert.integrations.inputs.cbs.lte_ssh import build_controller_config, enable_ssh, read_pubkey
 
-            pubkey_path = self._ssh_key_path + '.pub'
+            pubkey_path = self._lte_device_ssh_key_path + '.pub'
             pubkey = read_pubkey(pubkey_path)
             config = build_controller_config(
                 host=unifi.get('host'),
