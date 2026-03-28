@@ -13,7 +13,7 @@ import sys
 
 import httpx
 
-from red_alert.core.orchestrator import AlertInput, AlertOutput, Orchestrator
+from red_alert.core.orchestrator import AlertInput, AlertOutput, Orchestrator, PeriodicTask
 from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
 from red_alert.integrations.inputs.hfc.input import HfcInput
 
@@ -94,6 +94,15 @@ def _build_outputs(config: dict) -> list[AlertOutput]:
     return outputs
 
 
+def _build_periodic_tasks(api_client: HomeFrontCommandApiClient) -> list[PeriodicTask]:
+    from red_alert.core.city_data import CITY_DATA_REFRESH_INTERVAL, CityDataManager, _DEFAULT_CITY_DATA_PATH
+
+    city_data_mgr = CityDataManager(_DEFAULT_CITY_DATA_PATH, '', api_client, logger.info)
+    return [
+        PeriodicTask('city-data-refresh', CITY_DATA_REFRESH_INTERVAL, city_data_mgr.refresh),
+    ]
+
+
 def _compute_max_hold(config: dict) -> float:
     """Compute the maximum hold time across all outputs for history seeding."""
     max_hold = 1800.0
@@ -131,6 +140,7 @@ async def run(config: dict) -> None:
     try:
         inputs = _build_inputs(config, api_client)
         outputs = _build_outputs(config)
+        periodic = _build_periodic_tasks(api_client)
 
         logger.info(
             'Starting orchestrator: %d input(s) [%s], %d output(s) [%s]',
@@ -140,7 +150,7 @@ async def run(config: dict) -> None:
             ', '.join(o.name for o in outputs),
         )
 
-        orchestrator = Orchestrator(inputs, outputs)
+        orchestrator = Orchestrator(inputs, outputs, periodic)
         await orchestrator.run()
     finally:
         await http_client.aclose()

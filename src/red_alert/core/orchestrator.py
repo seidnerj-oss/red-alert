@@ -153,12 +153,35 @@ class MultiSourceStateTracker:
         return AlertState.ROUTINE
 
 
+class PeriodicTask:
+    """A named coroutine that runs on a fixed interval."""
+
+    def __init__(self, name: str, interval: float, coro):
+        self.name = name
+        self.interval = interval
+        self.coro = coro
+
+    async def run(self) -> None:
+        while True:
+            await asyncio.sleep(self.interval)
+            try:
+                await self.coro()
+            except Exception:
+                logger.debug('Periodic task %s failed', self.name, exc_info=True)
+
+
 class Orchestrator:
     """Routes alert events from inputs to outputs."""
 
-    def __init__(self, inputs: list[AlertInput], outputs: list[AlertOutput]):
+    def __init__(
+        self,
+        inputs: list[AlertInput],
+        outputs: list[AlertOutput],
+        periodic_tasks: list[PeriodicTask] | None = None,
+    ):
         self._inputs = inputs
         self._outputs = outputs
+        self._periodic_tasks = periodic_tasks or []
 
     async def run(self) -> None:
         for output in self._outputs:
@@ -179,7 +202,11 @@ class Orchestrator:
                     logger.error('Output %s failed on event from %s: %s', self._outputs[i].name, event.source, result)
 
         input_tasks = [asyncio.create_task(inp.run(emit), name=f'input-{inp.name}') for inp in self._inputs]
-        logger.info('Orchestrator running: %d input(s), %d output(s)', len(self._inputs), len(self._outputs))
+        bg_tasks = [asyncio.create_task(pt.run(), name=f'periodic-{pt.name}') for pt in self._periodic_tasks]
+
+        logger.info(
+            'Orchestrator running: %d input(s), %d output(s), %d periodic task(s)', len(self._inputs), len(self._outputs), len(self._periodic_tasks)
+        )
 
         try:
             done, _ = await asyncio.wait(input_tasks, return_when=asyncio.FIRST_EXCEPTION)
@@ -187,9 +214,9 @@ class Orchestrator:
                 if task.exception():
                     logger.error('Input %s failed: %s', task.get_name(), task.exception())
         finally:
-            for task in input_tasks:
+            for task in input_tasks + bg_tasks:
                 task.cancel()
-            await asyncio.gather(*input_tasks, return_exceptions=True)
+            await asyncio.gather(*input_tasks, *bg_tasks, return_exceptions=True)
             for inp in self._inputs:
                 try:
                     await inp.stop()
