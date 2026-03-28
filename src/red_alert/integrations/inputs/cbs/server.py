@@ -387,25 +387,22 @@ async def run_monitor(config: dict):
     health_check_task = None
 
     try:
-        if bridge:
-            if not await bridge.ensure_bridge():
-                raise RuntimeError('Failed to establish socat bridge to LTE device')
-
-            logger.info('Configuring CBS channels via bridge...')
-            if not await bridge.configure_cbs(cfg['qmicli_path'], cfg['channels']):
-                logger.warning('CBS channel configuration failed - monitor may not receive alerts')
-
-            health_interval = cfg.get('health_check_interval', 300)
-            if health_interval > 0:
-                health_check_task = asyncio.create_task(_periodic_health_check(bridge, health_interval))
-
         while True:
             try:
-                if bridge_mode and not await bridge.ensure_bridge():
-                    logger.error('Bridge is down, waiting %ds before retry...', delay)
-                    await asyncio.sleep(delay)
-                    delay = min(delay * 2, max_delay)
-                    continue
+                if bridge_mode:
+                    if not await bridge.ensure_bridge():
+                        logger.error('Bridge is down, waiting %ds before retry...', delay)
+                        await asyncio.sleep(delay)
+                        delay = min(delay * 2, max_delay)
+                        continue
+
+                    if not await bridge.configure_cbs(cfg['qmicli_path'], cfg['channels']):
+                        logger.warning('CBS channel configuration failed - monitor may not receive alerts')
+
+                    if not health_check_task:
+                        health_interval = cfg.get('health_check_interval', 300)
+                        if health_interval > 0:
+                            health_check_task = asyncio.create_task(_periodic_health_check(bridge, health_interval))
 
                 returncode = await monitor.run_subprocess()
                 if returncode == 0:
@@ -417,13 +414,12 @@ async def run_monitor(config: dict):
             await asyncio.sleep(delay)
             delay = min(delay * 2, max_delay)
     finally:
-        for task in (health_check_task,):
-            if task:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+        if health_check_task:
+            health_check_task.cancel()
+            try:
+                await health_check_task
+            except asyncio.CancelledError:
+                pass
 
         if bridge:
             await bridge.close()

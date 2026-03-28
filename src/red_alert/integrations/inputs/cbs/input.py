@@ -133,25 +133,26 @@ class CbsInput(AlertInput):
             f'{bridge.lte_host}:{bridge.bridge_port}' if bridge else 'disabled',
         )
 
+        health_check_started = False
+
         try:
-            if bridge:
-                if not await bridge.ensure_bridge():
-                    raise RuntimeError('Failed to establish socat bridge to LTE device')
-
-                if not await bridge.configure_cbs(cfg.get('qmicli_path', '/tmp/qmicli'), cfg.get('channels', '919,4370-4383')):
-                    logger.warning('CBS channel configuration failed')
-
-                health_interval = cfg.get('health_check_interval', 300)
-                if health_interval > 0:
-                    self._background_tasks.append(asyncio.create_task(_periodic_health_check(bridge, health_interval)))
-
             while True:
                 try:
-                    if bridge_mode and not await bridge.ensure_bridge():
-                        logger.error('Bridge is down, waiting %ds before retry...', delay)
-                        await asyncio.sleep(delay)
-                        delay = min(delay * 2, max_delay)
-                        continue
+                    if bridge_mode:
+                        if not await bridge.ensure_bridge():
+                            logger.error('Bridge is down, waiting %ds before retry...', delay)
+                            await asyncio.sleep(delay)
+                            delay = min(delay * 2, max_delay)
+                            continue
+
+                        if not await bridge.configure_cbs(cfg.get('qmicli_path', '/tmp/qmicli'), cfg.get('channels', '919,4370-4383')):
+                            logger.warning('CBS channel configuration failed')
+
+                        if not health_check_started:
+                            health_interval = cfg.get('health_check_interval', 300)
+                            if health_interval > 0:
+                                self._background_tasks.append(asyncio.create_task(_periodic_health_check(bridge, health_interval)))
+                                health_check_started = True
 
                     returncode = await self._monitor.run_subprocess()
                     if returncode == 0:

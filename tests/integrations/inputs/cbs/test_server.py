@@ -505,7 +505,7 @@ class TestBridgeIntegration:
         mock_bridge.configure_cbs.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_run_monitor_bridge_failure_raises(self, tmp_path):
+    async def test_run_monitor_bridge_failure_retries(self, tmp_path):
         mock_polygon_mgr = MagicMock()
         mock_polygon_mgr._fetch_polygons = AsyncMock()
         mock_polygon_mgr._polygons = {'dummy': [[]]}
@@ -514,7 +514,16 @@ class TestBridgeIntegration:
         mock_bridge = MagicMock()
         mock_bridge.lte_host = '192.168.1.100'
         mock_bridge.bridge_port = 18222
-        mock_bridge.ensure_bridge = AsyncMock(return_value=False)
+        bridge_call_count = 0
+
+        async def fail_then_succeed():
+            nonlocal bridge_call_count
+            bridge_call_count += 1
+            if bridge_call_count < 3:
+                return False
+            raise KeyboardInterrupt()
+
+        mock_bridge.ensure_bridge = fail_then_succeed
         mock_bridge.close = AsyncMock()
 
         config = {
@@ -528,11 +537,12 @@ class TestBridgeIntegration:
         with (
             patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr),
             patch('red_alert.integrations.inputs.cbs.server._create_bridge', return_value=mock_bridge),
-            pytest.raises(RuntimeError, match='Failed to establish socat bridge'),
+            patch('asyncio.sleep', new_callable=AsyncMock),
+            pytest.raises(KeyboardInterrupt),
         ):
             await run_monitor(config)
 
-        mock_bridge.close.assert_called_once()
+        assert bridge_call_count == 3
 
     @pytest.mark.asyncio
     async def test_run_monitor_no_bridge_when_lte_host_absent(self, tmp_path):
