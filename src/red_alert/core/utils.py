@@ -4,7 +4,7 @@ from datetime import datetime
 from red_alert.core.constants import CLEAN_NAME_REGEX
 
 
-@functools.lru_cache(maxsize=None)
+@functools.lru_cache(maxsize=512)
 def standardize_name(name: str) -> str:
     """Return a city name stripped of parentheses/quotes and extra spaces, with special handling for ג'ת."""
     if not isinstance(name, str):

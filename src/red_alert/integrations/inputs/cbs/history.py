@@ -18,7 +18,7 @@ from red_alert.integrations.inputs.cbs.parser import CbsMessage
 
 logger = logging.getLogger('red_alert.cbs.history')
 
-DEFAULT_MAX_AGE_SECONDS = 3600
+DEFAULT_MAX_AGE_SECONDS = 86400
 
 
 class CbsHistory:

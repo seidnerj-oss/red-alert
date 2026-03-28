@@ -10,6 +10,8 @@ from red_alert.core.utils import standardize_name
 # committed fallback copy in the repo for when both HFC APIs are unavailable)
 _DEFAULT_CITY_DATA_PATH = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'city_data.json')
 
+CITY_DATA_REFRESH_INTERVAL = 86400  # 24 hours
+
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate the great-circle distance between two points in kilometers."""
@@ -113,6 +115,29 @@ class CityDataManager:
         self._city_data = None
         self._city_details_map = {}
         return False
+
+    async def refresh(self) -> bool:
+        """Re-fetch city data from HFC sources and update cache.
+
+        Called periodically (every 24h) to keep city data current.
+        Only updates if the fetch succeeds - keeps existing data on failure.
+        """
+        try:
+            hfc_districts = await self._api_client.get_districts()
+            if not hfc_districts:
+                self._log('City data refresh: HFC districts unavailable.', level='WARNING')
+                return False
+            if not self._process_hfc_districts(hfc_districts):
+                return False
+            await self._overlay_polygon_centroids()
+            self._save_cache()
+            self.get_city_details.cache_clear()
+            self._build_city_details_map()
+            self._log('City data refreshed successfully.')
+            return True
+        except Exception as e:
+            self._log(f'City data refresh failed: {e}', level='WARNING')
+            return False
 
     def _load_cached_file(self, force_download):
         """Load city data from local cached file. Returns raw data dict or None."""

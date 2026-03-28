@@ -28,10 +28,10 @@ def main():
         print(f'Error loading config file: {e}', file=sys.stderr)
         sys.exit(1)
 
-    # Default history_path to sit alongside the config file
+    # Default history_path to the data directory
     if not config.get('history_path'):
         config_dir = os.path.dirname(os.path.abspath(args.config))
-        config['history_path'] = os.path.join(config_dir, 'cbs_history.json')
+        config['history_path'] = os.path.join(config_dir, 'data', 'cbs_history.json')
 
     logging.basicConfig(
         level=logging.INFO,
