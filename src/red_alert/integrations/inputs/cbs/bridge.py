@@ -298,10 +298,7 @@ class CbsBridge:
             await self._kill_local_bridge()
 
         if not await self.ensure_lte_bridge():
-            logger.error(
-                'LTE-side bridge is down. If the LTE device was rebooted, re-run: '
-                'python scripts/setup-cbs.py --enable-ssh-only && python scripts/setup-cbs.py --provision-lte-only'
-            )
+            logger.error('LTE-side bridge is down')
             return False
 
         if not await self.ensure_local_bridge():
