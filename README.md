@@ -123,9 +123,9 @@ See [HomePod setup guide](docs/integrations/outputs/HOMEPOD.md) for full instruc
 
 ---
 
-## Unified Service (Recommended)
+## Quick Start
 
-The unified orchestrator runs all configured inputs and outputs as concurrent tasks in a single process. This is the recommended way to deploy red-alert.
+The orchestrator runs all configured inputs and outputs as concurrent tasks in a single process.
 
 ### Quick Start
 
