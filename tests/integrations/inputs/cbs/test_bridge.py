@@ -84,10 +84,6 @@ class TestDeploySocatToLte:
     async def test_deploys_when_not_present(self):
         bridge = CbsBridge(lte_host='192.168.1.100', socat_remote_binary='/local/socat')
 
-        mock_sftp = AsyncMock()
-        mock_sftp.__aenter__ = AsyncMock(return_value=mock_sftp)
-        mock_sftp.__aexit__ = AsyncMock(return_value=False)
-
         check_result = MagicMock()
         check_result.stdout = ''
 
@@ -96,14 +92,16 @@ class TestDeploySocatToLte:
 
         mock_conn = AsyncMock()
         mock_conn.run = AsyncMock(side_effect=[check_result, chmod_result])
-        mock_conn.start_sftp_client = MagicMock(return_value=mock_sftp)
         mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
         mock_conn.__aexit__ = AsyncMock(return_value=False)
 
-        with patch('asyncssh.connect', return_value=mock_conn):
+        with (
+            patch('asyncssh.connect', return_value=mock_conn),
+            patch('asyncssh.scp', new_callable=AsyncMock) as mock_scp,
+        ):
             assert await bridge._deploy_socat_to_lte() is True
 
-        mock_sftp.put.assert_called_once_with('/local/socat', SOCAT_REMOTE_PATH)
+        mock_scp.assert_called_once_with('/local/socat', (mock_conn, SOCAT_REMOTE_PATH))
 
     @pytest.mark.asyncio
     async def test_returns_false_on_ssh_error(self):

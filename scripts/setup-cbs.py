@@ -376,9 +376,8 @@ async def deploy_socat_to_lte(
             logger.info('socat already present on LTE device at %s', SOCAT_REMOTE_PATH)
             return
 
-        logger.info('Deploying socat to LTE device...')
-        async with conn.start_sftp_client() as sftp:
-            await sftp.put(str(socat_binary), SOCAT_REMOTE_PATH)
+        logger.info('Deploying socat to LTE device via SCP...')
+        await asyncssh.scp(str(socat_binary), (conn, SOCAT_REMOTE_PATH))
         await conn.run(f'chmod +x {SOCAT_REMOTE_PATH}')
         logger.info('socat deployed to %s', SOCAT_REMOTE_PATH)
 

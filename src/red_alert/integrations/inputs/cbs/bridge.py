@@ -146,7 +146,11 @@ class CbsBridge:
             return False
 
     async def _deploy_socat_to_lte(self) -> bool:
-        """Deploy socat binary to the LTE device via SSH."""
+        """Deploy socat binary to the LTE device via SSH.
+
+        Uses SCP (not SFTP) because the LTE device runs dropbear which
+        does not support the SFTP subsystem.
+        """
         if not self._socat_remote_binary:
             logger.error('No socat binary path configured for deployment')
             return False
@@ -159,9 +163,8 @@ class CbsBridge:
                     logger.info('socat already present on LTE device at %s', SOCAT_REMOTE_PATH)
                     return True
 
-                logger.info('Deploying socat to LTE device at %s', SOCAT_REMOTE_PATH)
-                async with conn.start_sftp_client() as sftp:
-                    await sftp.put(self._socat_remote_binary, SOCAT_REMOTE_PATH)
+                logger.info('Deploying socat to LTE device at %s via SCP', SOCAT_REMOTE_PATH)
+                await asyncssh.scp(self._socat_remote_binary, (conn, SOCAT_REMOTE_PATH))
                 await conn.run(f'chmod +x {SOCAT_REMOTE_PATH}')
                 logger.info('socat deployed successfully')
                 return True

@@ -259,9 +259,13 @@ python -m red_alert.integrations.inputs.cbs --config cbs-bridge-config.json
 
 Setting `lte_host` activates bridge mode. The monitor will:
 - Ensure the socat bridge is running on both the LTE device and locally before starting qmicli
+- Auto-enable SSH on the LTE device via the UniFi controller if connection is refused (requires `unifi` + `lte_device_mac` config)
+- Auto-deploy socat binary to the LTE device via SCP if missing (requires `socat_remote_binary` config)
 - Configure CBS channels through the bridge on first connection
 - Run periodic health checks (every `health_check_interval` seconds)
 - Re-verify the bridge before restarting qmicli after any exit
+
+> **Note:** The LTE device runs dropbear SSH which does not support SFTP. File transfers use SCP instead.
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
