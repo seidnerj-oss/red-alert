@@ -162,7 +162,7 @@ python -m red_alert.integrations.inputs.cbs --config cbs-config.json
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `qmicli_path` | Path to the patched qmicli binary | `/tmp/qmicli` |
-| `device` | QMI device path (use `/tmp/cdc-wdm0` in bridge mode - auto-created as placeholder) | `/tmp/cdc-wdm0` |
+| `device` | QMI device path | `/dev/cdc-wdm0` |
 | `device_open_proxy` | Use `--device-open-proxy` for shared modem access | `true` |
 | `channels` | CBS channel IDs to monitor | `919,4370-4383` |
 | `message_id_map` | Custom CBS message ID to state mapping (optional) | see below |
@@ -266,6 +266,12 @@ Setting `lte_host` activates bridge mode. The monitor will:
 - Re-verify the bridge before restarting qmicli after any exit
 
 > **Note:** The LTE device runs dropbear SSH which does not support SFTP. File transfers use SCP instead.
+
+> **Bridge mode device node:** In bridge mode, the QMI device is remote but qmicli still requires a local character device node at the configured `device` path. The systemd service creates this automatically via `ExecStartPre`:
+> ```ini
+> ExecStartPre=+/bin/sh -c 'test -e /dev/cdc-wdm0 || mknod -m 0666 /dev/cdc-wdm0 c 180 0'
+> ```
+> The `+` prefix runs the command as root. The device node persists until reboot.
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|

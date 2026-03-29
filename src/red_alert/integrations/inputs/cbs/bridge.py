@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import shutil
 
 import asyncssh
@@ -43,7 +42,7 @@ class CbsBridge:
         self,
         lte_host: str,
         bridge_port: int = DEFAULT_BRIDGE_PORT,
-        device: str = '/tmp/cdc-wdm0',
+        device: str = '/dev/cdc-wdm0',
         lte_device_ssh_key_path: str | None = None,
         ssh_username: str | None = None,
         socat_remote_binary: str | None = None,
@@ -248,23 +247,6 @@ class CbsBridge:
                 await self._local_socat_proc.wait()
         self._local_socat_proc = None
 
-    def _ensure_device_node(self) -> None:
-        """Ensure the QMI device path exists locally.
-
-        qmicli with --device-open-proxy still stats the device path before
-        connecting to the qmi-proxy abstract socket. In bridge mode the device
-        is remote, so there's no real device node. We create an empty file as
-        a placeholder. Use a writable path like /tmp/cdc-wdm0 (not /dev/)
-        since the service runs as a non-root user.
-        """
-        if not os.path.exists(self._device):
-            try:
-                os.makedirs(os.path.dirname(self._device), exist_ok=True)
-                open(self._device, 'w').close()
-                logger.info('Created QMI device placeholder at %s', self._device)
-            except OSError as e:
-                logger.warning('Could not create device placeholder at %s: %s', self._device, e)
-
     async def ensure_local_bridge(self) -> bool:
         """Start the local socat bridge if not running.
 
@@ -299,7 +281,6 @@ class CbsBridge:
                 return False
 
             logger.info('Local bridge started (socat PID %d)', self._local_socat_proc.pid)
-            self._ensure_device_node()
             return True
 
         except Exception as e:

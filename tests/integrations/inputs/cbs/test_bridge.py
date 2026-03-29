@@ -13,7 +13,7 @@ class TestCbsBridgeInit:
         bridge = CbsBridge(lte_host='192.168.1.100')
         assert bridge.lte_host == '192.168.1.100'
         assert bridge.bridge_port == DEFAULT_BRIDGE_PORT
-        assert bridge.device == '/tmp/cdc-wdm0'
+        assert bridge.device == '/dev/cdc-wdm0'
 
     def test_custom_values(self):
         bridge = CbsBridge(
