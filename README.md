@@ -25,9 +25,12 @@ red-alert is designed as a **multi-consumer library**:
 
 ```
 src/red_alert/
+  __main__.py              # Unified entry point (python -m red_alert)
   core/                    # Framework-agnostic core (no HA dependency)
+    orchestrator.py        # Orchestrator, AlertEvent, AlertInput/Output, MultiSourceStateTracker
     alert_processor.py     # Alert data processing
-    city_data.py           # CityDataManager (ICBS geographic data)
+    city_data.py           # CityDataManager (HFC districts + polygon centroids)
+    polygon_data.py        # HFC polygon boundaries for point-in-polygon lookups
     constants.py           # Icons, emojis, defaults
     history.py             # Alert history management
     i18n.py                # Internationalization (en/he)
@@ -37,35 +40,24 @@ src/red_alert/
     inputs/                # Alert sources (input data)
       hfc/                 # Home Front Command website API
         api_client.py      # HomeFrontCommandApiClient (httpx)
+        input.py           # HfcInput (orchestrator wrapper)
       cbs/                 # Cell Broadcast System via QMI modem
         parser.py          # CBS page/message parsing
         server.py          # CbsAlertMonitor + qmicli subprocess
+        bridge.py          # CbsBridge (socat bridge + auto SSH enable)
+        lte_ssh.py         # Enable SSH on LTE device via WebRTC
+        input.py           # CbsInput (orchestrator wrapper)
         __main__.py        # CLI entry point
     outputs/               # Alert consumers (output destinations)
       homeassistant/       # Home Assistant AppDaemon integration
-        app.py             # RedAlert(Hass) main class
-        file_manager.py    # CSV, TXT, JSON file management
-        geojson.py         # GeoJSON map data generation
       homebridge/          # Homebridge HTTP server integration
-        server.py          # AlertMonitor + HTTP endpoints
-        __main__.py        # CLI entry point
       unifi/               # UniFi AP LED control integration
-        led_controller.py  # LED control via aiounifi REST API
-        server.py          # UnifiAlertMonitor + poll loop
-        __main__.py        # CLI entry point
       hue/                 # Philips Hue light control integration
-        light_controller.py  # Hue Bridge REST API color control
-        server.py          # HueAlertMonitor + poll loop
-        __main__.py        # CLI entry point (with --register)
       telegram/            # Telegram Bot notification integration
-        bot.py             # Telegram Bot API client (httpx)
-        server.py          # TelegramAlertMonitor + poll loop
-        __main__.py        # CLI entry point
       homepod/             # Apple HomePod AirPlay audio integration
-        audio_controller.py  # HomepodController - pyatv AirPlay streaming
-        server.py          # HomepodAlertMonitor + poll loop
-        __main__.py        # CLI entry point (with --scan, --pair)
 ```
+
+Each output has `server.py` (standalone), `output.py` (orchestrator wrapper), and `__main__.py` (CLI).
 
 The **core** package has zero framework dependencies and can be used by any Python application. Integrations are divided into **inputs** (alert sources) and **outputs** (alert consumers).
 
@@ -128,6 +120,84 @@ See [HomePod setup guide](docs/integrations/outputs/HOMEPOD.md) for full instruc
 *   **Saves** alert history (TXT, CSV) and the last active state (JSON) for persistence across restarts (optional).
 *   **Generates** GeoJSON files for visualizing active and historical alert locations on the Home Assistant map (optional).
 *   **Provides** specific binary sensors to indicate if an alert affects *your configured cities* or if it's a special "Pre-Alert" type.
+
+---
+
+## Unified Service (Recommended)
+
+The unified orchestrator runs all configured inputs and outputs as concurrent tasks in a single process. This is the recommended way to deploy red-alert.
+
+### Quick Start
+
+```bash
+git clone https://github.com/seidnerj/red-alert.git
+cd red-alert
+uv sync --group dev --extra unifi --extra cbs
+```
+
+### Configuration
+
+Create a `config.json` with your inputs and outputs:
+
+```json
+{
+    "inputs": {
+        "hfc": { "poll_interval": 1 },
+        "cbs": {
+            "enabled": true,
+            "qmicli_path": "/usr/local/bin/qmicli-cbs",
+            "device": "/dev/cdc-wdm0",
+            "lte_host": "172.16.1.221",
+            "lte_device_ssh_key_path": "~/.ssh/id_ed25519_lte",
+            "ssh_username": "ISey",
+            "lte_device_mac": "aa:bb:cc:dd:ee:ff",
+            "unifi": {
+                "host": "172.16.1.1",
+                "username": "admin",
+                "password": "...",
+                "totp_secret": "..."
+            }
+        }
+    },
+    "outputs": {
+        "unifi": {
+            "enabled": true,
+            "host": "172.16.1.1",
+            "username": "admin",
+            "password": "...",
+            "totp_secret": "...",
+            "backend": "pyunifiapi",
+            "device_macs": ["aa:bb:cc:dd:ee:ff"],
+            "areas_of_interest": ["כפר סבא"]
+        }
+    }
+}
+```
+
+### Run
+
+```bash
+python -m red_alert --config config.json
+```
+
+### Deploy as systemd Service
+
+```bash
+sudo cp systemd/redalert.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable redalert
+sudo systemctl start redalert
+```
+
+The service file includes `ExecStartPre` to create the QMI device node required for CBS bridge mode. See [`systemd/redalert.service`](systemd/redalert.service).
+
+### Auto-Recovery
+
+The orchestrator handles failures gracefully:
+- **Output auth failures** (TOTP timing, rate limiting) - retries with exponential backoff
+- **Input failures** (CBS bridge down) - retries independently, other inputs continue
+- **LTE device reboots** - auto-enables SSH via the UniFi controller's WebRTC debug terminal
+- **Stale QMI clients** - kills socat/qmicli/qmi-proxy on the LTE device before reconnecting
 
 ---
 
