@@ -162,7 +162,7 @@ python -m red_alert.integrations.inputs.cbs --config cbs-config.json
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `qmicli_path` | Path to the patched qmicli binary | `/tmp/qmicli` |
-| `device` | QMI device path | `/dev/cdc-wdm0` |
+| `device` | QMI device path (use `/tmp/cdc-wdm0` in bridge mode - auto-created as placeholder) | `/tmp/cdc-wdm0` |
 | `device_open_proxy` | Use `--device-open-proxy` for shared modem access | `true` |
 | `channels` | CBS channel IDs to monitor | `919,4370-4383` |
 | `message_id_map` | Custom CBS message ID to state mapping (optional) | see below |
@@ -239,7 +239,7 @@ Or re-run the full setup (idempotent - skips already-completed steps).
 ```json
 {
     "qmicli_path": "/usr/local/bin/qmicli-cbs",
-    "device": "/dev/cdc-wdm0",
+    "device": "/tmp/cdc-wdm0",
     "device_open_proxy": true,
     "channels": "919,4370-4383",
     "lte_host": "<lte-device-ip>",

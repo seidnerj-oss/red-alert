@@ -98,7 +98,7 @@ class CbsInput(AlertInput):
 
         self._monitor = CbsAlertMonitor(
             qmicli_path=cfg.get('qmicli_path', '/tmp/qmicli'),
-            device=cfg.get('device', '/dev/cdc-wdm0'),
+            device=cfg.get('device', '/tmp/cdc-wdm0'),
             device_open_proxy=cfg.get('device_open_proxy', True),
             message_id_map=message_id_map,
             on_state_change=on_state_change,
@@ -128,7 +128,7 @@ class CbsInput(AlertInput):
 
         logger.info(
             'CBS input running: device=%s, areas=%s, bridge=%s',
-            cfg.get('device', '/dev/cdc-wdm0'),
+            cfg.get('device', '/tmp/cdc-wdm0'),
             self._areas or 'all',
             f'{bridge.lte_host}:{bridge.bridge_port}' if bridge else 'disabled',
         )

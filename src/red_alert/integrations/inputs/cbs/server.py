@@ -47,7 +47,7 @@ DEFAULT_MESSAGE_ID_MAP: dict[int, AlertState] = {
 
 DEFAULT_CONFIG: dict = {
     'qmicli_path': '/tmp/qmicli',
-    'device': '/dev/cdc-wdm0',
+    'device': '/tmp/cdc-wdm0',
     'device_open_proxy': True,
     'channels': '919,4370-4383',
     'message_id_map': None,
