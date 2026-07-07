@@ -95,7 +95,7 @@ data/                # city_data.json (ICBS geographic data), cities.json
 
 ## CRITICAL: FORMATTING RULES
 
-- **NEVER use em dashes anywhere** - not in console output, code, commit messages, PR descriptions, comments, user messages, API calls, or any other output
+- **NEVER use em dashes or en dashes anywhere** - not in console output, code, commit messages, PR descriptions, comments, user messages, API calls, or any other output
 - **ALWAYS use regular hyphens/dashes (-) instead of em dashes**
 
 ## CRITICAL: TESTING REQUIREMENTS
