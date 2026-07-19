@@ -81,58 +81,70 @@ class UnifiOutput(AlertOutput):
         if not first_connection.get('username') or not first_connection.get('password'):
             raise ValueError('UniFi controller credentials required')
 
+        # The orchestrator retries start() on the same instance after a failure,
+        # so reset per-start state and release everything created here if any
+        # step raises - otherwise controllers/sessions accumulate across retries
+        # and leak sockets until fd exhaustion.
+        self._led_controllers = []
+        self._monitors = []
+        self._all_raw_monitors = []
+
         self._http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
         self._api_client = HomeFrontCommandApiClient(self._http_client, API_URLS, logger)
 
-        total_monitor_cfgs = sum(len(mon_cfgs) for _, mon_cfgs in controller_groups)
-        multi_monitor = total_monitor_cfgs > 1
+        try:
+            total_monitor_cfgs = sum(len(mon_cfgs) for _, mon_cfgs in controller_groups)
+            multi_monitor = total_monitor_cfgs > 1
 
-        for connection, monitor_cfgs in controller_groups:
-            ctrl_macs: list[str] = []
-            for mon_cfg in monitor_cfgs:
-                ctrl_macs.extend(mon_cfg.get('device_macs', []))
+            for connection, monitor_cfgs in controller_groups:
+                ctrl_macs: list[str] = []
+                for mon_cfg in monitor_cfgs:
+                    ctrl_macs.extend(mon_cfg.get('device_macs', []))
 
-            if not ctrl_macs:
-                logger.warning('Controller has no device MACs, skipping')
-                continue
+                if not ctrl_macs:
+                    logger.warning('Controller has no device MACs, skipping')
+                    continue
 
-            seen: set[str] = set()
-            for mac in ctrl_macs:
-                seen.add(mac.lower())
+                seen: set[str] = set()
+                for mac in ctrl_macs:
+                    seen.add(mac.lower())
 
-            led_controller = UnifiLedController(
-                host=connection.get('host', ''),
-                username=connection['username'],
-                password=connection['password'],
-                device_macs=list(seen),
-                port=connection.get('port', 443),
-                site=connection.get('site'),
-                totp_secret=connection.get('totp_secret'),
-                backend=connection.get('backend'),
-                device_id=connection.get('device_id'),
-            )
-            self._led_controllers.append(led_controller)
-
-            raw_monitors = _build_monitors_for_controller(
-                connection,
-                monitor_cfgs,
-                self._api_client,
-                led_controller,
-                multi_monitor,
-            )
-            self._all_raw_monitors.extend(raw_monitors)
-
-            for i, (mon_cfg, raw_mon) in enumerate(zip(monitor_cfgs, raw_monitors)):
-                ms_monitor = _MultiSourceMonitor(
-                    monitor=raw_mon,
-                    areas_of_interest=mon_cfg.get('areas_of_interest'),
-                    hold_seconds=mon_cfg.get('hold_seconds'),
-                    name=mon_cfg.get('name', f'monitor-{i}'),
+                led_controller = UnifiLedController(
+                    host=connection.get('host', ''),
+                    username=connection['username'],
+                    password=connection['password'],
+                    device_macs=list(seen),
+                    port=connection.get('port', 443),
+                    site=connection.get('site'),
+                    totp_secret=connection.get('totp_secret'),
+                    backend=connection.get('backend'),
+                    device_id=connection.get('device_id'),
                 )
-                self._monitors.append(ms_monitor)
+                self._led_controllers.append(led_controller)
 
-        for ctrl in self._led_controllers:
-            await ctrl.connect()
+                raw_monitors = _build_monitors_for_controller(
+                    connection,
+                    monitor_cfgs,
+                    self._api_client,
+                    led_controller,
+                    multi_monitor,
+                )
+                self._all_raw_monitors.extend(raw_monitors)
+
+                for i, (mon_cfg, raw_mon) in enumerate(zip(monitor_cfgs, raw_monitors)):
+                    ms_monitor = _MultiSourceMonitor(
+                        monitor=raw_mon,
+                        areas_of_interest=mon_cfg.get('areas_of_interest'),
+                        hold_seconds=mon_cfg.get('hold_seconds'),
+                        name=mon_cfg.get('name', f'monitor-{i}'),
+                    )
+                    self._monitors.append(ms_monitor)
+
+            for ctrl in self._led_controllers:
+                await ctrl.connect()
+        except BaseException:
+            await self._close_resources()
+            raise
 
         self._reconcile_task = asyncio.create_task(self._reconcile_loop())
         self._metadata_task = asyncio.create_task(self._metadata_loop())
@@ -164,10 +176,24 @@ class UnifiOutput(AlertOutput):
                     await task
                 except asyncio.CancelledError:
                     pass
+        await self._close_resources()
+
+    async def _close_resources(self) -> None:
+        """Close all controllers and the HTTP client, resetting per-start state."""
         for ctrl in self._led_controllers:
-            await ctrl.close()
+            try:
+                await ctrl.close()
+            except Exception:
+                logger.debug('Error closing LED controller', exc_info=True)
+        self._led_controllers = []
+        self._monitors = []
+        self._all_raw_monitors = []
         if self._http_client:
-            await self._http_client.aclose()
+            try:
+                await self._http_client.aclose()
+            except Exception:
+                logger.debug('Error closing HTTP client', exc_info=True)
+            self._http_client = None
 
     async def _reconcile_loop(self) -> None:
         while True:

@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -108,3 +108,111 @@ class TestUnifiOutput:
     async def test_stop_without_start(self):
         out = UnifiOutput(config={})
         await out.stop()
+
+
+class TestUnifiOutputStartFailure:
+    """Failed start() must clean up after itself so the orchestrator retry loop can call it again safely."""
+
+    def _config(self):
+        return {
+            'host': '172.16.1.1',
+            'username': 'user',
+            'password': 'pass',
+            'backend': 'pyunifiapi',
+            'device_macs': ['aa:bb:cc:dd:ee:ff'],
+        }
+
+    def _multi_config(self):
+        return {
+            'username': 'user',
+            'password': 'pass',
+            'backend': 'pyunifiapi',
+            'controllers': [
+                {'host': '172.16.1.1', 'monitors': [{'device_macs': ['aa:bb:cc:dd:ee:01']}]},
+                {'host': '172.16.1.2', 'monitors': [{'device_macs': ['aa:bb:cc:dd:ee:02']}]},
+            ],
+        }
+
+    def _patch_led_controller(self, instances, connect_side_effect=None):
+        def make_ctrl(*args, **kwargs):
+            ctrl = AsyncMock()
+            if connect_side_effect is not None:
+                ctrl.connect = AsyncMock(side_effect=connect_side_effect)
+            instances.append(ctrl)
+            return ctrl
+
+        return patch('red_alert.integrations.outputs.unifi.output.UnifiLedController', side_effect=make_ctrl)
+
+    @pytest.mark.asyncio
+    async def test_failed_start_does_not_accumulate_state(self):
+        out = UnifiOutput(config=self._config())
+        instances = []
+
+        with self._patch_led_controller(instances, connect_side_effect=ConnectionError('boom')):
+            for _ in range(2):
+                with pytest.raises(ConnectionError):
+                    await out.start()
+
+        assert out._led_controllers == []
+        assert out._monitors == []
+        assert out._all_raw_monitors == []
+        for ctrl in instances:
+            assert ctrl.connect.await_count <= 1
+
+    @pytest.mark.asyncio
+    async def test_failed_start_closes_resources(self):
+        out = UnifiOutput(config=self._config())
+        instances = []
+
+        with self._patch_led_controller(instances, connect_side_effect=ConnectionError('boom')):
+            with pytest.raises(ConnectionError):
+                await out.start()
+
+        assert out._http_client is None
+        instances[0].close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_partial_connect_failure_closes_connected_controllers(self):
+        out = UnifiOutput(config=self._multi_config())
+        instances = []
+
+        def make_ctrl(*args, **kwargs):
+            ctrl = AsyncMock()
+            if len(instances) == 1:
+                ctrl.connect = AsyncMock(side_effect=ConnectionError('boom'))
+            instances.append(ctrl)
+            return ctrl
+
+        with patch('red_alert.integrations.outputs.unifi.output.UnifiLedController', side_effect=make_ctrl):
+            with pytest.raises(ConnectionError):
+                await out.start()
+
+        assert len(instances) == 2
+        for ctrl in instances:
+            ctrl.close.assert_awaited_once()
+        assert out._led_controllers == []
+        assert out._http_client is None
+
+    @pytest.mark.asyncio
+    async def test_retry_after_failure_connects_single_controller(self):
+        out = UnifiOutput(config=self._config())
+        instances = []
+        fail = {'value': True}
+
+        def make_ctrl(*args, **kwargs):
+            ctrl = AsyncMock()
+            if fail['value']:
+                ctrl.connect = AsyncMock(side_effect=ConnectionError('boom'))
+            instances.append(ctrl)
+            return ctrl
+
+        with patch('red_alert.integrations.outputs.unifi.output.UnifiLedController', side_effect=make_ctrl):
+            with pytest.raises(ConnectionError):
+                await out.start()
+            fail['value'] = False
+            await out.start()
+
+            assert len(out._led_controllers) == 1
+            assert sum(ctrl.connect.await_count for ctrl in instances) == 2
+
+            await out.stop()
