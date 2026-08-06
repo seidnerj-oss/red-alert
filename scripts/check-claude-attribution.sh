@@ -26,7 +26,7 @@ if echo "$commit_msg" | grep -qi "Co-Authored-By: Claude"; then
 fi
 
 # Check for Claude branding in commit message
-if echo "$commit_msg" | grep -v "CLAUDE.md" | grep -v "\.claude" | grep -qi "generated with.*claude\|claude code"; then
+if echo "$commit_msg" | grep -v "CLAUDE.md" | grep -v "\.claude" | grep -qi "generated with.*claude\|🤖.*claude"; then
     echo ""
     echo "ERROR: Commit message contains Claude branding!"
     echo ""
