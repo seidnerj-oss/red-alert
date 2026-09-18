@@ -73,6 +73,12 @@ class CbsBridge:
         return self._device
 
     def _build_ssh_options(self) -> dict:
+        # known_hosts is None deliberately, not by oversight: a UniFi firmware upgrade
+        # regenerates the device's dropbear host keys, so a pinned key would start
+        # failing after an upgrade - including on the WebRTC bootstrap in _ssh_run that
+        # exists to repair access, which would leave CBS silently down until someone
+        # re-trusted the key by hand. Verifying the key would need automatic re-trust
+        # gated on a successful controller-side bootstrap.
         opts: dict = {
             'host': self._lte_host,
             'username': self._ssh_username,
