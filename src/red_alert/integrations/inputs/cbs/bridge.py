@@ -137,13 +137,40 @@ class CbsBridge:
             return False
 
     async def check_lte_bridge(self) -> bool:
-        """Check if socat bridge is running on the LTE device."""
+        """Check that the socat bridge is accepting connections on the LTE device.
+
+        Verifies a listening socket on the bridge port rather than pattern-matching
+        ``ps``. socat runs with ``fork``, so every accepted connection becomes a child
+        process with an identical command line - a ``ps`` match therefore stays true
+        even when the listener itself has died and only a connected child remains,
+        reporting a healthy bridge that can no longer accept anything.
+
+        Falls back to the ``ps`` check on devices that have no netstat.
+        """
         try:
-            result = await self._ssh_run('ps w | grep "socat TCP-LISTEN" | grep -v grep')
-            return result.exit_status == 0 and bool(result.stdout and result.stdout.strip())
+            result = await self._ssh_run(
+                f'netstat -tnl 2>/dev/null | grep -E ":{self._bridge_port}[[:space:]]" | grep -q LISTEN && echo LISTENING'
+                ' || command -v netstat >/dev/null 2>&1 || echo NO_NETSTAT'
+            )
+            raw = result.stdout or ''
+            stdout = raw.decode(errors='replace') if isinstance(raw, bytes) else raw
+            if 'LISTENING' in stdout:
+                return True
+            if 'NO_NETSTAT' in stdout:
+                logger.debug('netstat unavailable on LTE device, falling back to process check')
+                return await self._check_lte_bridge_by_ps()
+            return False
         except Exception as e:
             logger.error('Failed to check LTE bridge status: %s', e)
             return False
+
+    async def _check_lte_bridge_by_ps(self) -> bool:
+        """Fallback bridge check for devices without netstat.
+
+        Cannot distinguish a listener from a forked child - see ``check_lte_bridge``.
+        """
+        result = await self._ssh_run('ps w | grep "socat TCP-LISTEN" | grep -v grep')
+        return result.exit_status == 0 and bool(result.stdout and result.stdout.strip())
 
     async def _deploy_socat_to_lte(self) -> bool:
         """Deploy socat binary to the LTE device via SSH.

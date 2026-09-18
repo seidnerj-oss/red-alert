@@ -31,18 +31,33 @@ class TestCbsBridgeInit:
 
 class TestCheckLteBridge:
     @pytest.mark.asyncio
-    async def test_returns_true_when_socat_running(self):
+    async def test_returns_true_when_port_is_listening(self):
         bridge = CbsBridge(lte_host='192.168.1.100')
 
         mock_result = MagicMock()
         mock_result.exit_status = 0
-        mock_result.stdout = '12345 root  /tmp/socat TCP-LISTEN:18222,reuseaddr,fork ABSTRACT-CONNECT:qmi-proxy'
+        mock_result.stdout = 'LISTENING\n'
 
-        with patch.object(bridge, '_ssh_run', new_callable=AsyncMock, return_value=mock_result):
+        with patch.object(bridge, '_ssh_run', new_callable=AsyncMock, return_value=mock_result) as mock_ssh:
             assert await bridge.check_lte_bridge() is True
 
+        assert ':18222' in mock_ssh.call_args[0][0]
+
     @pytest.mark.asyncio
-    async def test_returns_false_when_socat_not_running(self):
+    async def test_checks_the_configured_bridge_port(self):
+        bridge = CbsBridge(lte_host='192.168.1.100', bridge_port=9999)
+
+        mock_result = MagicMock()
+        mock_result.exit_status = 0
+        mock_result.stdout = 'LISTENING\n'
+
+        with patch.object(bridge, '_ssh_run', new_callable=AsyncMock, return_value=mock_result) as mock_ssh:
+            assert await bridge.check_lte_bridge() is True
+
+        assert ':9999' in mock_ssh.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_nothing_is_listening(self):
         bridge = CbsBridge(lte_host='192.168.1.100')
 
         mock_result = MagicMock()
@@ -50,6 +65,54 @@ class TestCheckLteBridge:
         mock_result.stdout = ''
 
         with patch.object(bridge, '_ssh_run', new_callable=AsyncMock, return_value=mock_result):
+            assert await bridge.check_lte_bridge() is False
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_only_a_forked_child_remains(self):
+        """A dead listener with a live connected child must not read as healthy.
+
+        The old ps-based check matched the child's identical command line and
+        reported a healthy bridge; nothing is listening in that state.
+        """
+        bridge = CbsBridge(lte_host='192.168.1.100')
+
+        mock_result = MagicMock()
+        mock_result.exit_status = 1
+        mock_result.stdout = '19269 ISey  /tmp/socat TCP-LISTEN:18222,reuseaddr,fork ABSTRACT-CONNECT:qmi-proxy'
+
+        with patch.object(bridge, '_ssh_run', new_callable=AsyncMock, return_value=mock_result):
+            assert await bridge.check_lte_bridge() is False
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_process_check_without_netstat(self):
+        bridge = CbsBridge(lte_host='192.168.1.100')
+
+        no_netstat = MagicMock()
+        no_netstat.exit_status = 0
+        no_netstat.stdout = 'NO_NETSTAT\n'
+
+        ps_hit = MagicMock()
+        ps_hit.exit_status = 0
+        ps_hit.stdout = '12345 root  /tmp/socat TCP-LISTEN:18222,reuseaddr,fork ABSTRACT-CONNECT:qmi-proxy'
+
+        with patch.object(bridge, '_ssh_run', new_callable=AsyncMock, side_effect=[no_netstat, ps_hit]) as mock_ssh:
+            assert await bridge.check_lte_bridge() is True
+
+        assert 'ps w' in mock_ssh.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_fallback_returns_false_when_no_socat_process(self):
+        bridge = CbsBridge(lte_host='192.168.1.100')
+
+        no_netstat = MagicMock()
+        no_netstat.exit_status = 0
+        no_netstat.stdout = 'NO_NETSTAT\n'
+
+        ps_miss = MagicMock()
+        ps_miss.exit_status = 1
+        ps_miss.stdout = ''
+
+        with patch.object(bridge, '_ssh_run', new_callable=AsyncMock, side_effect=[no_netstat, ps_miss]):
             assert await bridge.check_lte_bridge() is False
 
     @pytest.mark.asyncio
