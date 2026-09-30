@@ -25,6 +25,19 @@ if echo "$commit_msg" | grep -qi "Co-Authored-By: Claude"; then
     exit 1
 fi
 
+# Check for Claude Code session trailers and session URLs
+if echo "$commit_msg" | grep -qiE "Claude-Session:|claude\.ai/code"; then
+    echo ""
+    echo "ERROR: Commit message contains a Claude session reference!"
+    echo ""
+    echo "The commit message includes a 'Claude-Session:' trailer or a claude.ai/code URL which violates project policy."
+    echo "See CLAUDE.md section 'CRITICAL: COMMIT AND PUSH RULES' for details."
+    echo ""
+    echo "Please remove the session reference and try again."
+    echo ""
+    exit 1
+fi
+
 # Check for Claude branding in commit message
 if echo "$commit_msg" | grep -v "CLAUDE.md" | grep -v "\.claude" | grep -qi "generated with.*claude\|🤖.*claude"; then
     echo ""
