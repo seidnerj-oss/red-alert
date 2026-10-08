@@ -84,6 +84,13 @@ typeCheckingMode = "standard"
 # Python 3.14 (PyO3 doesn't support it yet). Exclude it so basedpyright
 # doesn't fail on unresolvable imports. Remove once PyO3 adds 3.14 support.
 exclude = ["src/red_alert/integrations/outputs/homeassistant"]
+# pyunifiapi is a private package installed locally (see the unifi extra), so it
+# cannot be resolved in a fresh checkout. Downgrade unresolved imports to
+# warnings only in the CBS input package, the one place that imports it at
+# module scope. Remove once pyunifiapi is published and listed as a dependency.
+executionEnvironments = [
+    { root = "src/red_alert/integrations/inputs/cbs", extraPaths = ["src"], reportMissingImports = "warning" },
+]
 
 [tool.uv]
 required-version = ">=0.10"

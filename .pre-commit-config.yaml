@@ -92,7 +92,7 @@ repos:
       - id: type-checking-pyright
         name: type checking (basedpyright)
         description: Run basedpyright on the codebase using uv
-        entry: bash -c 'uv run basedpyright src/'
+        entry: bash -c 'uv run --extra cbs basedpyright src/'
         language: system
         types: [python]
         pass_filenames: false
