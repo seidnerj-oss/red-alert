@@ -99,17 +99,6 @@ repos:
         always_run: true
 
   # Local hooks
-  - repo: local
-    hooks:
-      - id: check-claude-attribution
-        name: check commit message for Claude attribution
-        description: Prevent commits with Claude attribution
-        entry: bash scripts/check-claude-attribution.sh
-        language: system
-        stages: [commit-msg]
-        always_run: true
-        pass_filenames: true
-
 # Global settings
 default_stages: [pre-commit]
 fail_fast: false
