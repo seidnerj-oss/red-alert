@@ -367,7 +367,7 @@ The integration supports two controller libraries:
 | Backend | Library | 2FA | HTTP Client | Notes |
 |---------|---------|-----|-------------|-------|
 | `aiounifi` (default) | [aiounifi](https://github.com/Kane610/aiounifi) | Monkey-patch | aiohttp | Same library used by Home Assistant's UniFi integration |
-| `pyunifiapi` | [pyunifiapi](https://github.com/seidnerj/pyunifiapi) | Native | httpx | Also supports WebRTC SSH, cloud API |
+| `pyunifiapi` | [pyunifiapi](https://github.com/seidnerj-oss/pyunifiapi) | Native | httpx | Also supports WebRTC SSH, cloud API |
 
 To switch backends, add `"backend": "pyunifiapi"` to your config:
 
