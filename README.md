@@ -130,7 +130,7 @@ The orchestrator runs all configured inputs and outputs as concurrent tasks in a
 ### Quick Start
 
 ```bash
-git clone https://github.com/seidnerj/red-alert.git
+git clone https://github.com/seidnerj-oss/red-alert.git
 cd red-alert
 uv sync --group dev --extra unifi --extra cbs
 ```
@@ -206,7 +206,7 @@ The orchestrator handles failures gracefully:
 ### HACS Download
 1. In Home Assistant: Navigate to `HACS > Automation`
    * If this option is not available, go to `Settings > Integrations > HACS > Configure` and enable `AppDaemon apps discovery & tracking`. After enabling, return to the main HACS screen and select `Automation`
-2. Navigate to the `Custom Repositories` page and add the following repository as `Appdaemon`: `https://github.com/seidnerj/red-alert/`
+2. Navigate to the `Custom Repositories` page and add the following repository as `Appdaemon`: `https://github.com/seidnerj-oss/red-alert/`
 3. Return to the `HACS Automation` screen, search for `Red Alert`, click on `Download`
 
 ### Manual Download

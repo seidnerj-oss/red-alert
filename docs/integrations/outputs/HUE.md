@@ -24,7 +24,7 @@ red-alert can control Philips Hue lights based on alert state. Lights change col
 ### 1. Install red-alert
 
 ```bash
-git clone https://github.com/seidnerj/red-alert.git
+git clone https://github.com/seidnerj-oss/red-alert.git
 cd red-alert
 
 pip install httpx

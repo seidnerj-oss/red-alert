@@ -118,7 +118,7 @@ The HFC area groupings (33 areas with names like "דן", "חוף הכרמל") di
 
 The 46 alert city names missing from ICBS are farms (חוות), merged alert zones (e.g., "דור, נחשולים"), and newer settlements. GetDistricts is a perfect superset of all city names that appear in live alerts.
 
-**Coordinate gap:** GetDistricts does not include lat/long coordinates. The ICBS file provides coordinates for ~1,330 of 1,486 GetDistricts cities (matched by standardized name). The remaining 156 cities have no coordinates and are skipped by the GeoJSON map feature. See [GitHub issue #3](https://github.com/seidnerj/red-alert/issues/3) for plans to close this gap.
+**Coordinate gap:** GetDistricts does not include lat/long coordinates. The ICBS file provides coordinates for ~1,330 of 1,486 GetDistricts cities (matched by standardized name). The remaining 156 cities have no coordinates and are skipped by the GeoJSON map feature. See [GitHub issue #3](https://github.com/seidnerj-oss/red-alert/issues/3) for plans to close this gap.
 
 #### 24-Hour History (unreliable, used as fallback only)
 

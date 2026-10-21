@@ -15,7 +15,7 @@ red-alert includes a lightweight HTTP server that exposes alert state for Homebr
 
 ```bash
 # Clone the repository
-git clone https://github.com/seidnerj/red-alert.git
+git clone https://github.com/seidnerj-oss/red-alert.git
 cd red-alert
 
 # Install dependencies (using pip or uv)

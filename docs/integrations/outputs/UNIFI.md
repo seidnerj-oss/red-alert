@@ -28,7 +28,7 @@ Developed and tested with **U6 Mesh** (U6M) access points, but should work with 
 ### 1. Install red-alert with UniFi Support
 
 ```bash
-git clone https://github.com/seidnerj/red-alert.git
+git clone https://github.com/seidnerj-oss/red-alert.git
 cd red-alert
 pip install ".[unifi]"
 ```

@@ -44,7 +44,7 @@ Look for `"chat":{"id":123456789}` in the response.
 ### 3. Install red-alert
 
 ```bash
-git clone https://github.com/seidnerj/red-alert.git
+git clone https://github.com/seidnerj-oss/red-alert.git
 cd red-alert
 
 pip install httpx

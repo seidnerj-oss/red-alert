@@ -29,7 +29,7 @@ red-alert can play audio on Apple HomePod devices via AirPlay when alert state c
 ### 1. Install red-alert with HomePod Support
 
 ```bash
-git clone https://github.com/seidnerj/red-alert.git
+git clone https://github.com/seidnerj-oss/red-alert.git
 cd red-alert
 pip install ".[homepod]"
 ```
