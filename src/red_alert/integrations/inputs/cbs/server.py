@@ -9,6 +9,7 @@ Usage:
 """
 
 import asyncio
+import contextlib
 import logging
 import time
 
@@ -69,6 +70,17 @@ DEFAULT_CONFIG: dict = {
     'history_max_age': 3600,
 }
 
+# Consecutive failed bridge health checks before the monitor is restarted to rebuild
+# the bridge. One failure is not enough: check_lte_bridge reports any SSH error as
+# "down", so a momentary network blip would otherwise cost a full teardown (and the
+# CBS blind spot while it runs). Two in a row means the link has been bad across a
+# whole health_check_interval, which a blip does not survive.
+HEALTH_CHECK_FAILURES_BEFORE_REBUILD = 2
+
+# Seconds qmicli gets to exit after SIGTERM before it is killed. On a dead link it may
+# block trying to release its WMS client through the proxy.
+QMICLI_STOP_TIMEOUT = 10.0
+
 
 class CbsAlertMonitor:
     """Monitors CBS messages from qmicli and tracks alert state."""
@@ -98,6 +110,7 @@ class CbsAlertMonitor:
         self._latitude = latitude
         self._longitude = longitude
         self._areas_of_interest = areas_of_interest or []
+        self._proc: asyncio.subprocess.Process | None = None
 
     @property
     def alert_state(self) -> AlertState:
@@ -162,6 +175,7 @@ class CbsAlertMonitor:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        self._proc = proc
 
         try:
             if proc.stdout:
@@ -169,8 +183,12 @@ class CbsAlertMonitor:
                     line = raw_line.decode('utf-8', errors='replace')
                     await self._process_line(line)
         finally:
-            proc.terminate()
+            if proc.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.terminate()
             await proc.wait()
+            if self._proc is proc:
+                self._proc = None
 
         returncode = proc.returncode
         if returncode and proc.stderr:
@@ -178,6 +196,27 @@ class CbsAlertMonitor:
             logger.error('qmicli exited with code %d: %s', returncode, stderr.decode(errors='replace').strip())
 
         return returncode
+
+    async def stop_subprocess(self, timeout: float) -> None:
+        """Stop the running qmicli process so ``run_subprocess`` returns.
+
+        qmicli does not notice when the link under it dies (the TCP connection to a
+        rebooted device stays half-open), so it can sit forever producing no output.
+        SIGTERM first, SIGKILL if it has not exited after ``timeout`` seconds.
+        No-op if no process is running.
+        """
+        proc = self._proc
+        if proc is None or proc.returncode is not None:
+            return
+        with contextlib.suppress(ProcessLookupError):
+            proc.terminate()
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=timeout)
+        except TimeoutError:
+            logger.warning('qmicli did not exit %.0fs after SIGTERM, killing it', timeout)
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            await proc.wait()
 
 
 async def _resolve_location(cfg: dict) -> list[str]:
@@ -300,18 +339,45 @@ def _create_bridge(cfg: dict):
     )
 
 
-async def _periodic_health_check(bridge, interval: int):
-    """Periodically check bridge health and log status."""
+async def _periodic_health_check(bridge, monitor: CbsAlertMonitor, interval: int, failure_threshold: int, stop_timeout: float):
+    """Periodically check bridge health; rebuild the bridge after repeated failures.
+
+    After ``failure_threshold`` consecutive checks with either side down, marks the
+    bridge for a fresh start and stops the qmicli monitor. The reconnect loop in
+    ``run_monitor`` then runs ``ensure_bridge`` (full teardown and rebuild) and
+    ``configure_cbs`` before starting qmicli again - the same path as a service
+    restart. Without this, a qmicli attached to a dead link never exits, so the
+    reconnect loop never runs.
+
+    A check that raises is logged and neither counts as a failure nor resets the count.
+    """
+    failures = 0
     while True:
         await asyncio.sleep(interval)
         try:
             status = await bridge.health_check()
-            if status['lte_bridge'] and status['local_bridge']:
-                logger.info('Bridge health check: OK')
-            else:
-                logger.warning('Bridge health check: LTE=%s, local=%s', status['lte_bridge'], status['local_bridge'])
         except Exception as e:
             logger.warning('Bridge health check error: %s', e)
+            continue
+
+        if status['lte_bridge'] and status['local_bridge']:
+            failures = 0
+            logger.info('Bridge health check: OK')
+            continue
+
+        failures += 1
+        logger.warning(
+            'Bridge health check: LTE=%s, local=%s (%d/%d consecutive failures)',
+            status['lte_bridge'],
+            status['local_bridge'],
+            failures,
+            failure_threshold,
+        )
+        if failures >= failure_threshold:
+            logger.warning('Bridge down for %d consecutive health checks - restarting qmicli to rebuild the bridge', failures)
+            failures = 0
+            bridge.request_fresh_start()
+            await monitor.stop_subprocess(stop_timeout)
 
 
 async def run_monitor(config: dict):
@@ -402,7 +468,15 @@ async def run_monitor(config: dict):
                     if not health_check_task:
                         health_interval = cfg.get('health_check_interval', 300)
                         if health_interval > 0:
-                            health_check_task = asyncio.create_task(_periodic_health_check(bridge, health_interval))
+                            health_check_task = asyncio.create_task(
+                                _periodic_health_check(
+                                    bridge,
+                                    monitor,
+                                    health_interval,
+                                    HEALTH_CHECK_FAILURES_BEFORE_REBUILD,
+                                    QMICLI_STOP_TIMEOUT,
+                                )
+                            )
 
                 returncode = await monitor.run_subprocess()
                 if returncode == 0:

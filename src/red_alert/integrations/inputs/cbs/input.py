@@ -17,6 +17,8 @@ from red_alert.core.orchestrator import AlertEvent, AlertInput
 from red_alert.core.state import AlertState
 from red_alert.integrations.inputs.cbs.parser import CbsMessage
 from red_alert.integrations.inputs.cbs.server import (
+    HEALTH_CHECK_FAILURES_BEFORE_REBUILD,
+    QMICLI_STOP_TIMEOUT,
     CbsAlertMonitor,
     _resolve_location,
     _create_bridge,
@@ -151,7 +153,17 @@ class CbsInput(AlertInput):
                         if not health_check_started:
                             health_interval = cfg.get('health_check_interval', 300)
                             if health_interval > 0:
-                                self._background_tasks.append(asyncio.create_task(_periodic_health_check(bridge, health_interval)))
+                                self._background_tasks.append(
+                                    asyncio.create_task(
+                                        _periodic_health_check(
+                                            bridge,
+                                            self._monitor,
+                                            health_interval,
+                                            HEALTH_CHECK_FAILURES_BEFORE_REBUILD,
+                                            QMICLI_STOP_TIMEOUT,
+                                        )
+                                    )
+                                )
                                 health_check_started = True
 
                     returncode = await self._monitor.run_subprocess()

@@ -357,6 +357,60 @@ class TestEnsureBridge:
             assert await bridge.ensure_bridge() is False
 
 
+class TestRequestFreshStart:
+    """request_fresh_start makes an established bridge rebuild from scratch, as on startup."""
+
+    @pytest.mark.asyncio
+    async def test_lte_side_is_torn_down_even_when_listener_looks_healthy(self):
+        bridge = CbsBridge(lte_host='192.168.1.100')
+        bridge._fresh_start = False
+        bridge.request_fresh_start()
+
+        exists_result = MagicMock()
+        exists_result.stdout = 'exists'
+
+        with (
+            patch.object(bridge, '_kill_lte_socat', new_callable=AsyncMock) as mock_kill,
+            patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=True),
+            patch.object(bridge, '_ssh_run', new_callable=AsyncMock, side_effect=[exists_result, MagicMock()]),
+        ):
+            assert await bridge.ensure_lte_bridge() is True
+            mock_kill.assert_called_once()
+        assert bridge._fresh_start is False
+
+    @pytest.mark.asyncio
+    async def test_redeploys_socat_after_device_reboot(self):
+        bridge = CbsBridge(lte_host='192.168.1.100', socat_remote_binary='/opt/socat-mips')
+        bridge._fresh_start = False
+        bridge.request_fresh_start()
+
+        exists_result = MagicMock()
+        exists_result.stdout = 'exists'
+
+        with (
+            patch.object(bridge, '_kill_lte_socat', new_callable=AsyncMock),
+            patch.object(bridge, '_deploy_socat_to_lte', new_callable=AsyncMock, return_value=True) as mock_deploy,
+            patch.object(bridge, 'check_lte_bridge', new_callable=AsyncMock, return_value=True),
+            patch.object(bridge, '_ssh_run', new_callable=AsyncMock, side_effect=[exists_result, MagicMock()]),
+        ):
+            assert await bridge.ensure_lte_bridge() is True
+            mock_deploy.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_local_side_is_restarted(self):
+        bridge = CbsBridge(lte_host='192.168.1.100')
+        bridge._fresh_start = False
+        bridge.request_fresh_start()
+
+        with (
+            patch.object(bridge, '_kill_local_bridge', new_callable=AsyncMock) as mock_kill_local,
+            patch.object(bridge, 'ensure_lte_bridge', new_callable=AsyncMock, return_value=True),
+            patch.object(bridge, 'ensure_local_bridge', new_callable=AsyncMock, return_value=True),
+        ):
+            assert await bridge.ensure_bridge() is True
+            mock_kill_local.assert_called_once()
+
+
 class TestConfigureCbs:
     @pytest.mark.asyncio
     async def test_runs_all_commands(self):

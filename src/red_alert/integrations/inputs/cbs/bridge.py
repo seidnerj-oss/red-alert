@@ -72,6 +72,16 @@ class CbsBridge:
     def device(self) -> str:
         return self._device
 
+    def request_fresh_start(self) -> None:
+        """Make the next ``ensure_bridge()`` tear down and rebuild both sides, as on startup.
+
+        Used when the bridge is found broken while qmicli is still attached to it:
+        the rebuild kills the local socat and the LTE device's socat, qmicli and
+        qmi-proxy (clearing any WMS client registration the old monitor left behind),
+        redeploys socat if it is missing, and starts both sides again.
+        """
+        self._fresh_start = True
+
     def _build_ssh_options(self) -> dict:
         # known_hosts is None deliberately, not by oversight: a UniFi firmware upgrade
         # regenerates the device's dropbear host keys, so a pinned key would start
@@ -382,6 +392,8 @@ class CbsBridge:
         """Verify bridge connectivity.
 
         Checks that both the LTE-side and local-side socat processes are running.
+        Acting on a failed check is the caller's decision (see
+        ``request_fresh_start``); this method only reports.
 
         Previously this also ran ``qmicli --wms-get-cbs-channels`` to verify CBS
         channel configuration. That was removed because QMI only allows one WMS

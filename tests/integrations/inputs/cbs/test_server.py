@@ -1,5 +1,6 @@
 """Tests for CBS alert monitor."""
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -10,8 +11,10 @@ from red_alert.core.state import AlertState
 from red_alert.integrations.inputs.cbs.parser import CbsMessage
 from red_alert.integrations.inputs.cbs.server import (
     DEFAULT_MESSAGE_ID_MAP,
+    HEALTH_CHECK_FAILURES_BEFORE_REBUILD,
     CbsAlertMonitor,
     _create_bridge,
+    _periodic_health_check,
     _resolve_location,
     _resolve_via_centroids,
     run_monitor,
@@ -605,6 +608,237 @@ class TestBridgeIntegration:
                 pass
 
         mock_bridge.close.assert_called_once()
+
+
+def _write_hanging_qmicli(tmp_path: Path) -> str:
+    """A stand-in for qmicli on a dead link: accepts any arguments, prints nothing, never exits."""
+    script = tmp_path / 'qmicli'
+    script.write_text('#!/bin/sh\nexec sleep 300\n')
+    script.chmod(0o755)
+    return str(script)
+
+
+async def _wait_for(predicate, timeout: float = 5.0):
+    deadline = asyncio.get_running_loop().time() + timeout
+    while not predicate():
+        if asyncio.get_running_loop().time() > deadline:
+            raise AssertionError('condition not met before timeout')
+        await asyncio.sleep(0.01)
+
+
+class TestStopSubprocess:
+    def _monitor(self, qmicli_path: str = '/tmp/qmicli') -> CbsAlertMonitor:
+        return CbsAlertMonitor(qmicli_path=qmicli_path, device='/dev/null')
+
+    @pytest.mark.asyncio
+    async def test_noop_when_no_process(self):
+        await self._monitor().stop_subprocess(1.0)
+
+    @pytest.mark.asyncio
+    async def test_noop_when_process_already_exited(self):
+        monitor = self._monitor()
+        proc = MagicMock()
+        proc.returncode = 1
+        monitor._proc = proc
+
+        await monitor.stop_subprocess(1.0)
+
+        proc.terminate.assert_not_called()
+        proc.kill.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_tolerates_process_exiting_between_check_and_signal(self):
+        monitor = self._monitor()
+        proc = MagicMock()
+        proc.returncode = None
+        proc.terminate.side_effect = ProcessLookupError
+        proc.wait = AsyncMock(return_value=0)
+        monitor._proc = proc
+
+        await monitor.stop_subprocess(1.0)
+
+        proc.wait.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_kills_when_sigterm_is_ignored(self):
+        monitor = self._monitor()
+        proc = MagicMock()
+        proc.returncode = None
+        waits = 0
+
+        async def wait():
+            nonlocal waits
+            waits += 1
+            if waits == 1:
+                await asyncio.sleep(10)
+            return -9
+
+        proc.wait = wait
+        monitor._proc = proc
+
+        await monitor.stop_subprocess(0.05)
+
+        proc.terminate.assert_called_once()
+        proc.kill.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_unblocks_run_subprocess_stuck_on_silent_qmicli(self, tmp_path):
+        """Reproduces the dead-link hang: qmicli neither prints nor exits until it is stopped."""
+        monitor = self._monitor(_write_hanging_qmicli(tmp_path))
+        run = asyncio.create_task(monitor.run_subprocess())
+        await _wait_for(lambda: monitor._proc is not None)
+
+        await asyncio.sleep(0.1)
+        assert not run.done()
+
+        await monitor.stop_subprocess(5.0)
+        returncode = await asyncio.wait_for(run, timeout=5.0)
+
+        assert returncode != 0
+        assert monitor._proc is None
+
+
+class TestPeriodicHealthCheck:
+    """The health check rebuilds the bridge after consecutive failures instead of only logging."""
+
+    OK = {'lte_bridge': True, 'local_bridge': True}
+    LTE_DOWN = {'lte_bridge': False, 'local_bridge': True}
+    LOCAL_DOWN = {'lte_bridge': True, 'local_bridge': False}
+
+    async def _run(self, results: list):
+        """Run the health check loop once per entry in ``results`` (a status dict or an exception)."""
+        bridge = MagicMock()
+        bridge.health_check = AsyncMock(side_effect=results)
+        monitor = MagicMock()
+        monitor.stop_subprocess = AsyncMock()
+
+        sleeps = [None] * len(results) + [asyncio.CancelledError()]
+        with (
+            patch('red_alert.integrations.inputs.cbs.server.asyncio.sleep', new_callable=AsyncMock, side_effect=sleeps),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _periodic_health_check(bridge, monitor, 300, 2, 10.0)
+
+        return bridge, monitor
+
+    def test_threshold_requires_more_than_one_failure(self):
+        assert HEALTH_CHECK_FAILURES_BEFORE_REBUILD == 2
+
+    @pytest.mark.asyncio
+    async def test_healthy_takes_no_action(self):
+        bridge, monitor = await self._run([self.OK, self.OK, self.OK])
+
+        bridge.request_fresh_start.assert_not_called()
+        monitor.stop_subprocess.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_single_lte_failure_takes_no_action(self):
+        bridge, monitor = await self._run([self.LTE_DOWN, self.OK])
+
+        bridge.request_fresh_start.assert_not_called()
+        monitor.stop_subprocess.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_consecutive_lte_failures_rebuild(self):
+        bridge, monitor = await self._run([self.LTE_DOWN, self.LTE_DOWN])
+
+        bridge.request_fresh_start.assert_called_once()
+        monitor.stop_subprocess.assert_awaited_once_with(10.0)
+
+    @pytest.mark.asyncio
+    async def test_consecutive_local_failures_rebuild(self):
+        bridge, monitor = await self._run([self.LOCAL_DOWN, self.LOCAL_DOWN])
+
+        bridge.request_fresh_start.assert_called_once()
+        monitor.stop_subprocess.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_healthy_check_resets_the_count(self):
+        bridge, monitor = await self._run([self.LTE_DOWN, self.OK, self.LTE_DOWN])
+
+        bridge.request_fresh_start.assert_not_called()
+        monitor.stop_subprocess.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_check_error_neither_counts_nor_resets(self):
+        bridge, monitor = await self._run([self.LTE_DOWN, RuntimeError('ssh blew up'), RuntimeError('again')])
+        bridge.request_fresh_start.assert_not_called()
+
+        bridge, monitor = await self._run([self.LTE_DOWN, RuntimeError('ssh blew up'), self.LTE_DOWN])
+        bridge.request_fresh_start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_count_restarts_after_a_rebuild(self):
+        bridge, monitor = await self._run([self.LTE_DOWN] * 3)
+        assert monitor.stop_subprocess.await_count == 1
+
+        bridge, monitor = await self._run([self.LTE_DOWN] * 4)
+        assert monitor.stop_subprocess.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_survives_monitor_that_already_exited(self):
+        """A rebuild requested while qmicli is already gone (e.g. between reconnects) does not crash the loop."""
+        monitor = CbsAlertMonitor(qmicli_path='/tmp/qmicli', device='/dev/null')
+        bridge = MagicMock()
+        bridge.health_check = AsyncMock(side_effect=[self.LTE_DOWN] * 4)
+
+        sleeps = [None] * 4 + [asyncio.CancelledError()]
+        with (
+            patch('red_alert.integrations.inputs.cbs.server.asyncio.sleep', new_callable=AsyncMock, side_effect=sleeps),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _periodic_health_check(bridge, monitor, 300, 2, 10.0)
+
+        assert bridge.request_fresh_start.call_count == 2
+
+
+class TestBridgeSelfHeal:
+    """End to end through run_monitor: a dead LTE link gets the bridge rebuilt without a service restart."""
+
+    @pytest.mark.asyncio
+    async def test_lte_down_restarts_qmicli_and_rebuilds_bridge(self, tmp_path):
+        mock_polygon_mgr = MagicMock()
+        mock_polygon_mgr._fetch_polygons = AsyncMock()
+        mock_polygon_mgr._polygons = {'dummy': [[]]}
+        mock_polygon_mgr.find_cities_at_point.return_value = ['תל אביב - יפו']
+
+        mock_bridge = MagicMock()
+        mock_bridge.lte_host = '192.168.1.100'
+        mock_bridge.bridge_port = 18222
+        mock_bridge.ensure_bridge = AsyncMock(return_value=True)
+        mock_bridge.configure_cbs = AsyncMock(return_value=True)
+        mock_bridge.health_check = AsyncMock(return_value={'lte_bridge': False, 'local_bridge': True})
+        mock_bridge.close = AsyncMock()
+
+        config = {
+            'latitude': 32.0853,
+            'longitude': 34.7818,
+            'lte_host': '192.168.1.100',
+            'qmicli_path': _write_hanging_qmicli(tmp_path),
+            'device': '/dev/null',
+            'polygon_cache_path': str(tmp_path / 'polygons.json'),
+            'history_path': str(tmp_path / 'cbs_history.json'),
+            'health_check_interval': 0.05,
+            'reconnect_delay': 0.01,
+            'max_reconnect_delay': 0.01,
+        }
+
+        with (
+            patch('red_alert.core.city_data.CityDataManager', return_value=mock_polygon_mgr),
+            patch('red_alert.integrations.inputs.cbs.server._create_bridge', return_value=mock_bridge),
+        ):
+            task = asyncio.create_task(run_monitor(config))
+            try:
+                await _wait_for(lambda: mock_bridge.configure_cbs.await_count >= 2, timeout=10.0)
+            finally:
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+
+        assert mock_bridge.health_check.await_count >= HEALTH_CHECK_FAILURES_BEFORE_REBUILD
+        mock_bridge.request_fresh_start.assert_called()
+        assert mock_bridge.ensure_bridge.await_count >= 2
+        mock_bridge.close.assert_awaited_once()
 
 
 class TestFixtureIntegration:
