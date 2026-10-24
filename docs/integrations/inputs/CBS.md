@@ -216,7 +216,7 @@ python scripts/setup-cbs.py --deploy-lte-only --lte-host <ip> --ssh-key ~/.ssh/i
 
 ### After LTE device reboot
 
-The LTE device's dropbear SSH server and `/tmp` contents do not survive reboots. Re-run:
+The LTE device's dropbear SSH server and `/tmp` contents do not survive reboots. With `unifi`, `lte_device_mac` and `socat_remote_binary` configured, a running monitor recovers on its own (see [Health checks and recovery](#runtime-behavior)). Otherwise, re-run:
 
 ```bash
 python scripts/setup-cbs.py --enable-ssh-only \
@@ -262,7 +262,7 @@ Setting `lte_host` activates bridge mode. The monitor will:
 - Auto-enable SSH on the LTE device via the UniFi controller if connection is refused (requires `unifi` + `lte_device_mac` config)
 - Auto-deploy socat binary to the LTE device via SCP if missing (requires `socat_remote_binary` config)
 - Configure CBS channels through the bridge on first connection
-- Run periodic health checks (every `health_check_interval` seconds)
+- Run periodic health checks (every `health_check_interval` seconds) and rebuild the bridge after two consecutive failures (see [Runtime behavior](#runtime-behavior))
 - Re-verify the bridge before restarting qmicli after any exit
 
 > **Note:** The LTE device runs dropbear SSH which does not support SFTP. File transfers use SCP instead.
@@ -280,7 +280,7 @@ Setting `lte_host` activates bridge mode. The monitor will:
 | `lte_device_ssh_key_path` | Path to SSH private key for LTE device access | `null` |
 | `ssh_username` | SSH username on the LTE device | `null` |
 | `socat_remote_binary` | Local path to socat binary for auto-deployment to LTE device | `null` |
-| `health_check_interval` | Seconds between bridge health checks (0 to disable) | `300` |
+| `health_check_interval` | Seconds between bridge health checks (0 disables both the checks and the automatic rebuild) | `300` |
 
 ### Runtime behavior
 
@@ -290,7 +290,16 @@ When the CBS monitor starts in bridge mode, `CbsBridge` handles all operational 
 - Runs periodic health checks
 - Restarts socat on either side if it crashes
 
-If the LTE device was rebooted (SSH down, socat binary gone), `CbsBridge` cannot re-enable SSH or redeploy socat on its own - it logs a clear error directing you to re-run the setup script with `--enable-ssh-only` and `--deploy-lte-only`.
+**Health checks and recovery.** Every `health_check_interval` seconds the monitor checks that the LTE device is listening on `bridge_port` and that the local socat is running. qmicli does not notice when the link under it dies - after an LTE device reboot its connection stays half-open, so it never prints or exits, and the reconnect loop never gets a chance to run. So after **two consecutive** failed checks the monitor stops qmicli (SIGTERM, then SIGKILL after 10 s) and marks the bridge for a fresh start. The reconnect loop then does what a service restart would:
+
+1. Kills the local socat, and socat, qmicli and qmi-proxy on the LTE device (clearing any stale WMS client registration)
+2. Re-enables SSH via the controller if the connection is refused (requires `unifi` + `lte_device_mac`)
+3. Redeploys socat if `/tmp/socat` is gone (requires `socat_remote_binary`)
+4. Starts both sides of the bridge, reconfigures CBS channels and restarts qmicli
+
+A single failed check only logs a warning: `check_lte_bridge` reports any SSH error as "down", so one failure may be a network blip, and a rebuild leaves CBS blind while it runs. Two in a row means the bridge has been down across a whole interval, so a dead bridge is detected within `2 x health_check_interval` (10 minutes by default). A check that errors out is logged and neither counts toward nor resets the failure count. If the rebuild itself fails (device still booting), the reconnect loop retries with exponential backoff up to `max_reconnect_delay`.
+
+Without `unifi`/`lte_device_mac` or `socat_remote_binary`, steps 2 and 3 cannot happen automatically; the bridge logs an error and keeps retrying, and you can restore access by re-running the setup script with `--enable-ssh-only` and `--deploy-lte-only` (see [After LTE device reboot](#after-lte-device-reboot)).
 
 ## Device Location
 
