@@ -356,6 +356,10 @@ async def _periodic_health_check(bridge, monitor: CbsAlertMonitor, interval: int
     restart. Without this, a qmicli attached to a dead link never exits, so the
     reconnect loop never runs.
 
+    A status with ``rebuild_now`` set (a self-managed bridge whose relay path was rebuilt
+    under qmicli) is definitive rather than a possible blip, so it triggers the rebuild at
+    once instead of counting toward the threshold.
+
     A check that raises is logged and neither counts as a failure nor resets the count.
     """
     failures = 0
@@ -370,6 +374,13 @@ async def _periodic_health_check(bridge, monitor: CbsAlertMonitor, interval: int
         if status['lte_bridge'] and status['local_bridge']:
             failures = 0
             logger.info('Bridge health check: OK')
+            continue
+
+        if status.get('rebuild_now'):
+            logger.warning('Bridge relay path was rebuilt under qmicli - restarting qmicli to rebuild the bridge')
+            failures = 0
+            bridge.request_fresh_start()
+            await monitor.stop_subprocess(stop_timeout)
             continue
 
         failures += 1

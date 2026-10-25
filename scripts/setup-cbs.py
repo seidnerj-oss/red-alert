@@ -156,10 +156,10 @@ def download_socat_mips() -> Path:
     Returns:
         Path to the extracted socat MIPS binary.
     """
-    cached = SOCAT_DEVICE_BINARY
-    if cached.exists():
-        logger.info('Using existing socat MIPS binary: %s', cached)
-        return cached
+    destination = SOCAT_DEVICE_BINARY
+    if destination.exists():
+        logger.info('Using existing socat MIPS binary: %s', destination)
+        return destination
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     ipk_path = CACHE_DIR / 'socat_mips_24kc.ipk'
@@ -177,7 +177,7 @@ def download_socat_mips() -> Path:
             f'  Package: socat_1.7.3.1-1_mips_24kc.ipk\n'
             f'  URL: {SOCAT_IPK_URL}\n'
             f'  Any socat 1.7.x build for mips_24kc musl should work.\n'
-            f'  Place the extracted binary at: {cached}\n',
+            f'  Place the extracted binary at: {destination}\n',
             file=sys.stderr,
         )
         raise
@@ -190,13 +190,13 @@ def download_socat_mips() -> Path:
         logger.info('SHA256 checksum verified')
 
     socat_binary = _extract_socat_from_ipk(ipk_path)
-    cached.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(socat_binary, cached)
-    os.chmod(cached, 0o755)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(socat_binary, destination)
+    os.chmod(destination, 0o755)
     ipk_path.unlink(missing_ok=True)
 
-    logger.info('socat MIPS binary placed at: %s', cached)
-    return cached
+    logger.info('socat MIPS binary placed at: %s', destination)
+    return destination
 
 
 def _extract_socat_from_ipk(ipk_path: Path) -> Path:

@@ -45,7 +45,9 @@ logger = logging.getLogger('red_alert.cbs.bridge')
 LOCAL_QMI_PROXY_SOCKET = '\0qmi-proxy'
 PROBE_TIMEOUT = 3.0
 
-# The MIPS socat that lte-pro-access uploads to the device as /tmp/socat.
+# The MIPS socat that lte-pro-access uploads to the device as /tmp/socat. The path walks up
+# from this module to the repo root, so it assumes a source checkout (the documented git
+# clone deployment); in a wheel install it would point outside the package.
 SOCAT_DEVICE_BINARY = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'data', 'socat-mips'))
 
 # Killing qmi-proxy is necessary because it holds QMI client registrations in memory:
@@ -70,7 +72,16 @@ SELF_MANAGED_REQUIRED_KEYS = (
 BridgeManagement = Literal['self', 'external']
 BRIDGE_MANAGEMENT_MODES = ('self', 'external')
 
+# Supervisor tick actions that mean a relay was (re)started, i.e. the path qmicli is attached
+# to was rebuilt under it. Other actions (uploaded-socat, enabled-ssh) leave a listening relay
+# in place, so they are not a repair as far as qmicli is concerned.
+REBUILD_ACTIONS = ('started-qmi-relay', 'started-pi-relay')
+
 DOWN = {'lte_bridge': False, 'local_bridge': False}
+
+# Status key set by a self-managed health check that found the relay path rebuilt under qmicli.
+# Unlike a failed probe this is definitive, not a blip, so the caller rebuilds at once.
+REBUILD_NOW_KEY = 'rebuild_now'
 
 
 def build_supervisor(cfg: dict, qmi_port: int, check_interval_seconds: int) -> Supervisor:
@@ -155,6 +166,7 @@ class CbsBridge:
         self._device = device
         self._supervisor = supervisor
         self._fresh_start = True
+        self._fresh_start_requests = 0
 
     @property
     def lte_host(self) -> str:
@@ -183,6 +195,7 @@ class CbsBridge:
         In external bridge mode this only restarts qmicli; the bridge itself is not touched.
         """
         self._fresh_start = True
+        self._fresh_start_requests += 1
 
     def _require_supervisor(self) -> Supervisor:
         if self._supervisor is None:
@@ -238,6 +251,9 @@ class CbsBridge:
             return False
 
         supervisor = self._require_supervisor()
+        # A request made while this call awaits the supervisor (a health-check tick that found
+        # a rebuilt relay path) must survive it, so success clears only what this call saw.
+        requests_seen = self._fresh_start_requests
         try:
             if self._fresh_start:
                 logger.info('Fresh start: killing socat, qmicli and qmi-proxy on the LTE device to clear stale WMS client registrations')
@@ -250,7 +266,8 @@ class CbsBridge:
         if not supervisor.relays_up:
             logger.error('Bridge is down: not every relay is up after the supervisor tick')
             return False
-        self._fresh_start = False
+        if self._fresh_start_requests == requests_seen:
+            self._fresh_start = False
         return True
 
     async def configure_cbs(self, qmicli_path: str, channels: str = '919,4370-4383') -> bool:
@@ -299,9 +316,12 @@ class CbsBridge:
         that had to change anything (re-enable SSH, upload socat, start a relay) means the
         path qmicli is attached to broke since the last rebuild, even though the tick has
         repaired it: qmicli does not notice, and after a device reboot its WMS registration
-        is gone. So such a tick reports both sides down and marks the bridge for a fresh
-        start, and the bridge keeps reporting down without ticking until ``ensure_bridge``
-        rebuilds it. A tick that raises also reports down.
+        is gone. Only a started relay counts (``REBUILD_ACTIONS``); an upload of socat or a
+        re-enabled SSH alone leaves a listening relay in place. Such a tick reports both sides
+        down with ``rebuild_now`` set, which tells the caller to rebuild without waiting for
+        a second failed check, and marks the bridge for a fresh start; the bridge keeps
+        reporting down without ticking until ``ensure_bridge`` rebuilds it. A tick that
+        raises also reports down.
 
         Previously this also ran ``qmicli --wms-get-cbs-channels`` to verify CBS
         channel configuration. That was removed because QMI only allows one WMS
@@ -331,13 +351,14 @@ class CbsBridge:
             logger.error('Supervisor tick failed during the health check: %s: %s', type(e).__name__, e)
             return dict(DOWN)
 
-        if result.actions:
+        rebuilt = [action for action in result.actions if action in REBUILD_ACTIONS]
+        if rebuilt:
             logger.warning(
-                'The bridge needed repair under the running qmicli (%s); reporting it down until it is rebuilt',
-                ', '.join(result.actions),
+                'The bridge relay path was rebuilt under the running qmicli (%s); reporting it down until it is rebuilt',
+                ', '.join(rebuilt),
             )
-            self._fresh_start = True
-            return dict(DOWN)
+            self.request_fresh_start()
+            return {**DOWN, REBUILD_NOW_KEY: True}
 
         up = supervisor.relays_up
         return {'lte_bridge': up, 'local_bridge': up}

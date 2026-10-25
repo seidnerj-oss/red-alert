@@ -731,6 +731,7 @@ class TestPeriodicHealthCheck:
     OK = {'lte_bridge': True, 'local_bridge': True}
     LTE_DOWN = {'lte_bridge': False, 'local_bridge': True}
     LOCAL_DOWN = {'lte_bridge': True, 'local_bridge': False}
+    REBUILD_NOW = {'lte_bridge': False, 'local_bridge': False, 'rebuild_now': True}
 
     async def _run(self, results: list):
         """Run the health check loop once per entry in ``results`` (a status dict or an exception)."""
@@ -778,6 +779,21 @@ class TestPeriodicHealthCheck:
 
         bridge.request_fresh_start.assert_called_once()
         monitor.stop_subprocess.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_rebuild_now_rebuilds_at_once(self):
+        """A definitive repair (relay path rebuilt under qmicli) does not wait for a second check."""
+        bridge, monitor = await self._run([self.REBUILD_NOW])
+
+        bridge.request_fresh_start.assert_called_once()
+        monitor.stop_subprocess.assert_awaited_once_with(10.0)
+
+    @pytest.mark.asyncio
+    async def test_rebuild_now_resets_the_failure_count(self):
+        bridge, monitor = await self._run([self.LTE_DOWN, self.REBUILD_NOW, self.LTE_DOWN])
+
+        assert bridge.request_fresh_start.call_count == 1
+        assert monitor.stop_subprocess.await_count == 1
 
     @pytest.mark.asyncio
     async def test_healthy_check_resets_the_count(self):
