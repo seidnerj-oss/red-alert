@@ -88,8 +88,8 @@ typeCheckingMode = "standard"
 exclude = ["src/red_alert/integrations/outputs/homeassistant"]
 # pyunifiapi is a private package installed locally (see the unifi extra), so it
 # cannot be resolved in a fresh checkout. Downgrade unresolved imports to
-# warnings only in the CBS input package, the one place that imports it at
-# module scope. Remove once pyunifiapi is published and listed as a dependency.
+# warnings only in the CBS input package, the one place that imports it (lazily,
+# inside functions, so the package works without it). Remove once pyunifiapi is published and listed as a dependency.
 executionEnvironments = [
     { root = "src/red_alert/integrations/inputs/cbs", extraPaths = ["src"], reportMissingImports = "warning" },
 ]

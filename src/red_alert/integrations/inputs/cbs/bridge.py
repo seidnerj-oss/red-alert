@@ -102,6 +102,8 @@ class CbsBridge:
         the rebuild kills the local socat and the LTE device's socat, qmicli and
         qmi-proxy (clearing any WMS client registration the old monitor left behind),
         redeploys socat if it is missing, and starts both sides again.
+
+        In external bridge mode this only restarts qmicli; the bridge itself is not touched.
         """
         self._fresh_start = True
 

@@ -336,8 +336,8 @@ async def enable_lte_ssh(
     )
 
     logger.info('Enabling SSH on LTE device %s via controller...', device_mac)
-    await lte_ssh.enable_ssh(controller_config, device_mac, pubkey)
-    logger.info('SSH enabled on LTE device')
+    result = await lte_ssh.enable_ssh(controller_config, device_mac, pubkey)
+    logger.info('SSH enabled on LTE device (key_added=%s, dropbear_started=%s)', result.key_added, result.dropbear_started)
 
 
 # ---------- Step e: Deploy socat to LTE device ----------

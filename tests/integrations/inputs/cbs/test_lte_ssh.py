@@ -1,10 +1,12 @@
 """Tests for the LTE SSH re-enable helper and CbsBridge._enable_lte_ssh (fakes only, no network)."""
 
 import importlib
+import importlib.util
 import logging
 import sys
 import types
 from dataclasses import dataclass
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -198,3 +200,38 @@ class TestBridgeEnableLteSsh:
 
         assert await bridge._enable_lte_ssh() is False
         module.enable_ssh.assert_not_called()
+
+
+class TestWithoutPyunifiapi:
+    """pyunifiapi is optional: importing the helpers must not require it."""
+
+    @pytest.fixture
+    def no_pyunifiapi(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, 'pyunifiapi', None)
+        monkeypatch.delitem(sys.modules, LTE_SSH_MODULE, raising=False)
+        yield
+        sys.modules.pop(LTE_SSH_MODULE, None)
+
+    def test_import_succeeds_and_pubkey_helper_works(self, no_pyunifiapi, tmp_path):
+        lte_ssh = importlib.import_module(LTE_SSH_MODULE)
+        key = tmp_path / 'id.pub'
+        key.write_text(PUBKEY + '\n')
+        assert lte_ssh.read_pubkey(key) == PUBKEY
+
+    def test_build_controller_config_needs_pyunifiapi(self, no_pyunifiapi):
+        lte_ssh = importlib.import_module(LTE_SSH_MODULE)
+        with pytest.raises(ImportError):
+            lte_ssh.build_controller_config(host='ctrl', username='u', password='p')
+
+    @pytest.mark.asyncio
+    async def test_enable_ssh_needs_pyunifiapi(self, no_pyunifiapi):
+        lte_ssh = importlib.import_module(LTE_SSH_MODULE)
+        with pytest.raises(ImportError):
+            await lte_ssh.enable_ssh(object(), 'aa:bb', PUBKEY)
+
+    @pytest.mark.parametrize('script', ['setup-cbs.py', 'setup-lte-pro-ssh.py'])
+    def test_setup_scripts_import_without_pyunifiapi(self, no_pyunifiapi, script):
+        path = Path(__file__).resolve().parents[4] / 'scripts' / script
+        spec = importlib.util.spec_from_file_location(f'_script_{path.stem}', path)
+        assert spec is not None and spec.loader is not None
+        spec.loader.exec_module(importlib.util.module_from_spec(spec))

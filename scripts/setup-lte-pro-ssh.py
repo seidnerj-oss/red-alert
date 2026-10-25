@@ -67,7 +67,8 @@ def main() -> None:
             site=args.site,
             totp_secret=args.totp_secret,
         )
-        asyncio.run(enable_ssh(config, args.mac, pubkey))
+        result = asyncio.run(enable_ssh(config, args.mac, pubkey))
+        print(f'SSH enabled (key_added={result.key_added}, dropbear_started={result.dropbear_started})')
     except Exception as e:
         print(f'Error: {e}', file=sys.stderr)
         sys.exit(1)

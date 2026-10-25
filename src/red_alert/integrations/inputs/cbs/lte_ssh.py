@@ -9,16 +9,19 @@ only when it is not already running, and verifies it.
 dropbear does not persist across LTE device reboots, so this must be re-run after
 each reboot. The CbsBridge calls this automatically when SSH connection is refused.
 
-Requires pyunifiapi >= 0.2.0 (see the unifi extra in pyproject.toml).
+Requires pyunifiapi >= 0.2.0 (see the unifi extra in pyproject.toml). It is imported lazily,
+so importing this module (and the setup scripts) works without it; only
+``build_controller_config`` and ``enable_ssh`` need it.
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from pyunifiapi import CloudConfig, ControllerConfig, SSHEnableResult
-from pyunifiapi import enable_ssh as pyunifiapi_enable_ssh
+if TYPE_CHECKING:
+    from pyunifiapi import CloudConfig, ControllerConfig, SSHEnableResult
 
 logger = logging.getLogger('red_alert.cbs.lte_ssh')
 
@@ -37,6 +40,8 @@ def build_controller_config(
 
     Returns a ControllerConfig (direct) or CloudConfig (cloud).
     """
+    from pyunifiapi import CloudConfig, ControllerConfig
+
     if not host and not device_id:
         raise ValueError('Either host (direct) or device_id (cloud) must be provided')
 
@@ -95,6 +100,8 @@ async def enable_ssh(
         ValueError: ``pubkey`` is not a single OpenSSH public key line.
         pyunifiapi.SSHSessionError: dropbear is not running after being started.
     """
+    from pyunifiapi import enable_ssh as pyunifiapi_enable_ssh
+
     result = await pyunifiapi_enable_ssh(controller_config, device_mac, pubkey)
     logger.info('SSH enabled on %s: key_added=%s dropbear_started=%s', device_mac, result.key_added, result.dropbear_started)
     return result
