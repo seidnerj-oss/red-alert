@@ -451,6 +451,7 @@ class TestBridgeIntegration:
             'device': '/dev/cdc-wdm0',
             'lte_host': '192.168.1.100',
             'bridge_port': 18222,
+            'bridge_management': 'external',
         }
         bridge = _create_bridge(cfg)
         assert bridge is not None
@@ -458,23 +459,33 @@ class TestBridgeIntegration:
         assert bridge.bridge_port == 18222
         assert bridge.device == '/dev/cdc-wdm0'
 
-    def test_create_bridge_passes_ssh_config(self):
-        cfg = {
-            'device': '/dev/cdc-wdm0',
-            'lte_host': '192.168.1.100',
-            'lte_device_ssh_key_path': '/home/user/.ssh/id_ed25519',
-            'ssh_username': 'admin',
-            'socat_remote_binary': '/cache/socat-mips',
-        }
-        bridge = _create_bridge(cfg)
-        assert bridge is not None
-        assert bridge._lte_device_ssh_key_path == '/home/user/.ssh/id_ed25519'
-        assert bridge._ssh_username == 'admin'
+    def test_create_bridge_self_builds_a_supervisor_from_the_cbs_config(self):
+        cfg = {'device': '/dev/cdc-wdm0', 'lte_host': '192.168.1.100', 'bridge_port': 9999, 'health_check_interval': 120}
+        supervisor = MagicMock()
+        with patch('red_alert.integrations.inputs.cbs.bridge.build_supervisor', return_value=supervisor) as build:
+            bridge = _create_bridge(cfg)
 
-    def test_create_bridge_defaults_to_self_management(self):
-        bridge = _create_bridge({'device': '/dev/cdc-wdm0', 'lte_host': '192.168.1.100'})
+        build.assert_called_once_with(cfg, 9999, 120)
         assert bridge is not None
         assert bridge.management == 'self'
+        assert bridge._supervisor is supervisor
+
+    def test_create_bridge_defaults_to_self_management(self):
+        with patch('red_alert.integrations.inputs.cbs.bridge.build_supervisor', return_value=MagicMock()) as build:
+            bridge = _create_bridge({'device': '/dev/cdc-wdm0', 'lte_host': '192.168.1.100'})
+        assert bridge is not None
+        assert bridge.management == 'self'
+        build.assert_called_once()
+
+    def test_create_bridge_self_without_its_required_keys_fails_at_startup(self):
+        with pytest.raises(ValueError, match='monitoring_host_address'):
+            _create_bridge({'device': '/dev/cdc-wdm0', 'lte_host': '192.168.1.100'})
+
+    def test_create_bridge_external_does_not_build_a_supervisor(self):
+        cfg = {'device': '/dev/cdc-wdm0', 'lte_host': '192.168.1.100', 'bridge_management': 'external'}
+        with patch('red_alert.integrations.inputs.cbs.bridge.build_supervisor') as build:
+            _create_bridge(cfg)
+        build.assert_not_called()
 
     def test_create_bridge_passes_external_management(self):
         cfg = {'device': '/dev/cdc-wdm0', 'lte_host': '192.168.1.100', 'bridge_management': 'external'}

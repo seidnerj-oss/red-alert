@@ -13,10 +13,16 @@ Architecture:
       ABSTRACT-CONNECT:qmi-proxy                   |
                                             qmicli --wms-monitor (local subprocess)
 
-socat MIPS binary source:
+In ``self`` bridge management both relays are supervised in-process by the
+lte-pro-access library (github.com/seidnerj-oss/lte-pro-access): it keeps SSH enabled
+on the device (re-enabling it through the UniFi controller after a reboot), uploads the
+MIPS socat binary when the device copy is missing or differs, and starts whichever relay
+is down. This module adds red-alert's own policy on top: a fresh start that clears stale
+WMS client registrations on the device.
+
+socat MIPS binary (``data/socat-mips``, placed there by ``scripts/setup-cbs.py``):
     Package: socat_1.7.3.1-1_mips_24kc.ipk
     URL: https://downloads.openwrt.org/releases/17.01.6/packages/mips_24kc/packages/socat_1.7.3.1-1_mips_24kc.ipk
-    SHA256: to be verified on first download
     Extracted binary: usr/bin/socat (164KB, ELF 32-bit MSB, MIPS, dynamically linked, musl)
     If the URL becomes unavailable, any socat 1.7.x build for mips_24kc musl should work.
 """
@@ -25,20 +31,98 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
-from typing import Literal
+from collections.abc import Awaitable
+from pathlib import Path
+from typing import TYPE_CHECKING, Literal
 
-import asyncssh
+if TYPE_CHECKING:
+    from lte_pro_access import Supervisor
 
 logger = logging.getLogger('red_alert.cbs.bridge')
 
-DEFAULT_BRIDGE_PORT = 18222
-SOCAT_REMOTE_PATH = '/tmp/socat'
 LOCAL_QMI_PROXY_SOCKET = '\0qmi-proxy'
 PROBE_TIMEOUT = 3.0
 
+# The MIPS socat that lte-pro-access uploads to the device as /tmp/socat.
+SOCAT_DEVICE_BINARY = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'data', 'socat-mips'))
+
+# Killing qmi-proxy is necessary because it holds QMI client registrations in memory:
+# even after socat and qmicli are killed it keeps the stale WMS client slot and rejects
+# new connections with InvalidClientId. qmi-proxy restarts on the next qmicli connection
+# via the device's init system. Killing socat also drops the device relay, which the
+# supervisor tick that follows starts again. The sleep gives the killed processes time to
+# exit before that tick probes the device: a socat still exiting would read as a listening
+# relay, and the tick would leave it down.
+FRESH_START_DEVICE_COMMAND = 'killall socat qmicli qmi-proxy 2>/dev/null; sleep 3; true'
+
+# CBS config keys that only ``self`` bridge management needs, all required there.
+SELF_MANAGED_REQUIRED_KEYS = (
+    'lte_device_mac',
+    'lte_device_ssh_key_path',
+    'ssh_username',
+    'unifi',
+    'monitoring_host_address',
+    'bridge_state_dir',
+)
+
 BridgeManagement = Literal['self', 'external']
 BRIDGE_MANAGEMENT_MODES = ('self', 'external')
+
+DOWN = {'lte_bridge': False, 'local_bridge': False}
+
+
+def build_supervisor(cfg: dict, qmi_port: int, check_interval_seconds: int) -> Supervisor:
+    """Build the lte-pro-access supervisor for ``self`` bridge management from the CBS config.
+
+    Raises ValueError when a required key is missing or the removed
+    ``socat_remote_binary`` key is present, FileNotFoundError when the local
+    socat or the bundled MIPS socat is missing, and ModuleNotFoundError when lte-pro-access
+    or pyunifiapi is not installed - all at startup rather than on the first LTE reboot.
+    """
+    if 'socat_remote_binary' in cfg:
+        raise ValueError(f'socat_remote_binary is no longer used: the MIPS socat is read from {SOCAT_DEVICE_BINARY}; remove the key')
+    missing = [key for key in SELF_MANAGED_REQUIRED_KEYS if not cfg.get(key)]
+    if missing:
+        raise ValueError(f'bridge_management "self" requires these CBS config keys: {", ".join(missing)}')
+
+    socat_pi_binary = shutil.which('socat')
+    if socat_pi_binary is None:
+        raise FileNotFoundError('socat not found in PATH; the local relay needs it. Install it (e.g., apt install socat or brew install socat)')
+    if not os.path.isfile(SOCAT_DEVICE_BINARY):
+        raise FileNotFoundError(f'MIPS socat binary not found at {SOCAT_DEVICE_BINARY}; run scripts/setup-cbs.py --download-socat-only')
+
+    try:
+        from lte_pro_access import Config, create_supervisor
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(
+            'bridge_management "self" needs lte-pro-access, which is not installed (see the unifi extra in pyproject.toml)',
+            name='lte_pro_access',
+        ) from e
+
+    config = Config(
+        lte_host=cfg['lte_host'],
+        lte_mac=cfg['lte_device_mac'],
+        pi_address=cfg['monitoring_host_address'],
+        ssh_user=cfg['ssh_username'],
+        ssh_key_path=Path(cfg['lte_device_ssh_key_path']).expanduser(),
+        state_dir=Path(cfg['bridge_state_dir']).expanduser(),
+        socat_device_binary=Path(SOCAT_DEVICE_BINARY),
+        socat_pi_binary=Path(socat_pi_binary),
+        qmi_port=qmi_port,
+        at_relay=None,
+        check_interval_seconds=check_interval_seconds,
+        unifi=cfg['unifi'],
+    )
+    return create_supervisor(config)
+
+
+async def _bounded[T](awaitable: Awaitable[T]) -> T:
+    """Await a supervisor call, bounded by the library's own tick timeout."""
+    from lte_pro_access import TICK_TIMEOUT_SECONDS
+
+    return await asyncio.wait_for(awaitable, TICK_TIMEOUT_SECONDS)
 
 
 class CbsBridge:
@@ -46,38 +130,31 @@ class CbsBridge:
 
     ``management`` selects who owns the bridge:
 
-    - ``'self'``: this class deploys and starts socat on the LTE device over SSH and
-      runs the local socat itself.
-    - ``'external'``: the bridge is managed by another process. This class never
-      opens SSH, deploys, or kills anything; it only probes the local abstract
-      ``qmi-proxy`` socket and the LTE device's bridge port over TCP.
+    - ``'self'``: ``supervisor`` (an lte-pro-access Supervisor, see ``build_supervisor``)
+      runs both relays in-process; this class adds the fresh-start policy.
+    - ``'external'``: the bridge is managed by another process and ``supervisor`` must be
+      None. This class never opens SSH, deploys, or kills anything; it only probes the
+      local abstract ``qmi-proxy`` socket and the LTE device's bridge port over TCP.
     """
 
     def __init__(
         self,
         lte_host: str,
-        bridge_port: int = DEFAULT_BRIDGE_PORT,
-        device: str = '/dev/cdc-wdm0',
-        lte_device_ssh_key_path: str | None = None,
-        ssh_username: str | None = None,
-        socat_remote_binary: str | None = None,
-        lte_device_mac: str | None = None,
-        unifi: dict | None = None,
-        management: BridgeManagement = 'self',
+        bridge_port: int,
+        device: str,
+        management: BridgeManagement,
+        supervisor: Supervisor | None,
     ):
         if management not in BRIDGE_MANAGEMENT_MODES:
             raise ValueError(f'management must be one of {BRIDGE_MANAGEMENT_MODES}, got {management!r}')
+        if (management == 'self') != (supervisor is not None):
+            raise ValueError('a supervisor is required with management "self" and not allowed with management "external"')
         self._management: BridgeManagement = management
         self._lte_host = lte_host
         self._bridge_port = bridge_port
         self._device = device
-        self._lte_device_ssh_key_path = lte_device_ssh_key_path
-        self._ssh_username = ssh_username or 'root'
-        self._socat_remote_binary = socat_remote_binary
-        self._local_socat_proc: asyncio.subprocess.Process | None = None
+        self._supervisor = supervisor
         self._fresh_start = True
-        self._lte_device_mac = lte_device_mac
-        self._unifi = unifi or {}
 
     @property
     def lte_host(self) -> str:
@@ -96,96 +173,21 @@ class CbsBridge:
         return self._management
 
     def request_fresh_start(self) -> None:
-        """Make the next ``ensure_bridge()`` tear down and rebuild both sides, as on startup.
+        """Make the next ``ensure_bridge()`` clear the device side and rebuild, as on startup.
 
-        Used when the bridge is found broken while qmicli is still attached to it:
-        the rebuild kills the local socat and the LTE device's socat, qmicli and
-        qmi-proxy (clearing any WMS client registration the old monitor left behind),
-        redeploys socat if it is missing, and starts both sides again.
+        Used when the bridge is found broken while qmicli is still attached to it: the
+        rebuild kills socat, qmicli and qmi-proxy on the LTE device (clearing any WMS
+        client registration the old monitor left behind), then runs a supervisor tick,
+        which re-enables SSH, uploads socat and starts the relays as needed.
 
         In external bridge mode this only restarts qmicli; the bridge itself is not touched.
         """
         self._fresh_start = True
 
-    def _build_ssh_options(self) -> dict:
-        # known_hosts is None deliberately, not by oversight: a UniFi firmware upgrade
-        # regenerates the device's dropbear host keys, so a pinned key would start
-        # failing after an upgrade - including on the WebRTC bootstrap in _ssh_run that
-        # exists to repair access, which would leave CBS silently down until someone
-        # re-trusted the key by hand. Verifying the key would need automatic re-trust
-        # gated on a successful controller-side bootstrap.
-        opts: dict = {
-            'host': self._lte_host,
-            'username': self._ssh_username,
-            'known_hosts': None,
-        }
-        if self._lte_device_ssh_key_path:
-            opts['client_keys'] = [self._lte_device_ssh_key_path]
-        return opts
-
-    async def _ssh_run(self, command: str) -> asyncssh.SSHCompletedProcess:
-        """Run a command on the LTE device via SSH.
-
-        If SSH connection is refused (port 22 closed), attempts to re-enable SSH
-        on the LTE device via the UniFi controller's WebRTC debug terminal, then retries.
-        """
-        opts = self._build_ssh_options()
-        try:
-            async with asyncssh.connect(**opts) as conn:
-                return await conn.run(command)
-        except OSError as e:
-            if 'Connect call failed' not in str(e) and 'Connection refused' not in str(e):
-                raise
-            if not await self._enable_lte_ssh():
-                raise
-            async with asyncssh.connect(**opts) as conn:
-                return await conn.run(command)
-
-    async def _enable_lte_ssh(self) -> bool:
-        """Re-enable SSH on the LTE device via the UniFi controller.
-
-        Uses the WebRTC debug terminal to write the SSH public key and start dropbear.
-        Requires a 'unifi' section in the CBS config with controller credentials,
-        plus lte_device_mac and lte_device_ssh_key_path.
-        """
-        unifi = self._unifi
-        if not unifi.get('host') or not unifi.get('username') or not unifi.get('password') or not self._lte_device_mac:
-            logger.warning('Cannot auto-enable SSH: unifi controller credentials or lte_device_mac not configured in CBS config')
-            return False
-        if not self._lte_device_ssh_key_path:
-            logger.warning('Cannot auto-enable SSH: lte_device_ssh_key_path not configured')
-            return False
-
-        try:
-            from pyunifiapi import SSHSessionError
-
-            from red_alert.integrations.inputs.cbs.lte_ssh import build_controller_config, enable_ssh, read_pubkey
-        except ImportError as e:
-            logger.error('Cannot auto-enable SSH: pyunifiapi >= 0.2.0 is not installed (%s)', e)
-            return False
-
-        try:
-            pubkey_path = self._lte_device_ssh_key_path + '.pub'
-            pubkey = read_pubkey(pubkey_path)
-            config = build_controller_config(
-                host=unifi.get('host'),
-                username=unifi['username'],
-                password=unifi['password'],
-                port=unifi.get('port', 443),
-                site=unifi.get('site', 'default'),
-                totp_secret=unifi.get('totp_secret'),
-            )
-            logger.info('SSH connection refused - re-enabling SSH on LTE device %s via controller', self._lte_device_mac)
-            result = await enable_ssh(config, self._lte_device_mac, pubkey)
-            logger.info('SSH re-enabled: key_added=%s dropbear_started=%s', result.key_added, result.dropbear_started)
-            await asyncio.sleep(3)
-            return True
-        except SSHSessionError as e:
-            logger.error('SSH could not be enabled on LTE device (dropbear not running): %s', e)
-            return False
-        except Exception as e:
-            logger.error('Failed to auto-enable SSH on LTE device: %s', e)
-            return False
+    def _require_supervisor(self) -> Supervisor:
+        if self._supervisor is None:
+            raise RuntimeError('no supervisor: the bridge is externally managed')
+        return self._supervisor
 
     async def _probe_tcp(self, host: str, port: int) -> bool:
         """Return whether a TCP connection to ``host:port`` is accepted."""
@@ -215,204 +217,14 @@ class CbsBridge:
         except OSError:
             pass
 
-    async def check_lte_bridge(self) -> bool:
-        """Check that the socat bridge is accepting connections on the LTE device.
-
-        Verifies a listening socket on the bridge port rather than pattern-matching
-        ``ps``. socat runs with ``fork``, so every accepted connection becomes a child
-        process with an identical command line - a ``ps`` match therefore stays true
-        even when the listener itself has died and only a connected child remains,
-        reporting a healthy bridge that can no longer accept anything.
-
-        Falls back to the ``ps`` check on devices that have no netstat.
-
-        In ``external`` management this is a TCP connect to ``lte_host:bridge_port``
-        instead; no SSH is opened.
-        """
-        if self._management == 'external':
-            return await self._probe_tcp(self._lte_host, self._bridge_port)
-        try:
-            result = await self._ssh_run(
-                f'netstat -tnl 2>/dev/null | grep -E ":{self._bridge_port}[[:space:]]" | grep -q LISTEN && echo LISTENING'
-                ' || command -v netstat >/dev/null 2>&1 || echo NO_NETSTAT'
-            )
-            raw = result.stdout or ''
-            stdout = raw.decode(errors='replace') if isinstance(raw, bytes) else raw
-            if 'LISTENING' in stdout:
-                return True
-            if 'NO_NETSTAT' in stdout:
-                logger.debug('netstat unavailable on LTE device, falling back to process check')
-                return await self._check_lte_bridge_by_ps()
-            return False
-        except Exception as e:
-            logger.error('Failed to check LTE bridge status: %s', e)
-            return False
-
-    async def _check_lte_bridge_by_ps(self) -> bool:
-        """Fallback bridge check for devices without netstat.
-
-        Cannot distinguish a listener from a forked child - see ``check_lte_bridge``.
-        """
-        result = await self._ssh_run('ps w | grep "socat TCP-LISTEN" | grep -v grep')
-        return result.exit_status == 0 and bool(result.stdout and result.stdout.strip())
-
-    async def _deploy_socat_to_lte(self) -> bool:
-        """Deploy socat binary to the LTE device via SSH.
-
-        Uses SCP (not SFTP) because the LTE device runs dropbear which
-        does not support the SFTP subsystem.
-        """
-        if not self._socat_remote_binary:
-            logger.error('No socat binary path configured for deployment')
-            return False
-
-        try:
-            opts = self._build_ssh_options()
-            async with asyncssh.connect(**opts) as conn:
-                result = await conn.run(f'test -x {SOCAT_REMOTE_PATH} && echo exists')
-                if result.stdout and 'exists' in str(result.stdout):
-                    logger.info('socat already present on LTE device at %s', SOCAT_REMOTE_PATH)
-                    return True
-
-                logger.info('Deploying socat to LTE device at %s via SCP', SOCAT_REMOTE_PATH)
-                await asyncssh.scp(self._socat_remote_binary, (conn, SOCAT_REMOTE_PATH))
-                await conn.run(f'chmod +x {SOCAT_REMOTE_PATH}')
-                logger.info('socat deployed successfully')
-                return True
-        except Exception as e:
-            logger.error('Failed to deploy socat to LTE device: %s', e)
-            return False
-
-    async def _kill_lte_socat(self) -> None:
-        """Kill socat, qmicli, and qmi-proxy on the LTE device.
-
-        Killing qmi-proxy is necessary because it holds QMI client
-        registrations in memory. Even after socat and qmicli are killed,
-        qmi-proxy retains the stale WMS client slot and rejects new
-        connections with InvalidClientId. qmi-proxy auto-restarts on the
-        next qmicli connection via the device's init system.
-        """
-        try:
-            await self._ssh_run('killall socat qmicli qmi-proxy 2>/dev/null; true')
-            await asyncio.sleep(3.0)
-        except Exception as e:
-            logger.debug('Failed to kill LTE processes (may not have been running): %s', e)
-
-    async def ensure_lte_bridge(self) -> bool:
-        """Ensure the socat bridge is running on the LTE device.
-
-        On first call (or after a failed reconnect), kills any existing socat
-        to clear stale QMI client registrations from a previous process, then
-        starts a fresh bridge. On subsequent calls where the bridge is already
-        running, returns immediately.
-        """
-        if not self._fresh_start and await self.check_lte_bridge():
-            logger.debug('LTE bridge already running')
-            return True
-
-        await self._kill_lte_socat()
-
-        if self._socat_remote_binary:
-            if not await self._deploy_socat_to_lte():
-                return False
-
-        try:
-            result = await self._ssh_run(f'test -x {SOCAT_REMOTE_PATH} && echo exists')
-            if not (result.stdout and 'exists' in str(result.stdout)):
-                logger.error(
-                    'socat not found on LTE device at %s. Deploy it manually or set socat_remote_binary in config.',
-                    SOCAT_REMOTE_PATH,
-                )
-                return False
-
-            cmd = f'nohup {SOCAT_REMOTE_PATH} TCP-LISTEN:{self._bridge_port},reuseaddr,fork ABSTRACT-CONNECT:qmi-proxy > /dev/null 2>&1 &'
-            await self._ssh_run(cmd)
-            await asyncio.sleep(0.5)
-
-            if await self.check_lte_bridge():
-                logger.info('LTE bridge started on port %d', self._bridge_port)
-                self._fresh_start = False
-                return True
-
-            logger.error('LTE bridge failed to start')
-            return False
-
-        except Exception as e:
-            logger.error('Failed to start LTE bridge: %s', e)
-            return False
-
-    async def check_local_bridge(self) -> bool:
-        """Check if the local socat bridge process is running.
-
-        In ``external`` management the process is not ours, so this checks that the
-        local abstract ``qmi-proxy`` socket accepts a connection.
-        """
-        if self._management == 'external':
-            return await self._probe_local_socket()
-        if self._local_socat_proc is None:
-            return False
-        return self._local_socat_proc.returncode is None
-
-    async def _kill_local_bridge(self) -> None:
-        """Kill the local socat bridge process if running."""
-        if self._local_socat_proc and self._local_socat_proc.returncode is None:
-            self._local_socat_proc.terminate()
-            try:
-                await asyncio.wait_for(self._local_socat_proc.wait(), timeout=3.0)
-            except asyncio.TimeoutError:
-                self._local_socat_proc.kill()
-                await self._local_socat_proc.wait()
-        self._local_socat_proc = None
-
-    async def ensure_local_bridge(self) -> bool:
-        """Start the local socat bridge if not running.
-
-        Creates a local socat process that listens on an abstract Unix socket
-        (mimicking qmi-proxy) and forwards to the LTE device's TCP bridge.
-        """
-        if await self.check_local_bridge():
-            logger.debug('Local bridge already running')
-            return True
-
-        socat_path = shutil.which('socat')
-        if not socat_path:
-            logger.error('socat not found in PATH. Install it (e.g., apt install socat)')
-            return False
-
-        try:
-            self._local_socat_proc = await asyncio.create_subprocess_exec(
-                socat_path,
-                'ABSTRACT-LISTEN:qmi-proxy,fork',
-                f'TCP:{self._lte_host}:{self._bridge_port}',
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            await asyncio.sleep(0.3)
-
-            if self._local_socat_proc.returncode is not None:
-                stderr = b''
-                if self._local_socat_proc.stderr:
-                    stderr = await self._local_socat_proc.stderr.read()
-                logger.error('Local socat exited immediately: %s', stderr.decode(errors='replace').strip())
-                self._local_socat_proc = None
-                return False
-
-            logger.info('Local bridge started (socat PID %d)', self._local_socat_proc.pid)
-            return True
-
-        except Exception as e:
-            logger.error('Failed to start local bridge: %s', e)
-            self._local_socat_proc = None
-            return False
-
     async def ensure_bridge(self) -> bool:
-        """Ensure both LTE-side and local-side bridges are running.
+        """Ensure both sides of the bridge are up.
 
-        On first call, kills both sides to clear stale QMI client registrations
-        from a previous process. On subsequent calls, only restarts bridges that
-        are down.
-
-        Returns True if both sides are operational.
+        In ``self`` management, on the first call (or after ``request_fresh_start``) kills
+        socat, qmicli and qmi-proxy on the device first, then runs a supervisor tick, which
+        starts whatever is down. Returns True when the tick left every relay up. Errors
+        (SSH refused even after re-enabling, a changed host key, a timeout) are logged and
+        return False, and a pending fresh start stays pending until a call succeeds.
 
         In ``external`` management nothing is started, killed or deployed: the bridge
         is managed by another process, so this only reports whether the local abstract
@@ -425,16 +237,20 @@ class CbsBridge:
             logger.error('External bridge is down: nothing accepts connections on the local qmi-proxy socket')
             return False
 
-        if self._fresh_start:
-            await self._kill_local_bridge()
-
-        if not await self.ensure_lte_bridge():
-            logger.error('LTE-side bridge is down')
+        supervisor = self._require_supervisor()
+        try:
+            if self._fresh_start:
+                logger.info('Fresh start: killing socat, qmicli and qmi-proxy on the LTE device to clear stale WMS client registrations')
+                await _bounded(supervisor.run_on_device(FRESH_START_DEVICE_COMMAND))
+            await _bounded(supervisor.tick())
+        except Exception as e:
+            logger.error('Failed to bring up the bridge: %s: %s', type(e).__name__, e)
             return False
 
-        if not await self.ensure_local_bridge():
+        if not supervisor.relays_up:
+            logger.error('Bridge is down: not every relay is up after the supervisor tick')
             return False
-
+        self._fresh_start = False
         return True
 
     async def configure_cbs(self, qmicli_path: str, channels: str = '919,4370-4383') -> bool:
@@ -476,9 +292,16 @@ class CbsBridge:
     async def health_check(self) -> dict:
         """Verify bridge connectivity.
 
-        Checks that both the LTE-side and local-side socat processes are running.
-        Acting on a failed check is the caller's decision (see
-        ``request_fresh_start``); this method only reports.
+        Acting on a failed check is the caller's decision (see ``request_fresh_start``);
+        in ``external`` management this method only reports.
+
+        In ``self`` management it runs a supervisor tick, so the answer is current. A tick
+        that had to change anything (re-enable SSH, upload socat, start a relay) means the
+        path qmicli is attached to broke since the last rebuild, even though the tick has
+        repaired it: qmicli does not notice, and after a device reboot its WMS registration
+        is gone. So such a tick reports both sides down and marks the bridge for a fresh
+        start, and the bridge keeps reporting down without ticking until ``ensure_bridge``
+        rebuilds it. A tick that raises also reports down.
 
         Previously this also ran ``qmicli --wms-get-cbs-channels`` to verify CBS
         channel configuration. That was removed because QMI only allows one WMS
@@ -492,19 +315,35 @@ class CbsBridge:
 
         Returns a dict with status of each component.
         """
-        return {
-            'lte_bridge': await self.check_lte_bridge(),
-            'local_bridge': await self.check_local_bridge(),
-        }
+        if self._management == 'external':
+            return {
+                'lte_bridge': await self._probe_tcp(self._lte_host, self._bridge_port),
+                'local_bridge': await self._probe_local_socket(),
+            }
+
+        if self._fresh_start:
+            return dict(DOWN)
+
+        supervisor = self._require_supervisor()
+        try:
+            result = await _bounded(supervisor.tick())
+        except Exception as e:
+            logger.error('Supervisor tick failed during the health check: %s: %s', type(e).__name__, e)
+            return dict(DOWN)
+
+        if result.actions:
+            logger.warning(
+                'The bridge needed repair under the running qmicli (%s); reporting it down until it is rebuilt',
+                ', '.join(result.actions),
+            )
+            self._fresh_start = True
+            return dict(DOWN)
+
+        up = supervisor.relays_up
+        return {'lte_bridge': up, 'local_bridge': up}
 
     async def close(self) -> None:
-        """Stop the local socat bridge process."""
-        if self._local_socat_proc and self._local_socat_proc.returncode is None:
-            logger.info('Stopping local bridge (PID %d)', self._local_socat_proc.pid)
-            self._local_socat_proc.terminate()
-            try:
-                await asyncio.wait_for(self._local_socat_proc.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                self._local_socat_proc.kill()
-                await self._local_socat_proc.wait()
-            self._local_socat_proc = None
+        """Stop the local relay in ``self`` management; a no-op in ``external``."""
+        if self._supervisor is not None:
+            logger.info('Stopping the local bridge relay')
+            self._supervisor.close()

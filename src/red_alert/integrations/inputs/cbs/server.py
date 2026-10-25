@@ -63,16 +63,13 @@ DEFAULT_CONFIG: dict = {
     'lte_host': None,
     'bridge_port': 18222,
     'bridge_management': 'self',
-    'lte_device_ssh_key_path': None,
-    'ssh_username': None,
-    'socat_remote_binary': None,
     'health_check_interval': 300,
     'history_path': None,
     'history_max_age': 3600,
 }
 
 # Consecutive failed bridge health checks before the monitor is restarted to rebuild
-# the bridge. One failure is not enough: check_lte_bridge reports any SSH error as
+# the bridge. One failure is not enough: the health check reports any SSH error as
 # "down", so a momentary network blip would otherwise cost a full teardown (and the
 # CBS blind spot while it runs). Two in a row means the link has been bad across a
 # whole health_check_interval, which a blip does not survive.
@@ -321,23 +318,31 @@ def _validate_areas_overlap(lat: float, lon: float, areas: list[str], resolved: 
 
 
 def _create_bridge(cfg: dict):
-    """Create a CbsBridge if bridge mode is configured (lte_host is set)."""
+    """Create a CbsBridge if bridge mode is configured (lte_host is set).
+
+    With ``bridge_management`` "self" (the default) this also builds the lte-pro-access
+    supervisor that runs the relays; see ``build_supervisor`` for the keys it requires.
+    """
     lte_host = cfg.get('lte_host')
     if not lte_host:
         return None
 
-    from red_alert.integrations.inputs.cbs.bridge import CbsBridge
+    from red_alert.integrations.inputs.cbs.bridge import BRIDGE_MANAGEMENT_MODES, CbsBridge, build_supervisor
+
+    management = cfg.get('bridge_management', 'self')
+    if management not in BRIDGE_MANAGEMENT_MODES:
+        raise ValueError(f'bridge_management must be one of {BRIDGE_MANAGEMENT_MODES}, got {management!r}')
+    bridge_port = cfg.get('bridge_port', 18222)
+    supervisor = None
+    if management == 'self':
+        supervisor = build_supervisor(cfg, bridge_port, cfg.get('health_check_interval', 300))
 
     return CbsBridge(
         lte_host=lte_host,
-        bridge_port=cfg.get('bridge_port', 18222),
+        bridge_port=bridge_port,
         device=cfg['device'],
-        lte_device_ssh_key_path=cfg.get('lte_device_ssh_key_path'),
-        ssh_username=cfg.get('ssh_username'),
-        socat_remote_binary=cfg.get('socat_remote_binary'),
-        lte_device_mac=cfg.get('lte_device_mac'),
-        unifi=cfg.get('unifi'),
-        management=cfg.get('bridge_management', 'self'),
+        management=management,
+        supervisor=supervisor,
     )
 
 

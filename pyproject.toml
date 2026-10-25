@@ -31,6 +31,12 @@ unifi = [
     # lacks aarch64 wheels for Raspberry Pi OS (manylinux_2_36).
     # Remove this once pyunifiapi >= 0.2.0 is published to PyPI and added here directly.
     "libdatachannel-py>=2025.1.2.dev0",
+    # lte-pro-access (github.com/seidnerj-oss/lte-pro-access, git tag v0.1.0) is not
+    # on PyPI, so it is pinned to its git tag. The CBS bridge runs its supervisor
+    # in-process with bridge_management "self" (SSH re-enable, socat upload, both
+    # relays). It is imported lazily, so the package works without it.
+    # Switch to a plain version specifier once it is published to PyPI.
+    "lte-pro-access @ git+https://github.com/seidnerj-oss/lte-pro-access@v0.1.0",
 ]
 homepod = [
     # pyatv is NOT a direct dependency - it's invoked as a subprocess via
@@ -39,7 +45,8 @@ homepod = [
     # and PyO3 does not support Python 3.14.
 ]
 cbs = [
-    "asyncssh",
+    # Bridge mode with bridge_management "self" needs the unifi extra (lte-pro-access,
+    # which brings asyncssh, plus pyunifiapi); direct mode and "external" need nothing.
 ]
 
 [dependency-groups]
@@ -86,10 +93,10 @@ typeCheckingMode = "standard"
 # Python 3.14 (PyO3 doesn't support it yet). Exclude it so basedpyright
 # doesn't fail on unresolvable imports. Remove once PyO3 adds 3.14 support.
 exclude = ["src/red_alert/integrations/outputs/homeassistant"]
-# pyunifiapi is a private package installed locally (see the unifi extra), so it
-# cannot be resolved in a fresh checkout. Downgrade unresolved imports to
-# warnings only in the CBS input package, the one place that imports it (lazily,
-# inside functions, so the package works without it). Remove once pyunifiapi is published and listed as a dependency.
+# pyunifiapi and lte-pro-access are installed from source (see the unifi extra), so
+# they may not resolve in a fresh checkout. Downgrade unresolved imports to warnings
+# only in the CBS input package, the one place that imports them (lazily, inside
+# functions, so the package works without them). Remove once both are published and listed as dependencies.
 executionEnvironments = [
     { root = "src/red_alert/integrations/inputs/cbs", extraPaths = ["src"], reportMissingImports = "warning" },
 ]
