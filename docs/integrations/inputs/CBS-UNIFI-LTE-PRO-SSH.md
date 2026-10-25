@@ -89,12 +89,12 @@ ssh -i ~/.ssh/your_key <username>@<device-ip>
 
 The manual steps above can be automated using [pyunifiapi](https://github.com/seidnerj-oss/pyunifiapi), a Python library that accesses UniFi devices via the controller's WebRTC data channel - the same protocol used by the browser debug terminal.
 
-> **Note:** pyunifiapi is not yet published to PyPI. Install from source for now (see below).
+> **Note:** pyunifiapi is not yet published to PyPI. Install version 0.2.0 or later from source for now (see below).
 
-A ready-made script is provided at [`scripts/setup-lte-pro-ssh.py`](../../scripts/setup-lte-pro-ssh.py). It connects to the device through the controller, injects your SSH public key, and starts dropbear - all in one command:
+A ready-made script is provided at [`scripts/setup-lte-pro-ssh.py`](../../scripts/setup-lte-pro-ssh.py). It connects to the device through the controller, adds your SSH public key to the authorized keys (keeping any keys already there), and starts dropbear only if it is not already running - all in one command:
 
 ```bash
-pip install pyunifiapi  # once published, or: pip install git+https://github.com/seidnerj-oss/pyunifiapi.git
+pip install git+https://github.com/seidnerj-oss/pyunifiapi.git@v0.2.0  # 0.2.0 or later; plain `pip install pyunifiapi` once published
 
 python scripts/setup-lte-pro-ssh.py \
     --host <controller-ip> \

@@ -155,8 +155,14 @@ class CbsBridge:
             return False
 
         try:
-            from red_alert.integrations.inputs.cbs.lte_ssh import build_controller_config, enable_ssh, read_pubkey
+            from pyunifiapi import SSHSessionError
 
+            from red_alert.integrations.inputs.cbs.lte_ssh import build_controller_config, enable_ssh, read_pubkey
+        except ImportError as e:
+            logger.error('Cannot auto-enable SSH: pyunifiapi >= 0.2.0 is not installed (%s)', e)
+            return False
+
+        try:
             pubkey_path = self._lte_device_ssh_key_path + '.pub'
             pubkey = read_pubkey(pubkey_path)
             config = build_controller_config(
@@ -168,9 +174,13 @@ class CbsBridge:
                 totp_secret=unifi.get('totp_secret'),
             )
             logger.info('SSH connection refused - re-enabling SSH on LTE device %s via controller', self._lte_device_mac)
-            await enable_ssh(config, self._lte_device_mac, pubkey)
+            result = await enable_ssh(config, self._lte_device_mac, pubkey)
+            logger.info('SSH re-enabled: key_added=%s dropbear_started=%s', result.key_added, result.dropbear_started)
             await asyncio.sleep(3)
             return True
+        except SSHSessionError as e:
+            logger.error('SSH could not be enabled on LTE device (dropbear not running): %s', e)
+            return False
         except Exception as e:
             logger.error('Failed to auto-enable SSH on LTE device: %s', e)
             return False

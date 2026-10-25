@@ -181,7 +181,8 @@ Bridge mode runs qmicli on a separate monitoring host instead of on the LTE devi
 The `scripts/setup-cbs.py` script automates the entire bridge setup:
 
 ```bash
-pip install asyncssh pyunifiapi
+pip install asyncssh
+pip install git+https://github.com/seidnerj-oss/pyunifiapi.git@v0.2.0  # 0.2.0 or later
 
 python scripts/setup-cbs.py \
     --lte-host <lte-device-ip> \
@@ -395,7 +396,7 @@ The two sources complement each other well. The API provides structured data wit
 
 In direct mode, the CBS integration uses only Python stdlib modules (`asyncio.subprocess`, `dataclasses`, `re`). No additional pip packages are required.
 
-In bridge mode, the `asyncssh` package is required for SSH communication with the LTE device (install via `pip install red-alert[cbs]`). The setup script additionally requires `pyunifiapi` for enabling SSH via the UniFi controller.
+In bridge mode, the `asyncssh` package is required for SSH communication with the LTE device (install via `pip install red-alert[cbs]`). The setup script, and the monitor's automatic SSH re-enable, additionally require `pyunifiapi` 0.2.0 or later (install from source, see the `unifi` extra in `pyproject.toml`) for enabling SSH via the UniFi controller.
 
 The `qmicli` binary handles all QMI protocol communication with the modem.
 

@@ -1,19 +1,24 @@
 """Enable SSH on a UniFi LTE Backup Pro via the controller's WebRTC debug terminal.
 
 Connects to the device through the UniFi Network Controller (same protocol as the
-browser debug terminal), injects an SSH public key, and starts the dropbear SSH server.
+browser debug terminal), authorizes an SSH public key and makes sure the dropbear SSH
+server is running. The device-side work lives in pyunifiapi's ``enable_ssh``: it
+appends the key (never overwriting the existing ``authorized_keys``), starts dropbear
+only when it is not already running, and verifies it.
 
 dropbear does not persist across LTE device reboots, so this must be re-run after
 each reboot. The CbsBridge calls this automatically when SSH connection is refused.
 
-Requires pyunifiapi (already a dependency for the UniFi output integration).
+Requires pyunifiapi >= 0.2.0 (see the unifi extra in pyproject.toml).
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+
+from pyunifiapi import CloudConfig, ControllerConfig, SSHEnableResult
+from pyunifiapi import enable_ssh as pyunifiapi_enable_ssh
 
 logger = logging.getLogger('red_alert.cbs.lte_ssh')
 
@@ -27,13 +32,11 @@ def build_controller_config(
     port: int = 443,
     site: str = 'default',
     totp_secret: str | None = None,
-) -> Any:
+) -> ControllerConfig | CloudConfig:
     """Build a UniFi controller config for either direct or cloud connection.
 
     Returns a ControllerConfig (direct) or CloudConfig (cloud).
     """
-    from pyunifiapi._types import CloudConfig, ControllerConfig
-
     if not host and not device_id:
         raise ValueError('Either host (direct) or device_id (cloud) must be provided')
 
@@ -72,42 +75,26 @@ def read_pubkey(path: str | Path) -> str:
 
 
 async def enable_ssh(
-    controller_config: Any,
+    controller_config: ControllerConfig | CloudConfig,
     device_mac: str,
     pubkey: str,
-) -> None:
+) -> SSHEnableResult:
     """Enable SSH on a UniFi LTE Backup Pro device.
 
-    1. Connects to the device via the controller's WebRTC debug terminal
-    2. Writes the public key to /etc/dropbear/authorized_keys
-    3. Starts the dropbear SSH server
+    Delegates to pyunifiapi's ``enable_ssh`` and logs what it changed.
 
     Args:
         controller_config: UniFi controller connection details (ControllerConfig or CloudConfig).
         device_mac: MAC address of the LTE Backup Pro device.
         pubkey: SSH public key string to authorize.
+
+    Returns:
+        Which of the two steps changed something on the device.
+
+    Raises:
+        ValueError: ``pubkey`` is not a single OpenSSH public key line.
+        pyunifiapi.SSHSessionError: dropbear is not running after being started.
     """
-    from pyunifiapi._types import SSHConfig
-    from pyunifiapi.ssh.session import SSHSession
-
-    ssh_config = SSHConfig(mac=device_mac)
-
-    async with SSHSession(controller=controller_config, ssh=ssh_config) as ssh:
-        logger.info('Connected to device %s via WebRTC debug terminal', device_mac)
-
-        # Wait for the login banner and initial shell prompt
-        banner = await ssh.read_until('# ', timeout=60.0)
-        logger.debug('Banner received (%d bytes)', len(banner))
-
-        await ssh.execute(f'echo "{pubkey}" > /etc/dropbear/authorized_keys')
-        await ssh.execute('chmod 600 /etc/dropbear/authorized_keys')
-        logger.info('Public key written to /etc/dropbear/authorized_keys')
-
-        output = await ssh.execute('dropbear -R')
-        logger.info('dropbear started: %s', output.strip())
-
-        output = await ssh.execute('ps | grep dropbear')
-        if 'dropbear' in output:
-            logger.info('dropbear is running - SSH access enabled')
-        else:
-            logger.warning('dropbear may not have started correctly')
+    result = await pyunifiapi_enable_ssh(controller_config, device_mac, pubkey)
+    logger.info('SSH enabled on %s: key_added=%s dropbear_started=%s', device_mac, result.key_added, result.dropbear_started)
+    return result

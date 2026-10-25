@@ -22,13 +22,14 @@ homebridge = [
 unifi = [
     "aiounifi",
     "pyotp",
-    # pyunifiapi (github.com/seidnerj-oss/pyunifiapi) is not on PyPI yet, so it
-    # can't be listed here; install it from source. But its cloud extra requires
-    # libdatachannel-py for WebRTC
+    # pyunifiapi >= 0.2.0 (github.com/seidnerj-oss/pyunifiapi, git tag v0.2.0 or
+    # later) is not on PyPI yet, so it can't be listed here; install it from
+    # source (the CBS bridge needs its enable_ssh helper, added in 0.2.0). But its
+    # cloud extra requires libdatachannel-py for WebRTC
     # SSH (used by CBS bridge to auto-enable SSH on LTE device reboots).
     # The pre-release specifier (>=X.dev0) is needed because stable 2025.1.2
     # lacks aarch64 wheels for Raspberry Pi OS (manylinux_2_36).
-    # Remove this once pyunifiapi is published to PyPI and added here directly.
+    # Remove this once pyunifiapi >= 0.2.0 is published to PyPI and added here directly.
     "libdatachannel-py>=2025.1.2.dev0",
 ]
 homepod = [
