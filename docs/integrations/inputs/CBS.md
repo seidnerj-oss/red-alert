@@ -250,6 +250,8 @@ Setting `lte_host` activates bridge mode. With `bridge_management` `self` (the d
 
 > **Device SSH host key:** lte-pro-access pins the device's host key per boot cycle (trust on first use) in `bridge_state_dir/lte_host_key.pub`. A changed key is accepted only right after the monitor re-enabled SSH and the controller confirmed it started dropbear (a reboot). Any other change is refused and the bridge stays down; if that happens without a reboot, delete the pin file and restart the monitor. Never start dropbear on the device by hand while the monitor runs.
 
+> **Closing the local relay:** when the monitor stops, lte-pro-access terminates the local socat with SIGTERM and does not wait for it or escalate to SIGKILL (red-alert's own earlier code waited 5 s and then killed it). A socat that ignores SIGTERM can outlive the monitor; this is library behavior and red-alert does not change it.
+
 > **Bridge mode device node:** In bridge mode, the QMI device is remote but qmicli still requires a local character device node at the configured `device` path. The systemd service creates this automatically via `ExecStartPre`:
 > ```ini
 > ExecStartPre=+/bin/sh -c 'test -e /dev/cdc-wdm0 || mknod -m 0666 /dev/cdc-wdm0 c 180 0'
@@ -274,7 +276,18 @@ With `bridge_management` `self`, these keys are also required; none has a defaul
 | `monitoring_host_address` | This host's IP address as the LTE device sees it; the device relay accepts connections only from it |
 | `bridge_state_dir` | Writable directory for bridge state (the pinned device SSH host key) |
 
-The MIPS socat is read from `data/socat-mips` (placed there by `scripts/setup-cbs.py`) and the local socat from `PATH`. The removed `socat_remote_binary` key is rejected.
+The MIPS socat is read from `data/socat-mips` (placed there by `scripts/setup-cbs.py`) and the local socat from `PATH`. The removed `socat_remote_binary` key is rejected. The `data/socat-mips` path is relative to the red-alert source checkout, so self mode assumes a git clone deployment rather than a wheel install.
+
+**Self mode owns socat on the device.** A fresh start runs `killall socat qmicli qmi-proxy` on the LTE device, which also stops any socat that something else runs there (for example another lte-pro-access instance relaying AT commands). Self mode therefore assumes red-alert is the only owner of socat on the device. If the device is shared, use `bridge_management` `external` and let the other process own the bridge.
+
+#### Upgrading an existing self mode config
+
+Earlier versions of self mode deployed and ran the bridge with red-alert's own SSH code. It now runs on lte-pro-access, which changes the config. A config written for the old code stops the CBS input at startup with an error that names what is wrong, so update it before upgrading a running host:
+
+- Remove `socat_remote_binary`. It is rejected; the MIPS socat is always read from `data/socat-mips`.
+- Add the new required keys `monitoring_host_address` and `bridge_state_dir`. `lte_device_mac`, `lte_device_ssh_key_path`, `ssh_username` and `unifi` were optional or had defaults before; each is now required in self mode with no default (see the table above).
+- Produce `data/socat-mips` by running `python scripts/setup-cbs.py --download-socat-only`. It is not part of a fresh clone, and self mode refuses to start without it. Older versions kept the download in `~/.cache/red-alert/socat-mips`, which is no longer read.
+- Install the `unifi` extra (`uv sync --extra unifi`), which brings lte-pro-access.
 
 ### External bridge management
 
@@ -296,13 +309,18 @@ When the CBS monitor starts in bridge mode, `CbsBridge` (with the lte-pro-access
 - Runs periodic health checks
 - Restarts socat on either side if it crashes
 
-**Health checks and recovery.** Every `health_check_interval` seconds the monitor runs a supervisor tick, which checks that the LTE device is listening on `bridge_port` and that the local socat is running. A tick that had to repair anything (re-enable SSH, upload socat, restart a relay) counts as a failed check even though the relay is back, because qmicli is still attached to the old, broken path. qmicli does not notice when the link under it dies - after an LTE device reboot its connection stays half-open, so it never prints or exits, and the reconnect loop never gets a chance to run. So after **two consecutive** failed checks the monitor stops qmicli (SIGTERM, then SIGKILL after 10 s) and marks the bridge for a fresh start. The reconnect loop then does what a service restart would:
+**Health checks and recovery.** Every `health_check_interval` seconds the monitor runs a supervisor tick, which checks that the LTE device is listening on `bridge_port` and that the local socat is running. qmicli does not notice when the link under it dies - after an LTE device reboot its connection stays half-open, so it never prints or exits, and the reconnect loop never gets a chance to run. So a failed check has to make the monitor stop qmicli (SIGTERM, then SIGKILL after 10 s) and mark the bridge for a fresh start. There are two kinds of failed check:
+
+- A tick that **started a relay** (`started-qmi-relay` or `started-pi-relay`) is definitive: the relay path qmicli is attached to was rebuilt under it, even though the relay is back. The monitor rebuilds at once, without waiting for a second check. A tick that only uploaded socat or re-enabled SSH while the relays kept listening does not break qmicli's path and is not a failure.
+- A tick that found a relay down or errored out may be a network blip, so only **two consecutive** such checks trigger the rebuild.
+
+The reconnect loop then does what a service restart would:
 
 1. Kills socat, qmicli and qmi-proxy on the LTE device (clearing any stale WMS client registration), re-enabling SSH via the controller first if the connection is refused
 2. Runs a supervisor tick: uploads socat if `/tmp/socat` is gone or differs, and starts whichever side of the bridge is down
 3. Reconfigures CBS channels and restarts qmicli
 
-A single failed check only logs a warning: the health check reports any SSH error as "down", so one failure may be a network blip, and a rebuild leaves CBS blind while it runs. Two in a row means the bridge has been down across a whole interval, so a dead bridge is detected within `2 x health_check_interval` (10 minutes by default). A check that errors out is logged and neither counts toward nor resets the failure count. If the rebuild itself fails (device still booting), the reconnect loop retries with exponential backoff up to `max_reconnect_delay`.
+A single failed probe only logs a warning: the health check reports any SSH error as "down", so one failure may be a network blip, and a rebuild leaves CBS blind while it runs. Two in a row means the bridge has been down across a whole interval, so a dead bridge is detected within `2 x health_check_interval` (10 minutes by default); a rebuilt relay path is acted on at the first check. A check that errors out is logged and neither counts toward nor resets the failure count. If the rebuild itself fails (device still booting), the reconnect loop retries with exponential backoff up to `max_reconnect_delay`.
 
 With `bridge_management` set to `external`, none of the steps above apply; see [External bridge management](#external-bridge-management).
 
