@@ -22,7 +22,7 @@ In bridge mode, qmicli runs on a separate machine (Raspberry Pi, Mac, Linux serv
 LTE Device (<lte-device-ip>)                   Monitoring Host (Pi, Mac, etc.)
   qmi-proxy (stock, always running)               socat (apt/brew, persistent)
        |                                               |
-  socat (MIPS, deployed via SSH)                  ABSTRACT-LISTEN:qmi-proxy
+  socat (MIPS, uploaded via SSH)                  ABSTRACT-LISTEN:qmi-proxy
   TCP-LISTEN:18222 <--------network-------->      TCP:<lte-device-ip>:18222
   ABSTRACT-CONNECT:qmi-proxy                           |
                                                   qmicli --wms-monitor (aarch64/darwin)
@@ -46,8 +46,8 @@ Each CBS message contains the alert text in Hebrew, English, Arabic, and Russian
 ### Bridge mode (additional)
 - A monitoring host (Raspberry Pi, Mac, Linux server) with network access to the LTE device
 - `socat` installed on the monitoring host (`apt install socat` or `brew install socat`)
-- `asyncssh` Python package: `pip install red-alert[cbs]`
-- SSH access to the LTE device (automated via `scripts/setup-lte-pro-ssh.py`)
+- For `bridge_management` `self` (the default): the `unifi` extra, which brings [lte-pro-access](https://github.com/seidnerj-oss/lte-pro-access) (and through it `asyncssh`), plus `pyunifiapi` 0.2.0 or later installed from source (see the `unifi` extra in `pyproject.toml`)
+- SSH key access to the LTE device (first setup via `scripts/setup-lte-pro-ssh.py`; the monitor re-enables SSH itself after reboots)
 
 ## Hardware: UniFi LTE Backup Pro
 
@@ -181,55 +181,32 @@ Bridge mode runs qmicli on a separate monitoring host instead of on the LTE devi
 The `scripts/setup-cbs.py` script automates the entire bridge setup:
 
 ```bash
-pip install asyncssh
-pip install git+https://github.com/seidnerj-oss/pyunifiapi.git@v0.2.0  # 0.2.0 or later
+uv sync --extra unifi
+uv pip install "pyunifiapi @ git+https://github.com/seidnerj-oss/pyunifiapi@v0.2.0"  # 0.2.0 or later
 
-python scripts/setup-cbs.py \
-    --lte-host <lte-device-ip> \
-    --controller-host <controller-ip> \
-    --controller-username admin \
-    --controller-password <pass> \
-    --device-mac <lte-device-mac> \
-    --ssh-key ~/.ssh/id_ed25519
+python scripts/setup-cbs.py --ssh-key ~/.ssh/id_ed25519_lte
 ```
 
 **What the setup script does (infrastructure only):**
 
 1. **Builds qmicli** - clones [qmicli-cbs](https://github.com/seidnerj/qmicli-cbs) and runs Docker cross-compilation (aarch64 + MIPS + darwin)
-2. **Downloads socat** - fetches a MIPS socat binary from the LEDE 17.01.6 package repository
+2. **Downloads socat** - fetches a MIPS socat binary from the LEDE 17.01.6 package repository and places it at `data/socat-mips`, where the monitor reads it
 3. **Sets up the monitoring host** - checks socat is installed, prints instructions for deploying qmicli
-4. **Enables SSH on the LTE device** - uses the `setup-lte-pro-ssh.py` script to inject an SSH key and start dropbear via the UniFi controller's WebRTC debug terminal
-5. **Deploys socat** to the LTE device via SSH
+4. **Generates an SSH key** for the LTE device if `--ssh-key` is not given (`~/.ssh/id_ed25519_lte`)
 
-The setup script only positions binaries and enables SSH - it does **not** start the socat bridge or configure CBS channels. That's handled at runtime by `CbsBridge` when the CBS monitor starts.
+It does **not** enable SSH on the device, upload socat, start the bridge or configure CBS channels. That is handled at runtime by `CbsBridge` when the CBS monitor starts. For the first setup, authorize the key on the device once with [`scripts/setup-lte-pro-ssh.py`](../../../scripts/setup-lte-pro-ssh.py) (see the [SSH setup guide](CBS-UNIFI-LTE-PRO-SSH.md#automating-via-pyunifiapi)).
 
 Individual steps can be re-run independently:
 
 ```bash
 python scripts/setup-cbs.py --build-only
+python scripts/setup-cbs.py --download-socat-only
 python scripts/setup-cbs.py --setup-host-only
-python scripts/setup-cbs.py --enable-ssh-only [controller args]
-python scripts/setup-cbs.py --deploy-lte-only --lte-host <ip> --ssh-key ~/.ssh/id_ed25519
 ```
 
 ### After LTE device reboot
 
-The LTE device's dropbear SSH server and `/tmp` contents do not survive reboots. With `unifi`, `lte_device_mac` and `socat_remote_binary` configured, a running monitor recovers on its own (see [Health checks and recovery](#runtime-behavior)). Otherwise, re-run:
-
-```bash
-python scripts/setup-cbs.py --enable-ssh-only \
-    --controller-host <controller-ip> \
-    --controller-username admin \
-    --controller-password <pass> \
-    --device-mac <lte-device-mac> \
-    --ssh-key ~/.ssh/id_ed25519
-
-python scripts/setup-cbs.py --deploy-lte-only \
-    --lte-host <lte-device-ip> \
-    --ssh-key ~/.ssh/id_ed25519
-```
-
-Or re-run the full setup (idempotent - skips already-completed steps).
+The LTE device's dropbear SSH server and `/tmp` contents do not survive reboots. With `bridge_management` `self`, a running monitor recovers on its own: it re-enables SSH through the UniFi controller and uploads socat again (see [Health checks and recovery](#runtime-behavior)). Nothing needs to be re-run.
 
 ### Bridge mode config
 
@@ -242,8 +219,16 @@ Or re-run the full setup (idempotent - skips already-completed steps).
     "channels": "919,4370-4383",
     "lte_host": "<lte-device-ip>",
     "bridge_port": 18222,
-    "lte_device_ssh_key_path": "~/.ssh/id_ed25519",
+    "lte_device_mac": "<lte-device-mac>",
+    "lte_device_ssh_key_path": "~/.ssh/id_ed25519_lte",
     "ssh_username": "root",
+    "monitoring_host_address": "<monitoring-host-ip>",
+    "bridge_state_dir": "~/.local/state/red-alert",
+    "unifi": {
+        "host": "<controller-ip>",
+        "username": "admin",
+        "password": "<pass>"
+    },
     "health_check_interval": 300,
     "latitude": 32.0853,
     "longitude": 34.7818,
@@ -255,15 +240,15 @@ Or re-run the full setup (idempotent - skips already-completed steps).
 python -m red_alert.integrations.inputs.cbs --config cbs-bridge-config.json
 ```
 
-Setting `lte_host` activates bridge mode. The monitor will:
+Setting `lte_host` activates bridge mode. With `bridge_management` `self` (the default) the relays are supervised in-process by [lte-pro-access](https://github.com/seidnerj-oss/lte-pro-access), and the monitor will:
 - Ensure the socat bridge is running on both the LTE device and locally before starting qmicli
-- Auto-enable SSH on the LTE device via the UniFi controller if connection is refused (requires `unifi` + `lte_device_mac` config)
-- Auto-deploy socat binary to the LTE device via SCP if missing (requires `socat_remote_binary` config)
+- Auto-enable SSH on the LTE device via the UniFi controller if the connection is refused
+- Upload `data/socat-mips` to the LTE device as `/tmp/socat` when it is missing or differs
 - Configure CBS channels through the bridge on first connection
 - Run periodic health checks (every `health_check_interval` seconds) and rebuild the bridge after two consecutive failures (see [Runtime behavior](#runtime-behavior))
 - Re-verify the bridge before restarting qmicli after any exit
 
-> **Note:** The LTE device runs dropbear SSH which does not support SFTP. File transfers use SCP instead.
+> **Device SSH host key:** lte-pro-access pins the device's host key per boot cycle (trust on first use) in `bridge_state_dir/lte_host_key.pub`. A changed key is accepted only right after the monitor re-enabled SSH and the controller confirmed it started dropbear (a reboot). Any other change is refused and the bridge stays down; if that happens without a reboot, delete the pin file and restart the monitor. Never start dropbear on the device by hand while the monitor runs.
 
 > **Bridge mode device node:** In bridge mode, the QMI device is remote but qmicli still requires a local character device node at the configured `device` path. The systemd service creates this automatically via `ExecStartPre`:
 > ```ini
@@ -276,14 +261,24 @@ Setting `lte_host` activates bridge mode. The monitor will:
 | `lte_host` | LTE device hostname/IP (enables bridge mode when set) | `null` |
 | `bridge_port` | TCP port for the socat bridge | `18222` |
 | `bridge_management` | `self` (this monitor deploys and runs the bridge) or `external` (the bridge is managed by another process, see [External bridge management](#external-bridge-management)) | `self` |
-| `lte_device_ssh_key_path` | Path to SSH private key for LTE device access | `null` |
-| `ssh_username` | SSH username on the LTE device | `null` |
-| `socat_remote_binary` | Local path to socat binary for auto-deployment to LTE device | `null` |
 | `health_check_interval` | Seconds between bridge health checks (0 disables both the checks and the automatic rebuild) | `300` |
+
+With `bridge_management` `self`, these keys are also required; none has a default and the monitor refuses to start without them:
+
+| Parameter | Description |
+|-----------|-------------|
+| `lte_device_mac` | MAC address of the LTE device, used to re-enable SSH through the controller |
+| `lte_device_ssh_key_path` | Path to the SSH private key for the LTE device (its `.pub` is what gets authorized) |
+| `ssh_username` | SSH username on the LTE device |
+| `unifi` | UniFi controller credentials passed to pyunifiapi: `host`, `username`, `password` (and optionally `port`, `site`, `totp_secret`) for a local controller, or `device_id`, `username`, `password`, `totp_secret` for the cloud |
+| `monitoring_host_address` | This host's IP address as the LTE device sees it; the device relay accepts connections only from it |
+| `bridge_state_dir` | Writable directory for bridge state (the pinned device SSH host key) |
+
+The MIPS socat is read from `data/socat-mips` (placed there by `scripts/setup-cbs.py`) and the local socat from `PATH`. The removed `socat_remote_binary` key is rejected.
 
 ### External bridge management
 
-By default (`"bridge_management": "self"`, also what a config without the key gets) the monitor owns the bridge: it deploys and starts socat on the LTE device over SSH, runs the local socat, and tears both down on a fresh start.
+By default (`"bridge_management": "self"`, also what a config without the key gets) the monitor owns the bridge: lte-pro-access uploads and starts socat on the LTE device over SSH and runs the local socat, and a fresh start clears the device side.
 
 Set `"bridge_management": "external"` when the bridge is managed by another process. The monitor then never opens SSH, deploys, starts or kills anything. It only probes:
 
@@ -291,28 +286,25 @@ Set `"bridge_management": "external"` when the bridge is managed by another proc
 - Health checks report the LTE side from a TCP connect to `lte_host:bridge_port` and the local side from a connect to the local `qmi-proxy` socket.
 - A fresh-start request (after repeated failed health checks) restarts qmicli, but there is nothing for the monitor to rebuild: the other process is expected to restore the bridge.
 
-In this mode `lte_device_ssh_key_path`, `ssh_username`, `socat_remote_binary`, `lte_device_mac` and `unifi` are unused. The other process must provide the local abstract `qmi-proxy` socket that qmicli connects to.
+In this mode `lte_device_mac`, `lte_device_ssh_key_path`, `ssh_username`, `unifi`, `monitoring_host_address` and `bridge_state_dir` are unused and lte-pro-access is not needed. The other process must provide the local abstract `qmi-proxy` socket that qmicli connects to.
 
 ### Runtime behavior
 
-When the CBS monitor starts in bridge mode, `CbsBridge` handles all operational work:
+When the CBS monitor starts in bridge mode, `CbsBridge` (with the lte-pro-access supervisor) handles all operational work:
 - Starts the socat bridge on the LTE device (via SSH) and locally
 - Configures CBS channels through the bridge (set-cbs-channels, set-broadcast-activation)
 - Runs periodic health checks
 - Restarts socat on either side if it crashes
 
-**Health checks and recovery.** Every `health_check_interval` seconds the monitor checks that the LTE device is listening on `bridge_port` and that the local socat is running. qmicli does not notice when the link under it dies - after an LTE device reboot its connection stays half-open, so it never prints or exits, and the reconnect loop never gets a chance to run. So after **two consecutive** failed checks the monitor stops qmicli (SIGTERM, then SIGKILL after 10 s) and marks the bridge for a fresh start. The reconnect loop then does what a service restart would:
+**Health checks and recovery.** Every `health_check_interval` seconds the monitor runs a supervisor tick, which checks that the LTE device is listening on `bridge_port` and that the local socat is running. A tick that had to repair anything (re-enable SSH, upload socat, restart a relay) counts as a failed check even though the relay is back, because qmicli is still attached to the old, broken path. qmicli does not notice when the link under it dies - after an LTE device reboot its connection stays half-open, so it never prints or exits, and the reconnect loop never gets a chance to run. So after **two consecutive** failed checks the monitor stops qmicli (SIGTERM, then SIGKILL after 10 s) and marks the bridge for a fresh start. The reconnect loop then does what a service restart would:
 
-1. Kills the local socat, and socat, qmicli and qmi-proxy on the LTE device (clearing any stale WMS client registration)
-2. Re-enables SSH via the controller if the connection is refused (requires `unifi` + `lte_device_mac`)
-3. Redeploys socat if `/tmp/socat` is gone (requires `socat_remote_binary`)
-4. Starts both sides of the bridge, reconfigures CBS channels and restarts qmicli
+1. Kills socat, qmicli and qmi-proxy on the LTE device (clearing any stale WMS client registration), re-enabling SSH via the controller first if the connection is refused
+2. Runs a supervisor tick: uploads socat if `/tmp/socat` is gone or differs, and starts whichever side of the bridge is down
+3. Reconfigures CBS channels and restarts qmicli
 
-A single failed check only logs a warning: `check_lte_bridge` reports any SSH error as "down", so one failure may be a network blip, and a rebuild leaves CBS blind while it runs. Two in a row means the bridge has been down across a whole interval, so a dead bridge is detected within `2 x health_check_interval` (10 minutes by default). A check that errors out is logged and neither counts toward nor resets the failure count. If the rebuild itself fails (device still booting), the reconnect loop retries with exponential backoff up to `max_reconnect_delay`.
+A single failed check only logs a warning: the health check reports any SSH error as "down", so one failure may be a network blip, and a rebuild leaves CBS blind while it runs. Two in a row means the bridge has been down across a whole interval, so a dead bridge is detected within `2 x health_check_interval` (10 minutes by default). A check that errors out is logged and neither counts toward nor resets the failure count. If the rebuild itself fails (device still booting), the reconnect loop retries with exponential backoff up to `max_reconnect_delay`.
 
 With `bridge_management` set to `external`, none of the steps above apply; see [External bridge management](#external-bridge-management).
-
-Without `unifi`/`lte_device_mac` or `socat_remote_binary`, steps 2 and 3 cannot happen automatically; the bridge logs an error and keeps retrying, and you can restore access by re-running the setup script with `--enable-ssh-only` and `--deploy-lte-only` (see [After LTE device reboot](#after-lte-device-reboot)).
 
 ## Device Location
 
@@ -396,7 +388,7 @@ The two sources complement each other well. The API provides structured data wit
 
 In direct mode, the CBS integration uses only Python stdlib modules (`asyncio.subprocess`, `dataclasses`, `re`). No additional pip packages are required.
 
-In bridge mode, the `asyncssh` package is required for SSH communication with the LTE device (install via `pip install red-alert[cbs]`). The setup script, and the monitor's automatic SSH re-enable, additionally require `pyunifiapi` 0.2.0 or later (install from source, see the `unifi` extra in `pyproject.toml`) for enabling SSH via the UniFi controller.
+In bridge mode with `bridge_management` `self`, the [lte-pro-access](https://github.com/seidnerj-oss/lte-pro-access) library supervises the relays and SSH (install via the `unifi` extra), and `pyunifiapi` 0.2.0 or later (install from source, see the `unifi` extra in `pyproject.toml`) is required for enabling SSH via the UniFi controller; the monitor refuses to start without either. `scripts/setup-lte-pro-ssh.py` also requires `pyunifiapi`. With `external` no extra packages are needed.
 
 The `qmicli` binary handles all QMI protocol communication with the modem.
 
