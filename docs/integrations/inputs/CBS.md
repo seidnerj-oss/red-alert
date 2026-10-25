@@ -109,9 +109,6 @@ SSH into the device and run:
 
 # Activate Cell Broadcast reception
 /tmp/qmicli -d /dev/cdc-wdm0 --device-open-proxy --wms-set-broadcast-activation
-
-# Enable event reporting
-/tmp/qmicli -d /dev/cdc-wdm0 --device-open-proxy --wms-set-event-report
 ```
 
 ### 4. Verify it works
@@ -286,7 +283,7 @@ Setting `lte_host` activates bridge mode. The monitor will:
 
 When the CBS monitor starts in bridge mode, `CbsBridge` handles all operational work:
 - Starts the socat bridge on the LTE device (via SSH) and locally
-- Configures CBS channels through the bridge (set-cbs-channels, set-broadcast-activation, set-event-report)
+- Configures CBS channels through the bridge (set-cbs-channels, set-broadcast-activation)
 - Runs periodic health checks
 - Restarts socat on either side if it crashes
 
@@ -355,7 +352,6 @@ ssh user@<device-ip>
 # Set up CBS (one-time)
 /tmp/qmicli -d /dev/cdc-wdm0 --device-open-proxy --wms-set-cbs-channels=919,4370-4383
 /tmp/qmicli -d /dev/cdc-wdm0 --device-open-proxy --wms-set-broadcast-activation
-/tmp/qmicli -d /dev/cdc-wdm0 --device-open-proxy --wms-set-event-report
 
 # Run monitor in background, logging to file
 nohup /tmp/qmicli -d /dev/cdc-wdm0 --device-open-proxy --wms-monitor > /tmp/cbs.log 2>&1 &
@@ -389,7 +385,6 @@ In bridge mode, the `asyncssh` package is required for SSH communication with th
 The `qmicli` binary handles all QMI protocol communication with the modem.
 
 The patched qmicli commands added for CBS:
-- `--wms-set-event-report` - enables MT message event reporting via QMI_WMS_SET_EVENT_REPORT
 - `--wms-set-broadcast-activation` - activates CBS reception via QMI_WMS_SET_BROADCAST_ACTIVATION
 - `--wms-monitor` - registers for WMS Event Report indications, decodes CBS headers, ETWS messages, and PLMN info
 

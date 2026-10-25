@@ -424,7 +424,8 @@ class TestConfigureCbs:
             result = await bridge.configure_cbs('/usr/local/bin/qmicli')
 
         assert result is True
-        assert mock_exec.call_count == 3
+        flags = [call[0][4] for call in mock_exec.call_args_list]
+        assert flags == ['--wms-set-cbs-channels=919,4370-4383', '--wms-set-broadcast-activation']
 
     @pytest.mark.asyncio
     async def test_custom_channels(self):

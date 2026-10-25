@@ -355,12 +355,12 @@ class CbsBridge:
     async def configure_cbs(self, qmicli_path: str, channels: str = '919,4370-4383') -> bool:
         """Configure CBS channels on the modem via qmicli through the bridge.
 
-        Runs the sequence: set-cbs-channels, set-broadcast-activation, set-event-report.
+        Runs the sequence: set-cbs-channels, set-broadcast-activation. Event reporting is
+        enabled by --wms-monitor itself.
         """
         commands = [
             (f'--wms-set-cbs-channels={channels}', f'Setting CBS channels: {channels}'),
             ('--wms-set-broadcast-activation', 'Activating CBS reception'),
-            ('--wms-set-event-report', 'Enabling event reporting'),
         ]
 
         base_cmd = [qmicli_path, '-d', self._device, '--device-open-proxy']
