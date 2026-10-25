@@ -570,3 +570,160 @@ class TestClose:
 
         await bridge.close()
         mock_proc.terminate.assert_not_called()
+
+
+def _fake_unix_connection(accepts: bool):
+    """Stand-in for asyncio.open_unix_connection: succeeds with a closable writer, or refuses."""
+    writer = MagicMock()
+    writer.wait_closed = AsyncMock()
+    if accepts:
+        return AsyncMock(return_value=(MagicMock(), writer)), writer
+    return AsyncMock(side_effect=ConnectionRefusedError()), writer
+
+
+@pytest.fixture
+def listening_tcp_port():
+    """Yield a callable that starts a real local TCP listener and returns its port."""
+    servers = []
+
+    async def start() -> int:
+        server = await asyncio.start_server(lambda r, w: w.close(), '127.0.0.1', 0)
+        servers.append(server)
+        return server.sockets[0].getsockname()[1]
+
+    yield start
+
+    for server in servers:
+        server.close()
+
+
+class TestExternalManagement:
+    """bridge_management 'external': another process owns both socat halves."""
+
+    def test_invalid_management_is_rejected(self):
+        with pytest.raises(ValueError, match='management'):
+            CbsBridge(lte_host='192.168.1.100', management='bogus')
+
+    def test_default_management_is_self(self):
+        assert CbsBridge(lte_host='192.168.1.100').management == 'self'
+
+    @pytest.mark.asyncio
+    async def test_external_mode_never_runs_ssh(self):
+        bridge = CbsBridge(
+            lte_host='127.0.0.1',
+            bridge_port=1,
+            management='external',
+            lte_device_ssh_key_path='/home/user/.ssh/id_ed25519',
+            socat_remote_binary='/tmp/socat-mips',
+            lte_device_mac='aa:bb:cc:dd:ee:ff',
+            unifi={'host': 'ctrl', 'username': 'u', 'password': 'p'},
+        )
+        connect, _ = _fake_unix_connection(accepts=True)
+
+        with (
+            patch('red_alert.integrations.inputs.cbs.bridge.asyncssh.connect') as ssh_connect,
+            patch('red_alert.integrations.inputs.cbs.bridge.asyncssh.scp') as ssh_scp,
+            patch('red_alert.integrations.inputs.cbs.bridge.asyncio.open_unix_connection', connect),
+            patch('red_alert.integrations.inputs.cbs.bridge.asyncio.create_subprocess_exec') as spawn,
+            patch.object(bridge, '_enable_lte_ssh', new_callable=AsyncMock) as enable,
+            patch.object(bridge, '_deploy_socat_to_lte', new_callable=AsyncMock) as deploy,
+            patch.object(bridge, '_kill_lte_socat', new_callable=AsyncMock) as kill_lte,
+            patch.object(bridge, '_kill_local_bridge', new_callable=AsyncMock) as kill_local,
+        ):
+            bridge.request_fresh_start()
+            assert await bridge.ensure_bridge() is True
+            bridge.request_fresh_start()
+            assert await bridge.ensure_bridge() is True
+            # port 1 on loopback refuses: health reports LTE down but still must not SSH
+            assert (await bridge.health_check())['lte_bridge'] is False
+            bridge.request_fresh_start()
+            assert await bridge.check_lte_bridge() is False
+            await bridge.close()
+
+        ssh_connect.assert_not_called()
+        ssh_scp.assert_not_called()
+        spawn.assert_not_called()
+        enable.assert_not_called()
+        deploy.assert_not_called()
+        kill_lte.assert_not_called()
+        kill_local.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_external_ensure_bridge_true_when_local_socket_accepts(self):
+        bridge = CbsBridge(lte_host='192.168.1.100', management='external')
+        connect, writer = _fake_unix_connection(accepts=True)
+
+        with patch('red_alert.integrations.inputs.cbs.bridge.asyncio.open_unix_connection', connect):
+            assert await bridge.ensure_bridge() is True
+
+        assert connect.call_args.args[0] == '\0qmi-proxy'
+        writer.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_external_ensure_bridge_false_when_local_socket_refuses(self):
+        bridge = CbsBridge(lte_host='192.168.1.100', management='external')
+        connect, _ = _fake_unix_connection(accepts=False)
+
+        with patch('red_alert.integrations.inputs.cbs.bridge.asyncio.open_unix_connection', connect):
+            assert await bridge.ensure_bridge() is False
+
+    @pytest.mark.asyncio
+    async def test_external_ensure_bridge_false_when_local_socket_hangs(self):
+        bridge = CbsBridge(lte_host='192.168.1.100', management='external')
+
+        async def hang(*args, **kwargs):
+            await asyncio.sleep(60)
+
+        with (
+            patch('red_alert.integrations.inputs.cbs.bridge.asyncio.open_unix_connection', hang),
+            patch('red_alert.integrations.inputs.cbs.bridge.PROBE_TIMEOUT', 0.05),
+        ):
+            assert await bridge.ensure_bridge() is False
+
+    @pytest.mark.asyncio
+    async def test_external_mode_health_uses_tcp(self, listening_tcp_port):
+        port = await listening_tcp_port()
+        bridge = CbsBridge(lte_host='127.0.0.1', bridge_port=port, management='external')
+        connect, _ = _fake_unix_connection(accepts=True)
+
+        with (
+            patch('red_alert.integrations.inputs.cbs.bridge.asyncssh.connect') as ssh_connect,
+            patch('red_alert.integrations.inputs.cbs.bridge.asyncio.open_unix_connection', connect),
+        ):
+            status = await bridge.health_check()
+
+        assert status == {'lte_bridge': True, 'local_bridge': True}
+        ssh_connect.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_external_mode_health_reports_both_down_when_nothing_accepts(self):
+        bridge = CbsBridge(lte_host='127.0.0.1', bridge_port=1, management='external')
+        connect, _ = _fake_unix_connection(accepts=False)
+
+        with patch('red_alert.integrations.inputs.cbs.bridge.asyncio.open_unix_connection', connect):
+            status = await bridge.health_check()
+
+        assert status == {'lte_bridge': False, 'local_bridge': False}
+
+    @pytest.mark.asyncio
+    async def test_external_close_is_a_noop(self):
+        bridge = CbsBridge(lte_host='192.168.1.100', management='external')
+        await bridge.close()
+
+
+class TestSelfModeUnchanged:
+    @pytest.mark.asyncio
+    async def test_self_mode_unchanged(self):
+        """Without bridge_management the bridge still tears down and rebuilds both sides."""
+        bridge = CbsBridge(lte_host='192.168.1.100')
+
+        with (
+            patch.object(bridge, '_kill_local_bridge', new_callable=AsyncMock) as kill_local,
+            patch.object(bridge, 'ensure_lte_bridge', new_callable=AsyncMock, return_value=True) as ensure_lte,
+            patch.object(bridge, 'ensure_local_bridge', new_callable=AsyncMock, return_value=True) as ensure_local,
+        ):
+            assert await bridge.ensure_bridge() is True
+
+        kill_local.assert_awaited_once()
+        ensure_lte.assert_awaited_once()
+        ensure_local.assert_awaited_once()

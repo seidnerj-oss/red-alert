@@ -274,10 +274,23 @@ Setting `lte_host` activates bridge mode. The monitor will:
 |-----------|-------------|---------|
 | `lte_host` | LTE device hostname/IP (enables bridge mode when set) | `null` |
 | `bridge_port` | TCP port for the socat bridge | `18222` |
+| `bridge_management` | `self` (this monitor deploys and runs the bridge) or `external` (the bridge is managed by another process, see [External bridge management](#external-bridge-management)) | `self` |
 | `lte_device_ssh_key_path` | Path to SSH private key for LTE device access | `null` |
 | `ssh_username` | SSH username on the LTE device | `null` |
 | `socat_remote_binary` | Local path to socat binary for auto-deployment to LTE device | `null` |
 | `health_check_interval` | Seconds between bridge health checks (0 disables both the checks and the automatic rebuild) | `300` |
+
+### External bridge management
+
+By default (`"bridge_management": "self"`, also what a config without the key gets) the monitor owns the bridge: it deploys and starts socat on the LTE device over SSH, runs the local socat, and tears both down on a fresh start.
+
+Set `"bridge_management": "external"` when the bridge is managed by another process. The monitor then never opens SSH, deploys, starts or kills anything. It only probes:
+
+- `ensure_bridge()` succeeds when the local abstract `qmi-proxy` socket accepts a connection, and fails (so the reconnect loop backs off and retries) when it does not.
+- Health checks report the LTE side from a TCP connect to `lte_host:bridge_port` and the local side from a connect to the local `qmi-proxy` socket.
+- A fresh-start request (after repeated failed health checks) restarts qmicli, but there is nothing for the monitor to rebuild: the other process is expected to restore the bridge.
+
+In this mode `lte_device_ssh_key_path`, `ssh_username`, `socat_remote_binary`, `lte_device_mac` and `unifi` are unused. The other process must provide the local abstract `qmi-proxy` socket that qmicli connects to.
 
 ### Runtime behavior
 
@@ -295,6 +308,8 @@ When the CBS monitor starts in bridge mode, `CbsBridge` handles all operational 
 4. Starts both sides of the bridge, reconfigures CBS channels and restarts qmicli
 
 A single failed check only logs a warning: `check_lte_bridge` reports any SSH error as "down", so one failure may be a network blip, and a rebuild leaves CBS blind while it runs. Two in a row means the bridge has been down across a whole interval, so a dead bridge is detected within `2 x health_check_interval` (10 minutes by default). A check that errors out is logged and neither counts toward nor resets the failure count. If the rebuild itself fails (device still booting), the reconnect loop retries with exponential backoff up to `max_reconnect_delay`.
+
+With `bridge_management` set to `external`, none of the steps above apply; see [External bridge management](#external-bridge-management).
 
 Without `unifi`/`lte_device_mac` or `socat_remote_binary`, steps 2 and 3 cannot happen automatically; the bridge logs an error and keeps retrying, and you can restore access by re-running the setup script with `--enable-ssh-only` and `--deploy-lte-only` (see [After LTE device reboot](#after-lte-device-reboot)).
 

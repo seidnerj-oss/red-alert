@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+from typing import Literal
 
 import asyncssh
 
@@ -33,10 +34,24 @@ logger = logging.getLogger('red_alert.cbs.bridge')
 
 DEFAULT_BRIDGE_PORT = 18222
 SOCAT_REMOTE_PATH = '/tmp/socat'
+LOCAL_QMI_PROXY_SOCKET = '\0qmi-proxy'
+PROBE_TIMEOUT = 3.0
+
+BridgeManagement = Literal['self', 'external']
+BRIDGE_MANAGEMENT_MODES = ('self', 'external')
 
 
 class CbsBridge:
-    """Manages the socat QMI proxy bridge between an LTE device and the local machine."""
+    """Manages the socat QMI proxy bridge between an LTE device and the local machine.
+
+    ``management`` selects who owns the bridge:
+
+    - ``'self'``: this class deploys and starts socat on the LTE device over SSH and
+      runs the local socat itself.
+    - ``'external'``: the bridge is managed by another process. This class never
+      opens SSH, deploys, or kills anything; it only probes the local abstract
+      ``qmi-proxy`` socket and the LTE device's bridge port over TCP.
+    """
 
     def __init__(
         self,
@@ -48,7 +63,11 @@ class CbsBridge:
         socat_remote_binary: str | None = None,
         lte_device_mac: str | None = None,
         unifi: dict | None = None,
+        management: BridgeManagement = 'self',
     ):
+        if management not in BRIDGE_MANAGEMENT_MODES:
+            raise ValueError(f'management must be one of {BRIDGE_MANAGEMENT_MODES}, got {management!r}')
+        self._management: BridgeManagement = management
         self._lte_host = lte_host
         self._bridge_port = bridge_port
         self._device = device
@@ -71,6 +90,10 @@ class CbsBridge:
     @property
     def device(self) -> str:
         return self._device
+
+    @property
+    def management(self) -> BridgeManagement:
+        return self._management
 
     def request_fresh_start(self) -> None:
         """Make the next ``ensure_bridge()`` tear down and rebuild both sides, as on startup.
@@ -152,6 +175,34 @@ class CbsBridge:
             logger.error('Failed to auto-enable SSH on LTE device: %s', e)
             return False
 
+    async def _probe_tcp(self, host: str, port: int) -> bool:
+        """Return whether a TCP connection to ``host:port`` is accepted."""
+        try:
+            _, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=PROBE_TIMEOUT)
+        except (OSError, asyncio.TimeoutError) as e:
+            logger.debug('TCP probe of %s:%d failed: %s', host, port, e)
+            return False
+        await self._close_writer(writer)
+        return True
+
+    async def _probe_local_socket(self) -> bool:
+        """Return whether the local abstract ``qmi-proxy`` socket accepts a connection."""
+        try:
+            _, writer = await asyncio.wait_for(asyncio.open_unix_connection(LOCAL_QMI_PROXY_SOCKET), timeout=PROBE_TIMEOUT)
+        except (OSError, asyncio.TimeoutError) as e:
+            logger.debug('Local qmi-proxy socket probe failed: %s', e)
+            return False
+        await self._close_writer(writer)
+        return True
+
+    @staticmethod
+    async def _close_writer(writer: asyncio.StreamWriter) -> None:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except OSError:
+            pass
+
     async def check_lte_bridge(self) -> bool:
         """Check that the socat bridge is accepting connections on the LTE device.
 
@@ -162,7 +213,12 @@ class CbsBridge:
         reporting a healthy bridge that can no longer accept anything.
 
         Falls back to the ``ps`` check on devices that have no netstat.
+
+        In ``external`` management this is a TCP connect to ``lte_host:bridge_port``
+        instead; no SSH is opened.
         """
+        if self._management == 'external':
+            return await self._probe_tcp(self._lte_host, self._bridge_port)
         try:
             result = await self._ssh_run(
                 f'netstat -tnl 2>/dev/null | grep -E ":{self._bridge_port}[[:space:]]" | grep -q LISTEN && echo LISTENING'
@@ -274,7 +330,13 @@ class CbsBridge:
             return False
 
     async def check_local_bridge(self) -> bool:
-        """Check if the local socat bridge process is running."""
+        """Check if the local socat bridge process is running.
+
+        In ``external`` management the process is not ours, so this checks that the
+        local abstract ``qmi-proxy`` socket accepts a connection.
+        """
+        if self._management == 'external':
+            return await self._probe_local_socket()
         if self._local_socat_proc is None:
             return False
         return self._local_socat_proc.returncode is None
@@ -339,7 +401,18 @@ class CbsBridge:
         are down.
 
         Returns True if both sides are operational.
+
+        In ``external`` management nothing is started, killed or deployed: the bridge
+        is managed by another process, so this only reports whether the local abstract
+        ``qmi-proxy`` socket accepts a connection.
         """
+        if self._management == 'external':
+            if await self._probe_local_socket():
+                self._fresh_start = False
+                return True
+            logger.error('External bridge is down: nothing accepts connections on the local qmi-proxy socket')
+            return False
+
         if self._fresh_start:
             await self._kill_local_bridge()
 
@@ -400,6 +473,10 @@ class CbsBridge:
         client at a time - the ``qmicli --wms-monitor`` subprocess already holds
         it for the lifetime of the monitor, so a second qmicli instance always
         fails with ``InvalidClientId`` and never returns useful output.
+
+        In ``external`` management the LTE side is a TCP connect to
+        ``lte_host:bridge_port`` and the local side is a connect to the local
+        abstract ``qmi-proxy`` socket; no SSH is opened.
 
         Returns a dict with status of each component.
         """

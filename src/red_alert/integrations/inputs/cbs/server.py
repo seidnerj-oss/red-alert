@@ -62,6 +62,7 @@ DEFAULT_CONFIG: dict = {
     'polygon_cache_path': None,
     'lte_host': None,
     'bridge_port': 18222,
+    'bridge_management': 'self',
     'lte_device_ssh_key_path': None,
     'ssh_username': None,
     'socat_remote_binary': None,
@@ -336,6 +337,7 @@ def _create_bridge(cfg: dict):
         socat_remote_binary=cfg.get('socat_remote_binary'),
         lte_device_mac=cfg.get('lte_device_mac'),
         unifi=cfg.get('unifi'),
+        management=cfg.get('bridge_management', 'self'),
     )
 
 

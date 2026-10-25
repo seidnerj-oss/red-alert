@@ -471,6 +471,22 @@ class TestBridgeIntegration:
         assert bridge._lte_device_ssh_key_path == '/home/user/.ssh/id_ed25519'
         assert bridge._ssh_username == 'admin'
 
+    def test_create_bridge_defaults_to_self_management(self):
+        bridge = _create_bridge({'device': '/dev/cdc-wdm0', 'lte_host': '192.168.1.100'})
+        assert bridge is not None
+        assert bridge.management == 'self'
+
+    def test_create_bridge_passes_external_management(self):
+        cfg = {'device': '/dev/cdc-wdm0', 'lte_host': '192.168.1.100', 'bridge_management': 'external'}
+        bridge = _create_bridge(cfg)
+        assert bridge is not None
+        assert bridge.management == 'external'
+
+    def test_create_bridge_rejects_unknown_management(self):
+        cfg = {'device': '/dev/cdc-wdm0', 'lte_host': '192.168.1.100', 'bridge_management': 'bogus'}
+        with pytest.raises(ValueError, match='management'):
+            _create_bridge(cfg)
+
     @pytest.mark.asyncio
     async def test_run_monitor_bridge_mode_calls_ensure_bridge(self, tmp_path):
         mock_polygon_mgr = MagicMock()
