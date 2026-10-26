@@ -62,16 +62,14 @@ DEFAULT_CONFIG: dict = {
     'polygon_cache_path': None,
     'lte_host': None,
     'bridge_port': 18222,
-    'lte_device_ssh_key_path': None,
-    'ssh_username': None,
-    'socat_remote_binary': None,
+    'bridge_management': 'self',
     'health_check_interval': 300,
     'history_path': None,
     'history_max_age': 3600,
 }
 
 # Consecutive failed bridge health checks before the monitor is restarted to rebuild
-# the bridge. One failure is not enough: check_lte_bridge reports any SSH error as
+# the bridge. One failure is not enough: the health check reports any SSH error as
 # "down", so a momentary network blip would otherwise cost a full teardown (and the
 # CBS blind spot while it runs). Two in a row means the link has been bad across a
 # whole health_check_interval, which a blip does not survive.
@@ -320,22 +318,31 @@ def _validate_areas_overlap(lat: float, lon: float, areas: list[str], resolved: 
 
 
 def _create_bridge(cfg: dict):
-    """Create a CbsBridge if bridge mode is configured (lte_host is set)."""
+    """Create a CbsBridge if bridge mode is configured (lte_host is set).
+
+    With ``bridge_management`` "self" (the default) this also builds the lte-pro-access
+    supervisor that runs the relays; see ``build_supervisor`` for the keys it requires.
+    """
     lte_host = cfg.get('lte_host')
     if not lte_host:
         return None
 
-    from red_alert.integrations.inputs.cbs.bridge import CbsBridge
+    from red_alert.integrations.inputs.cbs.bridge import BRIDGE_MANAGEMENT_MODES, CbsBridge, build_supervisor
+
+    management = cfg.get('bridge_management', 'self')
+    if management not in BRIDGE_MANAGEMENT_MODES:
+        raise ValueError(f'bridge_management must be one of {BRIDGE_MANAGEMENT_MODES}, got {management!r}')
+    bridge_port = cfg.get('bridge_port', 18222)
+    supervisor = None
+    if management == 'self':
+        supervisor = build_supervisor(cfg, bridge_port, cfg.get('health_check_interval', 300))
 
     return CbsBridge(
         lte_host=lte_host,
-        bridge_port=cfg.get('bridge_port', 18222),
+        bridge_port=bridge_port,
         device=cfg['device'],
-        lte_device_ssh_key_path=cfg.get('lte_device_ssh_key_path'),
-        ssh_username=cfg.get('ssh_username'),
-        socat_remote_binary=cfg.get('socat_remote_binary'),
-        lte_device_mac=cfg.get('lte_device_mac'),
-        unifi=cfg.get('unifi'),
+        management=management,
+        supervisor=supervisor,
     )
 
 
@@ -348,6 +355,10 @@ async def _periodic_health_check(bridge, monitor: CbsAlertMonitor, interval: int
     ``configure_cbs`` before starting qmicli again - the same path as a service
     restart. Without this, a qmicli attached to a dead link never exits, so the
     reconnect loop never runs.
+
+    A status with ``rebuild_now`` set (a self-managed bridge whose relay path was rebuilt
+    under qmicli) is definitive rather than a possible blip, so it triggers the rebuild at
+    once instead of counting toward the threshold.
 
     A check that raises is logged and neither counts as a failure nor resets the count.
     """
@@ -363,6 +374,13 @@ async def _periodic_health_check(bridge, monitor: CbsAlertMonitor, interval: int
         if status['lte_bridge'] and status['local_bridge']:
             failures = 0
             logger.info('Bridge health check: OK')
+            continue
+
+        if status.get('rebuild_now'):
+            logger.warning('Bridge relay path was rebuilt under qmicli - restarting qmicli to rebuild the bridge')
+            failures = 0
+            bridge.request_fresh_start()
+            await monitor.stop_subprocess(stop_timeout)
             continue
 
         failures += 1

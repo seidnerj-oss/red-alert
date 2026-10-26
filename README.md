@@ -44,8 +44,7 @@ src/red_alert/
       cbs/                 # Cell Broadcast System via QMI modem
         parser.py          # CBS page/message parsing
         server.py          # CbsAlertMonitor + qmicli subprocess
-        bridge.py          # CbsBridge (socat bridge + auto SSH enable)
-        lte_ssh.py         # Enable SSH on LTE device via WebRTC
+        bridge.py          # CbsBridge (socat bridge, supervised in-process by lte-pro-access)
         input.py           # CbsInput (orchestrator wrapper)
         __main__.py        # CLI entry point
     outputs/               # Alert consumers (output destinations)
@@ -132,7 +131,7 @@ The orchestrator runs all configured inputs and outputs as concurrent tasks in a
 ```bash
 git clone https://github.com/seidnerj-oss/red-alert.git
 cd red-alert
-uv sync --group dev --extra unifi --extra cbs
+uv sync --group dev --extra unifi
 ```
 
 ### Configuration
@@ -147,12 +146,14 @@ Create a `config.json` with your inputs and outputs:
             "enabled": true,
             "qmicli_path": "/usr/local/bin/qmicli-cbs",
             "device": "/dev/cdc-wdm0",
-            "lte_host": "172.16.1.221",
+            "lte_host": "192.168.1.20",
             "lte_device_ssh_key_path": "~/.ssh/id_ed25519_lte",
-            "ssh_username": "ISey",
+            "ssh_username": "root",
             "lte_device_mac": "aa:bb:cc:dd:ee:ff",
+            "monitoring_host_address": "192.168.1.10",
+            "bridge_state_dir": "~/.local/state/red-alert",
             "unifi": {
-                "host": "172.16.1.1",
+                "host": "192.168.1.1",
                 "username": "admin",
                 "password": "...",
                 "totp_secret": "..."
@@ -162,7 +163,7 @@ Create a `config.json` with your inputs and outputs:
     "outputs": {
         "unifi": {
             "enabled": true,
-            "host": "172.16.1.1",
+            "host": "192.168.1.1",
             "username": "admin",
             "password": "...",
             "totp_secret": "...",
@@ -196,7 +197,7 @@ The service file includes `ExecStartPre` to create the QMI device node required 
 The orchestrator handles failures gracefully:
 - **Output auth failures** (TOTP timing, rate limiting) - retries with exponential backoff
 - **Input failures** (CBS bridge down) - retries independently, other inputs continue
-- **LTE device reboots** - auto-enables SSH via the UniFi controller's WebRTC debug terminal
+- **LTE device reboots** - auto-enables SSH via the UniFi controller's WebRTC debug terminal and re-uploads socat ([lte-pro-access](https://github.com/seidnerj-oss/lte-pro-access))
 - **Stale QMI clients** - kills socat/qmicli/qmi-proxy on the LTE device before reconnecting
 
 ---
@@ -292,4 +293,4 @@ Upon restarting the AppDaemon add-on, Home Assistant will create several entitie
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0, the license of the original RedAlert project - see the [LICENSE](LICENSE) file for details.

@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """Automate SSH setup on a UniFi LTE Backup Pro via the controller's WebRTC debug terminal.
 
-Thin CLI wrapper around red_alert.integrations.inputs.cbs.lte_ssh.
+Authorizes an SSH public key on the device (appending, never overwriting the existing
+authorized_keys) and starts dropbear only when it is not already running, via
+pyunifiapi's enable_ssh. The CBS monitor does this itself when the device refuses SSH
+(after a reboot); run this script for the first setup, or when dropbear is running but
+does not accept your key yet, which the monitor cannot repair because the connection
+is not refused.
+
+Requires pyunifiapi >= 0.2.0 (see the unifi extra in pyproject.toml). It is imported
+lazily, so importing this script works without it.
 
 Usage (direct):
     python scripts/setup-lte-pro-ssh.py \
@@ -27,8 +35,46 @@ import argparse
 import asyncio
 import logging
 import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from red_alert.integrations.inputs.cbs.lte_ssh import build_controller_config, enable_ssh, read_pubkey
+if TYPE_CHECKING:
+    from pyunifiapi import CloudConfig, ControllerConfig
+
+
+def read_pubkey(path: str | Path) -> str:
+    """Read and validate an SSH public key file."""
+    pubkey_path = Path(path).expanduser()
+    if not pubkey_path.exists():
+        raise FileNotFoundError(f'Public key file not found: {pubkey_path}')
+
+    pubkey = pubkey_path.read_text().strip()
+    if not pubkey.startswith(('ssh-', 'ecdsa-', 'sk-')):
+        raise ValueError(f'Does not look like a public key: {pubkey[:40]}...')
+
+    return pubkey
+
+
+def build_controller_config(
+    *,
+    host: str | None,
+    device_id: str | None,
+    username: str,
+    password: str,
+    port: int,
+    site: str,
+    totp_secret: str | None,
+) -> ControllerConfig | CloudConfig:
+    """Build a UniFi controller config for a direct (host) or cloud (device_id) connection."""
+    from pyunifiapi import CloudConfig, ControllerConfig
+
+    if device_id:
+        if not totp_secret:
+            raise ValueError('totp_secret is required for cloud connections')
+        return CloudConfig(username=username, password=password, device_id=device_id, totp_secret=totp_secret, site=site)
+    if not host:
+        raise ValueError('Either host (direct) or device_id (cloud) must be provided')
+    return ControllerConfig(host=host, username=username, password=password, port=port, site=site, totp_secret=totp_secret)
 
 
 def main() -> None:
@@ -67,7 +113,10 @@ def main() -> None:
             site=args.site,
             totp_secret=args.totp_secret,
         )
-        asyncio.run(enable_ssh(config, args.mac, pubkey))
+        from pyunifiapi import enable_ssh
+
+        result = asyncio.run(enable_ssh(config, args.mac, pubkey))
+        print(f'SSH enabled (key_added={result.key_added}, dropbear_started={result.dropbear_started})')
     except Exception as e:
         print(f'Error: {e}', file=sys.stderr)
         sys.exit(1)
