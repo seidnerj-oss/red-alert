@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 
 [[package]]
@@ -570,6 +570,14 @@ wheels = [
 ]
 
 [[package]]
+name = "lte-pro-access"
+version = "0.1.0"
+source = { git = "https://github.com/seidnerj-oss/lte-pro-access?rev=v0.1.0#2bca5ea572fd970d973378265db52da8e8f893c0" }
+dependencies = [
+    { name = "asyncssh" },
+]
+
+[[package]]
 name = "markupsafe"
 version = "3.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1041,9 +1049,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-cbs = [
-    { name = "asyncssh" },
-]
 homeassistant = [
     { name = "appdaemon" },
 ]
@@ -1053,6 +1058,7 @@ homebridge = [
 unifi = [
     { name = "aiounifi" },
     { name = "libdatachannel-py" },
+    { name = "lte-pro-access" },
     { name = "pyotp" },
 ]
 
@@ -1072,9 +1078,9 @@ requires-dist = [
     { name = "aiohttp", marker = "extra == 'homebridge'" },
     { name = "aiounifi", marker = "extra == 'unifi'" },
     { name = "appdaemon", marker = "extra == 'homeassistant'" },
-    { name = "asyncssh", marker = "extra == 'cbs'" },
     { name = "httpx" },
     { name = "libdatachannel-py", marker = "extra == 'unifi'", specifier = ">=2025.1.2.dev0" },
+    { name = "lte-pro-access", marker = "extra == 'unifi'", git = "https://github.com/seidnerj-oss/lte-pro-access?rev=v0.1.0" },
     { name = "pyotp", marker = "extra == 'unifi'" },
 ]
 provides-extras = ["homeassistant", "homebridge", "unifi", "homepod", "cbs"]
