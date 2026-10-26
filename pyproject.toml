@@ -31,12 +31,12 @@ unifi = [
     # lacks aarch64 wheels for Raspberry Pi OS (manylinux_2_36).
     # Remove this once pyunifiapi >= 0.2.0 is published to PyPI and added here directly.
     "libdatachannel-py>=2025.1.2.dev0",
-    # lte-pro-access (github.com/seidnerj-oss/lte-pro-access, git tag v0.1.0) is not
+    # lte-pro-access (github.com/seidnerj-oss/lte-pro-access, git tag v0.1.1) is not
     # on PyPI, so it is pinned to its git tag. The CBS bridge runs its supervisor
     # in-process with bridge_management "self" (SSH re-enable, socat upload, both
     # relays). It is imported lazily, so the package works without it.
     # Switch to a plain version specifier once it is published to PyPI.
-    "lte-pro-access @ git+https://github.com/seidnerj-oss/lte-pro-access@v0.1.0",
+    "lte-pro-access @ git+https://github.com/seidnerj-oss/lte-pro-access@v0.1.1",
 ]
 homepod = [
     # pyatv is NOT a direct dependency - it's invoked as a subprocess via
