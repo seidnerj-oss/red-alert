@@ -272,7 +272,11 @@ class CbsBridge:
         if self._management == 'external':
             if await self._probe_local_socket():
                 self._fresh_start = False
-                self._listener_inode = _local_listener_inode()
+                # A failed read keeps the previous listener, so the check stays armed: a stale
+                # value costs at most one extra qmicli restart, a None would disable it.
+                listener = _local_listener_inode()
+                if listener is not None:
+                    self._listener_inode = listener
                 return True
             logger.error('External bridge is down: nothing accepts connections on the local qmi-proxy socket')
             return False

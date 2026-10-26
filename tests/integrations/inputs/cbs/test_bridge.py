@@ -277,3 +277,16 @@ class TestExternalRelayReplaced:
         ):
             assert await bridge.ensure_bridge() is True
             assert await bridge.health_check() == {'lte_bridge': True, 'local_bridge': True}
+
+    @pytest.mark.asyncio
+    async def test_failed_read_keeps_the_previous_listener(self, tmp_path, listening_tcp_port):
+        port = await listening_tcp_port()
+        bridge = _external_bridge(lte_host='127.0.0.1', bridge_port=port)
+        connect, _ = _fake_unix_connection(accepts=True)
+        with patch('red_alert.integrations.inputs.cbs.bridge.asyncio.open_unix_connection', connect):
+            with patch('red_alert.integrations.inputs.cbs.bridge.PROC_NET_UNIX', str(_proc_net_unix(tmp_path, 1))):
+                await bridge.ensure_bridge()
+            with patch('red_alert.integrations.inputs.cbs.bridge.PROC_NET_UNIX', str(tmp_path / 'missing')):
+                await bridge.ensure_bridge()
+            with patch('red_alert.integrations.inputs.cbs.bridge.PROC_NET_UNIX', str(_proc_net_unix(tmp_path, 2))):
+                assert (await bridge.health_check())['rebuild_now'] is True
