@@ -66,6 +66,28 @@ class TestSetupCbs:
 
         assert _load_script('setup-cbs.py').SOCAT_DEVICE_BINARY == Path(SOCAT_DEVICE_BINARY)
 
+    def test_download_socat_delegates_to_lte_pro_access(self, monkeypatch):
+        calls = []
+        module = types.ModuleType('lte_pro_access')
+        module.fetch_socat = lambda destination: calls.append(destination) or destination  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, 'lte_pro_access', module)
+        script = _load_script('setup-cbs.py')
+        assert script.download_socat_mips() == script.SOCAT_DEVICE_BINARY
+        assert calls == [script.SOCAT_DEVICE_BINARY]
+
+    def test_download_socat_without_lte_pro_access_exits_with_the_fix(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, 'lte_pro_access', None)
+        with pytest.raises(SystemExit, match='uv sync --extra unifi'):
+            _load_script('setup-cbs.py').download_socat_mips()
+
+    def test_download_socat_only_flag_runs_the_helper(self, monkeypatch):
+        script = _load_script('setup-cbs.py')
+        calls = []
+        monkeypatch.setattr(script, 'download_socat_mips', lambda: calls.append(1) or script.SOCAT_DEVICE_BINARY)
+        monkeypatch.setattr(sys, 'argv', ['setup-cbs.py', '--download-socat-only'])
+        script.main()
+        assert calls == [1]
+
 
 class TestSetupLteProSsh:
     def test_read_pubkey_strips(self, tmp_path):

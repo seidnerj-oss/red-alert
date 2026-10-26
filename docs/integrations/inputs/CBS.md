@@ -190,7 +190,7 @@ python scripts/setup-cbs.py --ssh-key ~/.ssh/id_ed25519_lte
 **What the setup script does (infrastructure only):**
 
 1. **Builds qmicli** - clones [qmicli-cbs](https://github.com/seidnerj/qmicli-cbs) and runs Docker cross-compilation (aarch64 + MIPS + darwin)
-2. **Downloads socat** - fetches a MIPS socat binary from the LEDE 17.01.6 package repository and places it at `data/socat-mips`, where the monitor reads it
+2. **Downloads socat** - runs lte-pro-access's `fetch_socat`, which downloads the pinned MIPS socat 1.7.3.1 (GPL-2.0, OpenWrt 17.01.6 `mips_24kc` package, SHA-256 verified) and places it at `data/socat-mips`, where the monitor reads it. The binary is downloaded, never bundled or committed, and `data/socat-mips` is git-ignored
 3. **Sets up the monitoring host** - checks socat is installed, prints instructions for deploying qmicli
 4. **Generates an SSH key** for the LTE device if `--ssh-key` is not given (`~/.ssh/id_ed25519_lte`)
 
@@ -200,7 +200,7 @@ Individual steps can be re-run independently:
 
 ```bash
 python scripts/setup-cbs.py --build-only
-python scripts/setup-cbs.py --download-socat-only
+python scripts/setup-cbs.py --download-socat-only   # needs the unifi extra (lte-pro-access)
 python scripts/setup-cbs.py --setup-host-only
 ```
 

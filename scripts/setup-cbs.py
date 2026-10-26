@@ -36,24 +36,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import gzip
-import hashlib
-import io
 import logging
-import os
 import platform
 import shutil
 import subprocess
 import sys
-import tarfile
 from pathlib import Path
 
-import httpx
-
 logger = logging.getLogger('setup-cbs')
-
-SOCAT_IPK_URL = 'https://downloads.openwrt.org/releases/17.01.6/packages/mips_24kc/packages/socat_1.7.3.1-1_mips_24kc.ipk'
-SOCAT_IPK_SHA256 = None  # Set after first verified download
 
 CACHE_DIR = Path.home() / '.cache' / 'red-alert'
 # Where CbsBridge reads the MIPS socat it uploads to the LTE device.
@@ -147,84 +137,22 @@ def build_qmicli(qmicli_cbs_path: Path | None = None, arch: str | None = None) -
 
 
 def download_socat_mips() -> Path:
-    """Download and extract the socat MIPS binary for the LTE device.
+    """Fetch the MIPS socat for the LTE device to data/socat-mips, where CbsBridge reads it.
 
-    Downloads the socat ipk from the LEDE 17.01.6 package repository,
-    extracts the MIPS binary, and places it at data/socat-mips, where
-    CbsBridge reads it.
+    The download, pinned hashes and verification live in lte-pro-access (lte_pro_access.fetch_socat), which is
+    also what uploads the binary to the device.
 
     Returns:
-        Path to the extracted socat MIPS binary.
+        Path to the socat MIPS binary.
     """
-    destination = SOCAT_DEVICE_BINARY
-    if destination.exists():
-        logger.info('Using existing socat MIPS binary: %s', destination)
-        return destination
-
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    ipk_path = CACHE_DIR / 'socat_mips_24kc.ipk'
-
-    logger.info('Downloading socat MIPS binary from %s...', SOCAT_IPK_URL)
     try:
-        with httpx.Client(timeout=60.0, follow_redirects=True) as client:
-            resp = client.get(SOCAT_IPK_URL)
-            resp.raise_for_status()
-            ipk_path.write_bytes(resp.content)
-    except httpx.HTTPError as e:
-        print(
-            f'\nFailed to download socat: {e}\n\n'
-            f'If the LEDE URL is unavailable, manually download or build:\n'
-            f'  Package: socat_1.7.3.1-1_mips_24kc.ipk\n'
-            f'  URL: {SOCAT_IPK_URL}\n'
-            f'  Any socat 1.7.x build for mips_24kc musl should work.\n'
-            f'  Place the extracted binary at: {destination}\n',
-            file=sys.stderr,
-        )
-        raise
+        from lte_pro_access import fetch_socat
+    except ModuleNotFoundError as exc:
+        raise SystemExit('lte-pro-access is not installed. Run: uv sync --extra unifi') from exc
 
-    if SOCAT_IPK_SHA256:
-        sha256 = hashlib.sha256(ipk_path.read_bytes()).hexdigest()
-        if sha256 != SOCAT_IPK_SHA256:
-            ipk_path.unlink()
-            raise ValueError(f'SHA256 mismatch: expected {SOCAT_IPK_SHA256}, got {sha256}')
-        logger.info('SHA256 checksum verified')
-
-    socat_binary = _extract_socat_from_ipk(ipk_path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(socat_binary, destination)
-    os.chmod(destination, 0o755)
-    ipk_path.unlink(missing_ok=True)
-
+    destination = fetch_socat(SOCAT_DEVICE_BINARY)
     logger.info('socat MIPS binary placed at: %s', destination)
     return destination
-
-
-def _extract_socat_from_ipk(ipk_path: Path) -> Path:
-    """Extract the socat binary from an ipk (ar archive containing data.tar.gz)."""
-    extract_dir = CACHE_DIR / 'socat-extract'
-    extract_dir.mkdir(parents=True, exist_ok=True)
-
-    subprocess.run(['ar', 'x', str(ipk_path)], cwd=str(extract_dir), check=True)
-
-    data_tar_gz = extract_dir / 'data.tar.gz'
-    if not data_tar_gz.exists():
-        raise FileNotFoundError(f'data.tar.gz not found in ipk archive at {extract_dir}')
-
-    with gzip.open(data_tar_gz, 'rb') as gz:
-        with tarfile.open(fileobj=io.BytesIO(gz.read())) as tar:
-            socat_members = [m for m in tar.getmembers() if m.name.endswith('/socat') or m.name == 'socat']
-            if not socat_members:
-                all_members = [m.name for m in tar.getmembers()]
-                raise FileNotFoundError(f'socat binary not found in data.tar.gz. Contents: {all_members}')
-
-            tar.extract(socat_members[0], path=str(extract_dir))
-            extracted_path = extract_dir / socat_members[0].name
-
-    for f in extract_dir.iterdir():
-        if f != extracted_path and f.is_file():
-            f.unlink(missing_ok=True)
-
-    return extracted_path
 
 
 # ---------- Step c: Monitoring host setup ----------
