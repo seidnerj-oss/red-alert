@@ -200,3 +200,80 @@ class TestExternalManagement:
     async def test_external_close_is_a_noop(self):
         bridge = _external_bridge()
         await bridge.close()
+
+
+PROC_NET_UNIX_HEADER = 'Num       RefCount Protocol Flags    Type St Inode Path\n'
+
+
+def _proc_net_unix(tmp_path, listener_inode: int | None):
+    """Write a /proc/net/unix stand-in with a connected qmi-proxy socket and, optionally, its listener."""
+    lines = [PROC_NET_UNIX_HEADER, '0000000089f9beca: 00000003 00000000 00000000 0001 03 108253400 @qmi-proxy\n']
+    if listener_inode is not None:
+        lines.append(f'000000000e20bfde: 00000002 00000000 00010000 0001 01 {listener_inode} @qmi-proxy\n')
+    lines.append('0000000011111111: 00000002 00000000 00010000 0001 01 999 @other\n')
+    path = tmp_path / 'unix'
+    path.write_text(''.join(lines))
+    return path
+
+
+class TestExternalRelayReplaced:
+    """A restart of the external local relay leaves qmicli on a dead connection while both probes pass."""
+
+    async def _health_after_relay_change(self, tmp_path, listening_tcp_port, before: int | None, after: int | None) -> dict:
+        port = await listening_tcp_port()
+        bridge = _external_bridge(lte_host='127.0.0.1', bridge_port=port)
+        connect, _ = _fake_unix_connection(accepts=True)
+        with patch('red_alert.integrations.inputs.cbs.bridge.asyncio.open_unix_connection', connect):
+            with patch('red_alert.integrations.inputs.cbs.bridge.PROC_NET_UNIX', str(_proc_net_unix(tmp_path, before))):
+                assert await bridge.ensure_bridge() is True
+            with patch('red_alert.integrations.inputs.cbs.bridge.PROC_NET_UNIX', str(_proc_net_unix(tmp_path, after))):
+                return await bridge.health_check()
+
+    @pytest.mark.asyncio
+    async def test_replaced_listener_rebuilds_now(self, tmp_path, listening_tcp_port):
+        status = await self._health_after_relay_change(tmp_path, listening_tcp_port, 108095000, 108228412)
+
+        assert status == {'lte_bridge': False, 'local_bridge': False, 'rebuild_now': True}
+
+    @pytest.mark.asyncio
+    async def test_same_listener_is_healthy(self, tmp_path, listening_tcp_port):
+        status = await self._health_after_relay_change(tmp_path, listening_tcp_port, 108228412, 108228412)
+
+        assert status == {'lte_bridge': True, 'local_bridge': True}
+
+    @pytest.mark.asyncio
+    async def test_missing_listener_is_left_to_the_probes(self, tmp_path, listening_tcp_port):
+        status = await self._health_after_relay_change(tmp_path, listening_tcp_port, 108228412, None)
+
+        assert 'rebuild_now' not in status
+
+    @pytest.mark.asyncio
+    async def test_unknown_listener_at_start_skips_the_check(self, tmp_path, listening_tcp_port):
+        status = await self._health_after_relay_change(tmp_path, listening_tcp_port, None, 108228412)
+
+        assert status == {'lte_bridge': True, 'local_bridge': True}
+
+    @pytest.mark.asyncio
+    async def test_rebuild_records_the_new_listener(self, tmp_path, listening_tcp_port):
+        port = await listening_tcp_port()
+        bridge = _external_bridge(lte_host='127.0.0.1', bridge_port=port)
+        connect, _ = _fake_unix_connection(accepts=True)
+        with patch('red_alert.integrations.inputs.cbs.bridge.asyncio.open_unix_connection', connect):
+            with patch('red_alert.integrations.inputs.cbs.bridge.PROC_NET_UNIX', str(_proc_net_unix(tmp_path, 1))):
+                await bridge.ensure_bridge()
+            with patch('red_alert.integrations.inputs.cbs.bridge.PROC_NET_UNIX', str(_proc_net_unix(tmp_path, 2))):
+                assert (await bridge.health_check())['rebuild_now'] is True
+                assert await bridge.ensure_bridge() is True
+                assert await bridge.health_check() == {'lte_bridge': True, 'local_bridge': True}
+
+    @pytest.mark.asyncio
+    async def test_unreadable_proc_skips_the_check(self, tmp_path, listening_tcp_port):
+        port = await listening_tcp_port()
+        bridge = _external_bridge(lte_host='127.0.0.1', bridge_port=port)
+        connect, _ = _fake_unix_connection(accepts=True)
+        with (
+            patch('red_alert.integrations.inputs.cbs.bridge.asyncio.open_unix_connection', connect),
+            patch('red_alert.integrations.inputs.cbs.bridge.PROC_NET_UNIX', str(tmp_path / 'missing')),
+        ):
+            assert await bridge.ensure_bridge() is True
+            assert await bridge.health_check() == {'lte_bridge': True, 'local_bridge': True}

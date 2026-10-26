@@ -45,6 +45,12 @@ logger = logging.getLogger('red_alert.cbs.bridge')
 LOCAL_QMI_PROXY_SOCKET = '\0qmi-proxy'
 PROBE_TIMEOUT = 3.0
 
+# Linux lists unix sockets here; abstract names show with a leading '@' and a listening
+# socket carries the __SO_ACCEPTCON flag. Used in ``external`` management to notice that the
+# local relay was replaced under a running qmicli.
+PROC_NET_UNIX = '/proc/net/unix'
+UNIX_LISTENING_FLAG = 0x10000
+
 # The MIPS socat that lte-pro-access uploads to the device as /tmp/socat. The path walks up
 # from this module to the repo root, so it assumes a source checkout (the documented git
 # clone deployment); in a wheel install it would point outside the package.
@@ -129,6 +135,24 @@ def build_supervisor(cfg: dict, qmi_port: int, check_interval_seconds: int) -> S
     return create_supervisor(config)
 
 
+def _local_listener_inode() -> int | None:
+    """Return the inode of the socket listening on the local abstract ``qmi-proxy`` name.
+
+    None when nothing listens there or ``/proc/net/unix`` cannot be read (not Linux).
+    """
+    name = '@' + LOCAL_QMI_PROXY_SOCKET[1:]
+    try:
+        with open(PROC_NET_UNIX) as f:
+            lines = f.readlines()[1:]
+    except OSError:
+        return None
+    for line in lines:
+        fields = line.split()
+        if len(fields) == 8 and fields[7] == name and int(fields[3], 16) & UNIX_LISTENING_FLAG:
+            return int(fields[6])
+    return None
+
+
 async def _bounded[T](awaitable: Awaitable[T]) -> T:
     """Await a supervisor call, bounded by the library's own tick timeout."""
     from lte_pro_access import TICK_TIMEOUT_SECONDS
@@ -167,6 +191,8 @@ class CbsBridge:
         self._supervisor = supervisor
         self._fresh_start = True
         self._fresh_start_requests = 0
+        # External management: the local relay listener qmicli was started against.
+        self._listener_inode: int | None = None
 
     @property
     def lte_host(self) -> str:
@@ -246,6 +272,7 @@ class CbsBridge:
         if self._management == 'external':
             if await self._probe_local_socket():
                 self._fresh_start = False
+                self._listener_inode = _local_listener_inode()
                 return True
             logger.error('External bridge is down: nothing accepts connections on the local qmi-proxy socket')
             return False
@@ -331,15 +358,28 @@ class CbsBridge:
 
         In ``external`` management the LTE side is a TCP connect to
         ``lte_host:bridge_port`` and the local side is a connect to the local
-        abstract ``qmi-proxy`` socket; no SSH is opened.
+        abstract ``qmi-proxy`` socket; no SSH is opened. When the socket listening on
+        ``qmi-proxy`` is not the one ``ensure_bridge`` saw (the managing process restarted
+        the local relay), qmicli is still attached to the old relay's dead connection and
+        never notices, while both probes succeed; that reports both sides down with
+        ``rebuild_now`` set. Without ``/proc/net/unix`` this check is skipped.
 
         Returns a dict with status of each component.
         """
         if self._management == 'external':
-            return {
+            status = {
                 'lte_bridge': await self._probe_tcp(self._lte_host, self._bridge_port),
                 'local_bridge': await self._probe_local_socket(),
             }
+            listener = _local_listener_inode()
+            if self._listener_inode is not None and listener is not None and listener != self._listener_inode:
+                logger.warning(
+                    'The local qmi-proxy relay was replaced under the running qmicli (listener inode %d -> %d); reporting it down',
+                    self._listener_inode,
+                    listener,
+                )
+                return {**DOWN, REBUILD_NOW_KEY: True}
+            return status
 
         if self._fresh_start:
             return dict(DOWN)
