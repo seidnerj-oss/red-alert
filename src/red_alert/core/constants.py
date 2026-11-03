@@ -40,8 +40,7 @@ CLEAN_NAME_REGEX = re.compile(r'[\(\)\'"]+')
 # phrase rules in state.py decide. Memorial day sirens (5, 6) are not threats and map to 0.
 #
 # Related API endpoints:
-#   GetDistricts.aspx?lang=he - City list with areaid, areaname, migun_time (shelter time in seconds)
-#   GetCities.aspx?lang=he    - City list with areaid, mixname, color
+#   districts/districts_heb.json - City list with areaid, areaname, migun_time (shelter time in seconds)
 #   AlertHistory/heb?period=  - Extended history (lastDay, lastWeek or lastMonth)
 
 # Maps history endpoint 'category' values (alertCategories.json ids) to live endpoint 'cat' values.

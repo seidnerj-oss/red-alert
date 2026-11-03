@@ -9,8 +9,6 @@ import httpx
 
 from red_alert.core.utils import check_bom, detect_and_decode
 
-ALERTS_HISTORY_REFERER = 'https://alerts-history.oref.org.il/'
-ALERTS_HISTORY_BASE = 'https://alerts-history.oref.org.il'
 OREF_WEBSITE_BASE = 'https://www.oref.org.il'
 OREF_WEBSITE_REFERER = 'https://www.oref.org.il/'
 OREF_API_BASE = 'https://api.oref.org.il'
@@ -20,6 +18,9 @@ OREF_ALERT_HISTORY_REFERER = f'{OREF_WEBSITE_BASE}/heb/alerts-history'
 # The alert history API only accepts these fixed windows, as (max hours covered, period value).
 ALERT_HISTORY_PERIODS = ((24, 'lastDay'), (24 * 7, 'lastWeek'))
 ALERT_HISTORY_LONGEST_PERIOD = 'lastMonth'
+
+# District files are named with three-letter language suffixes (districts_heb.json).
+DISTRICTS_LANG_SUFFIXES = {'he': 'heb', 'en': 'eng', 'ar': 'arb', 'ru': 'rus'}
 
 
 class HomeFrontCommandApiClient:
@@ -33,9 +34,7 @@ class HomeFrontCommandApiClient:
             /alerts/alertsTranslation.json               - Multi-language alert translations
             /alerts/RemainderConfig_heb.json             - Alert display config (TTL, instructions)
             /api/v1/AlertHistory/heb?period=lastDay      - Extended history (primary)
-        alerts-history.oref.org.il:
-            /Shared/Ajax/GetDistricts.aspx              - District/city data with shelter times
-            /Shared/Ajax/GetCities.aspx                  - City data (less useful than districts)
+            /districts/districts_heb.json                - District/city data with shelter times
         api.oref.org.il:
             /api/v1/global                               - Global config (polling interval)
 
@@ -386,8 +385,8 @@ class HomeFrontCommandApiClient:
         Returns a list of dicts with keys: label, label_he, value, id, areaid, areaname, migun_time.
         Returns None on failure.
         """
-        url = f'{ALERTS_HISTORY_BASE}/Shared/Ajax/GetDistricts.aspx?lang={lang}'
-        return await self._fetch_json(url, headers={'Referer': ALERTS_HISTORY_REFERER}, label='districts')
+        url = f'{OREF_WEBSITE_BASE}/districts/districts_{DISTRICTS_LANG_SUFFIXES.get(lang, lang)}.json'
+        return await self._fetch_json(url, headers={'Referer': OREF_WEBSITE_REFERER}, label='districts')
 
     async def download_file(self, url: str):
         """Download text content (e.g. city data), return str or None."""

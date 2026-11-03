@@ -65,7 +65,7 @@ def find_cities_near(
 class CityDataManager:
     """Manages city geographic data from HFC (Home Front Command) sources.
 
-    Primary source: HFC GetDistricts endpoint - city names, area groupings, shelter times (migun_time).
+    Primary source: HFC districts file (districts_heb.json) - city names, area groupings, shelter times (migun_time).
     Coordinate source: HFC Meser Hadash polygon API - per-city polygon boundaries, from which
     centroids are computed for lat/long coordinates.
 
@@ -168,7 +168,7 @@ class CityDataManager:
             self._log(f'Error saving city data cache: {e}', level='WARNING')
 
     def _process_hfc_districts(self, districts_list):
-        """Process HFC GetDistricts response into internal city data structure.
+        """Process HFC districts response into internal city data structure.
 
         Input format (list of dicts):
             {"label": "כפר סבא", "label_he": "כפר סבא", "value": "...", "id": "840",
