@@ -14,6 +14,12 @@ ALERTS_HISTORY_BASE = 'https://alerts-history.oref.org.il'
 OREF_WEBSITE_BASE = 'https://www.oref.org.il'
 OREF_WEBSITE_REFERER = 'https://www.oref.org.il/'
 OREF_API_BASE = 'https://api.oref.org.il'
+OREF_ALERT_HISTORY_URL = f'{OREF_WEBSITE_BASE}/api/v1/AlertHistory/heb'
+OREF_ALERT_HISTORY_REFERER = f'{OREF_WEBSITE_BASE}/heb/alerts-history'
+
+# The alert history API only accepts these fixed windows, as (max hours covered, period value).
+ALERT_HISTORY_PERIODS = ((24, 'lastDay'), (24 * 7, 'lastWeek'))
+ALERT_HISTORY_LONGEST_PERIOD = 'lastMonth'
 
 
 class HomeFrontCommandApiClient:
@@ -26,9 +32,9 @@ class HomeFrontCommandApiClient:
             /alerts/alertCategories.json                 - Alert category definitions
             /alerts/alertsTranslation.json               - Multi-language alert translations
             /alerts/RemainderConfig_heb.json             - Alert display config (TTL, instructions)
+            /api/v1/AlertHistory/heb?period=lastDay      - Extended history (primary)
         alerts-history.oref.org.il:
-            /Shared/Ajax/GetAlarmsHistory.aspx           - Extended history (primary)
-            /Shared/Ajax/GetDistricts.aspx               - District/city data with shelter times
+            /Shared/Ajax/GetDistricts.aspx              - District/city data with shelter times
             /Shared/Ajax/GetCities.aspx                  - City data (less useful than districts)
         api.oref.org.il:
             /api/v1/global                               - Global config (polling interval)
@@ -165,7 +171,7 @@ class HomeFrontCommandApiClient:
     async def get_alert_history(self):
         """Fetch alert history from the extended history endpoint.
 
-        Uses the alerts-history.oref.org.il extended endpoint which is more reliable
+        Uses the www.oref.org.il alert history API which is more reliable
         than the 24h endpoint on www.oref.org.il (which returns empty even when alerts
         occurred recently). Falls back to the 24h endpoint if the extended one fails.
 
@@ -221,8 +227,9 @@ class HomeFrontCommandApiClient:
             if alert_dt < cutoff:
                 continue
 
-            # Use matrix_id (= live cat) if available, fall back to HISTORY_CATEGORY_TO_LIVE
-            matrix_id = entry.get('matrix_id')
+            # Use matrix_id (= live cat) if available, fall back to HISTORY_CATEGORY_TO_LIVE.
+            # The current history API always sends matrixId 0, which means "not provided".
+            matrix_id = entry.get('matrix_id') or None
             hist_cat = entry.get('category')
             if matrix_id is not None:
                 try:
@@ -260,19 +267,19 @@ class HomeFrontCommandApiClient:
         return result
 
     async def get_extended_alert_history(self, hours_back: int = 24):
-        """Fetch alert history from the extended alerts-history.oref.org.il endpoint.
+        """Fetch alert history from the www.oref.org.il alert history API.
 
-        This endpoint is more reliable than the 24h endpoint and returns richer data
-        including category, category_desc, matrix_id, and alertDate in ISO format.
+        This endpoint is more reliable than the 24h endpoint and returns richer data.
+        The API groups entries by date; they are flattened into one dict per city with
+        'alertDate' (ISO, to the second), 'category', 'category_desc', 'data' and 'rid'.
+        The API only offers fixed windows, so the smallest one covering hours_back is used.
         """
-        now = datetime.now()
-        from_date = (now - timedelta(hours=hours_back)).strftime('%d.%m.%Y')
-        to_date = now.strftime('%d.%m.%Y')
-        url = f'{ALERTS_HISTORY_BASE}/Shared/Ajax/GetAlarmsHistory.aspx?lang=he&fromDate={from_date}&toDate={to_date}&mode=0'
+        period = next((p for max_hours, p in ALERT_HISTORY_PERIODS if hours_back <= max_hours), ALERT_HISTORY_LONGEST_PERIOD)
+        url = f'{OREF_ALERT_HISTORY_URL}?period={period}&cities='
         try:
 
             async def _do_fetch():
-                resp = await self._client.get(url, headers={'Referer': ALERTS_HISTORY_REFERER})
+                resp = await self._client.get(url, headers={'Referer': OREF_ALERT_HISTORY_REFERER})
                 resp.raise_for_status()
                 return detect_and_decode(resp.content)
 
@@ -282,10 +289,12 @@ class HomeFrontCommandApiClient:
             try:
                 text = check_bom(text)
                 data = json.loads(text)
-                if isinstance(data, list):
-                    self._logger.info(f'Extended history: loaded {len(data)} entries for past {hours_back}h.')
-                    return data
-                self._logger.warning('Extended history response is not a list.')
+                grouped = data.get('alarmsGroupedByDate') if isinstance(data, dict) else None
+                if isinstance(grouped, list):
+                    entries = self._flatten_alert_history(grouped)
+                    self._logger.info(f'Extended history: loaded {len(entries)} entries for {period}.')
+                    return entries
+                self._logger.warning('Extended history response has no alarmsGroupedByDate list.')
                 return None
             except json.JSONDecodeError as e:
                 self._logger.warning(f'Invalid JSON in extended history: {e}')
@@ -297,6 +306,38 @@ class HomeFrontCommandApiClient:
         except Exception as e:
             self._logger.error(f'Unexpected error fetching extended history: {e.__class__.__name__} - {e}', exc_info=True)
         return None
+
+    @staticmethod
+    def _flatten_alert_history(grouped: list) -> list[dict]:
+        """Flatten alarmsGroupedByDate into one dict per city.
+
+        Each API entry looks like {"data": "city", "date": "19.10.2026", "time": "20:31:16",
+        "dateTime": "2026-10-19T20:31:00", "category": 13, "category_Desc": "...", "matrixId": 0, "rid": 1}.
+        'dateTime' is truncated to the minute, so 'alertDate' is rebuilt from 'date' and 'time'.
+        """
+        entries: list[dict] = []
+        for group in grouped:
+            values = group.get('value') if isinstance(group, dict) else None
+            if not isinstance(values, list):
+                continue
+            for item in values:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    alert_date = datetime.strptime(f'{item.get("date")} {item.get("time")}', '%d.%m.%Y %H:%M:%S').isoformat()
+                except (ValueError, TypeError):
+                    alert_date = item.get('dateTime', '')
+                entry = {
+                    'alertDate': alert_date,
+                    'category': item.get('category'),
+                    'category_desc': item.get('category_Desc', ''),
+                    'data': item.get('data', ''),
+                    'rid': item.get('rid'),
+                }
+                if item.get('matrixId'):
+                    entry['matrix_id'] = item['matrixId']
+                entries.append(entry)
+        return entries
 
     async def _get_24h_alert_history(self):
         """Fetch from the legacy 24h endpoint. Known to be unreliable - may return empty

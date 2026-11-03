@@ -1,9 +1,11 @@
 import json
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 
+from red_alert.core.state import AlertState, AlertStateTracker
 from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
 
 
@@ -34,6 +36,28 @@ def _make_response(data: bytes, status_code=200, content_type='application/json'
         headers={'Content-Type': content_type},
         request=httpx.Request('GET', 'https://example.com'),
     )
+
+
+def _make_history_response(entries: list[dict]) -> httpx.Response:
+    """Build an AlertHistory API response from flattened entries (alertDate, category, category_desc, data, matrix_id)."""
+    groups: dict[str, list[dict]] = {}
+    for e in entries:
+        dt = datetime.fromisoformat(e['alertDate'])
+        date = dt.strftime('%d.%m.%Y')
+        groups.setdefault(date, []).append(
+            {
+                'data': e.get('data', ''),
+                'date': date,
+                'time': dt.strftime('%H:%M:%S'),
+                'dateTime': dt.strftime('%Y-%m-%dT%H:%M:00'),
+                'category': e.get('category'),
+                'category_Desc': e.get('category_desc', ''),
+                'matrixId': e.get('matrix_id', 0),
+                'rid': e.get('rid', 1),
+            }
+        )
+    body = {'alarmsGroupedByDate': [{'key': k, 'value': v} for k, v in groups.items()]}
+    return _make_response(json.dumps(body).encode('utf-8'))
 
 
 class TestGetLiveAlerts:
@@ -165,27 +189,83 @@ class TestAlertReceivedLogging:
 
 
 class TestGetExtendedAlertHistory:
-    @pytest.mark.asyncio
-    async def test_returns_list_on_success(self, api_urls, mock_logger):
-        history_data = [
+    API_BODY = {
+        'alarmsGroupedByDate': [
             {
-                'data': 'כפר סבא',
-                'date': '14.03.2026',
-                'time': '02:30:30',
-                'alertDate': '2026-03-14T02:30:00',
-                'category': 14,
-                'category_desc': 'בדקות הקרובות צפויות להתקבל התרעות באזורך',
-                'matrix_id': 10,
-                'rid': 479300,
-            }
+                'key': '19.10.2026',
+                'value': [
+                    {
+                        'data': 'אביתר',
+                        'date': '19.10.2026',
+                        'time': '20:31:16',
+                        'dateTime': '2026-10-19T20:31:00',
+                        'category': 13,
+                        'category_Desc': 'האירוע הסתיים',
+                        'matrixId': 0,
+                        'rid': 706608,
+                    }
+                ],
+            },
+            {
+                'key': '10.10.2026',
+                'value': [
+                    {
+                        'data': 'כפר סבא',
+                        'date': '10.10.2026',
+                        'time': '09:15:42',
+                        'dateTime': '2026-10-10T09:15:00',
+                        'category': 2,
+                        'category_Desc': 'חדירת כלי טיס עוין',
+                        'matrixId': 6,
+                        'rid': 700001,
+                    }
+                ],
+            },
         ]
-        resp = _make_response(json.dumps(history_data).encode('utf-8'))
-        client = _make_mock_client(resp)
+    }
+
+    @pytest.mark.asyncio
+    async def test_flattens_grouped_response(self, api_urls, mock_logger):
+        client = _make_mock_client(_make_response(json.dumps(self.API_BODY).encode('utf-8')))
         api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
 
         result = await api.get_extended_alert_history()
-        assert result == history_data
-        assert len(result) == 1
+        assert result == [
+            {'alertDate': '2026-10-19T20:31:16', 'category': 13, 'category_desc': 'האירוע הסתיים', 'data': 'אביתר', 'rid': 706608},
+            {
+                'alertDate': '2026-10-10T09:15:42',
+                'category': 2,
+                'category_desc': 'חדירת כלי טיס עוין',
+                'data': 'כפר סבא',
+                'rid': 700001,
+                'matrix_id': 6,
+            },
+        ]
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_minute_datetime_when_time_is_malformed(self, api_urls, mock_logger):
+        body = {'alarmsGroupedByDate': [{'key': 'x', 'value': [{'data': 'A', 'date': 'bad', 'time': '', 'dateTime': '2026-10-19T20:31:00'}]}]}
+        client = _make_mock_client(_make_response(json.dumps(body).encode('utf-8')))
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_extended_alert_history()
+        assert result[0]['alertDate'] == '2026-10-19T20:31:00'
+
+    @pytest.mark.asyncio
+    async def test_empty_period_returns_empty_list(self, api_urls, mock_logger):
+        client = _make_mock_client(_make_response(json.dumps({'alarmsGroupedByDate': []}).encode('utf-8')))
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        assert await api.get_extended_alert_history() == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(('hours_back', 'period'), [(1, 'lastDay'), (24, 'lastDay'), (25, 'lastWeek'), (168, 'lastWeek'), (169, 'lastMonth')])
+    async def test_picks_smallest_period_covering_hours_back(self, api_urls, mock_logger, hours_back, period):
+        client = _make_mock_client(_make_response(json.dumps({'alarmsGroupedByDate': []}).encode('utf-8')))
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_extended_alert_history(hours_back=hours_back)
+        assert client.get.call_args.args[0] == f'https://www.oref.org.il/api/v1/AlertHistory/heb?period={period}&cities='
 
     @pytest.mark.asyncio
     async def test_returns_none_on_empty_response(self, api_urls, mock_logger):
@@ -197,8 +277,17 @@ class TestGetExtendedAlertHistory:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_on_non_list(self, api_urls, mock_logger):
-        resp = _make_response(json.dumps({'not': 'a list'}).encode('utf-8'))
+    async def test_returns_none_on_unexpected_shape(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps([{'alertDate': '2026-03-14T02:30:00'}]).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_extended_alert_history()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_html_redirect_target(self, api_urls, mock_logger):
+        resp = _make_response(b'<!doctype html><html></html>', content_type='text/html')
         client = _make_mock_client(resp)
         api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
 
@@ -207,13 +296,13 @@ class TestGetExtendedAlertHistory:
 
     @pytest.mark.asyncio
     async def test_sends_referer_header(self, api_urls, mock_logger):
-        resp = _make_response(json.dumps([]).encode('utf-8'))
+        resp = _make_response(json.dumps({'alarmsGroupedByDate': []}).encode('utf-8'))
         client = _make_mock_client(resp)
         api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
 
         await api.get_extended_alert_history()
         call_kwargs = client.get.call_args
-        assert call_kwargs.kwargs.get('headers', {}).get('Referer') == 'https://alerts-history.oref.org.il/'
+        assert call_kwargs.kwargs.get('headers', {}).get('Referer') == 'https://www.oref.org.il/heb/alerts-history'
 
     @pytest.mark.asyncio
     async def test_returns_none_on_http_error(self, api_urls, mock_logger):
@@ -234,13 +323,12 @@ class TestGetExtendedAlertHistory:
 class TestGetAlertHistoryFallback:
     @pytest.mark.asyncio
     async def test_prefers_extended_endpoint(self, api_urls, mock_logger):
-        extended_data = [{'alertDate': '2026-03-14T02:30:00', 'category_desc': 'Test', 'data': 'City'}]
-        resp = _make_response(json.dumps(extended_data).encode('utf-8'))
-        client = _make_mock_client(resp)
+        extended_data = [{'alertDate': '2026-03-14T02:30:00', 'category': 1, 'category_desc': 'Test', 'data': 'City'}]
+        client = _make_mock_client(_make_history_response(extended_data))
         api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
 
         result = await api.get_alert_history()
-        assert result == extended_data
+        assert result == [{**extended_data[0], 'rid': 1}]
 
     @pytest.mark.asyncio
     async def test_falls_back_to_24h_on_extended_failure(self, api_urls, mock_logger):
@@ -637,15 +725,13 @@ class TestGetGlobalConfig:
 class TestGetRecentAlertsFromHistory:
     @pytest.mark.asyncio
     async def test_groups_history_entries_into_live_format(self, api_urls, mock_logger):
-        from datetime import datetime
-
         now = datetime.now()
         recent_date = now.strftime('%Y-%m-%dT%H:%M:%S')
         history = [
             {'alertDate': recent_date, 'category': 1, 'category_desc': 'ירי רקטות וטילים', 'data': 'תל אביב', 'matrix_id': 1},
             {'alertDate': recent_date, 'category': 1, 'category_desc': 'ירי רקטות וטילים', 'data': 'רמת גן', 'matrix_id': 1},
         ]
-        resp = _make_response(json.dumps(history).encode('utf-8'))
+        resp = _make_history_response(history)
         client = _make_mock_client(resp)
         api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
 
@@ -661,7 +747,7 @@ class TestGetRecentAlertsFromHistory:
         history = [
             {'alertDate': '2020-01-01T00:00:00', 'category': 1, 'category_desc': 'Old alert', 'data': 'City', 'matrix_id': 1},
         ]
-        resp = _make_response(json.dumps(history).encode('utf-8'))
+        resp = _make_history_response(history)
         client = _make_mock_client(resp)
         api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
 
@@ -670,14 +756,12 @@ class TestGetRecentAlertsFromHistory:
 
     @pytest.mark.asyncio
     async def test_uses_matrix_id_over_category(self, api_urls, mock_logger):
-        from datetime import datetime
-
         now = datetime.now()
         recent_date = now.strftime('%Y-%m-%dT%H:%M:%S')
         history = [
             {'alertDate': recent_date, 'category': 8, 'category_desc': 'Flash', 'data': 'City', 'matrix_id': 10},
         ]
-        resp = _make_response(json.dumps(history).encode('utf-8'))
+        resp = _make_history_response(history)
         client = _make_mock_client(resp)
         api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
 
@@ -687,14 +771,12 @@ class TestGetRecentAlertsFromHistory:
 
     @pytest.mark.asyncio
     async def test_falls_back_to_category_mapping(self, api_urls, mock_logger):
-        from datetime import datetime
-
         now = datetime.now()
         recent_date = now.strftime('%Y-%m-%dT%H:%M:%S')
         history = [
-            {'alertDate': recent_date, 'category': 8, 'category_desc': 'Flash', 'data': 'City'},
+            {'alertDate': recent_date, 'category': 10, 'category_desc': 'חדירת מחבלים', 'data': 'City'},
         ]
-        resp = _make_response(json.dumps(history).encode('utf-8'))
+        resp = _make_history_response(history)
         client = _make_mock_client(resp)
         api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
 
@@ -713,18 +795,52 @@ class TestGetRecentAlertsFromHistory:
 
     @pytest.mark.asyncio
     async def test_deduplicates_cities_in_group(self, api_urls, mock_logger):
-        from datetime import datetime
-
         now = datetime.now()
         recent_date = now.strftime('%Y-%m-%dT%H:%M:%S')
         history = [
             {'alertDate': recent_date, 'category': 1, 'category_desc': 'Missiles', 'data': 'City A', 'matrix_id': 1},
             {'alertDate': recent_date, 'category': 1, 'category_desc': 'Missiles', 'data': 'City A', 'matrix_id': 1},
         ]
-        resp = _make_response(json.dumps(history).encode('utf-8'))
+        resp = _make_history_response(history)
         client = _make_mock_client(resp)
         api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
 
         result = await api.get_recent_alerts_from_history(max_age_seconds=300)
         assert len(result) == 1
         assert result[0]['data'].count('City A') == 1
+
+    @pytest.mark.asyncio
+    async def test_zero_matrix_id_uses_category_mapping(self, api_urls, mock_logger):
+        recent_date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        history = [{'alertDate': recent_date, 'category': 2, 'category_desc': 'חדירת כלי טיס עוין', 'data': 'City', 'matrix_id': 0}]
+        client = _make_mock_client(_make_history_response(history))
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_recent_alerts_from_history(max_age_seconds=300)
+        assert result[0]['cat'] == '6'
+
+    @pytest.mark.asyncio
+    async def test_terrorist_infiltration_classifies_as_alert(self, api_urls, mock_logger):
+        recent_date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        history = [{'alertDate': recent_date, 'category': 10, 'category_desc': 'חדירת מחבלים', 'data': 'City'}]
+        client = _make_mock_client(_make_history_response(history))
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_recent_alerts_from_history(max_age_seconds=300)
+        tracker = AlertStateTracker()
+        assert tracker.update(result[0]) == AlertState.ALERT
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ('category', 'title', 'state'),
+        [(13, 'האירוע הסתיים', AlertState.ALL_CLEAR), (14, 'בדקות הקרובות צפויות להתקבל התרעות באזורך', AlertState.PRE_ALERT)],
+    )
+    async def test_update_and_flash_classify_by_title(self, api_urls, mock_logger, category, title, state):
+        recent_date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        history = [{'alertDate': recent_date, 'category': category, 'category_desc': title, 'data': 'City'}]
+        client = _make_mock_client(_make_history_response(history))
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        result = await api.get_recent_alerts_from_history(max_age_seconds=300)
+        tracker = AlertStateTracker()
+        assert tracker.update(result[0]) == state
