@@ -35,7 +35,7 @@ SESSION_HEADERS = {
     'Referer': 'https://www.oref.org.il/',
     'X-Requested-With': 'XMLHttpRequest',
     'Accept': 'application/json',
-    'Accept-Encoding': 'gzip, deflate, br',
+    'Accept-Encoding': 'gzip, deflate',
     'Accept-Language': 'he,en;q=0.9',
     'Connection': 'keep-alive',
     'Pragma': 'no-cache',
