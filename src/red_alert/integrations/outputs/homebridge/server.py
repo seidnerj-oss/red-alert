@@ -26,12 +26,12 @@ from red_alert.core.state import AlertState, AlertStateTracker
 logger = logging.getLogger('red_alert.homebridge')
 
 API_URLS = {
-    'live': 'https://www.oref.org.il/WarningMessages/alert/alerts.json',
-    'history': 'https://www.oref.org.il/WarningMessages/alert/History/AlertsHistory.json',
+    'live': 'https://www.oref.org.il/warningMessages/alert/Alerts.json',
+    'history': 'https://www.oref.org.il/warningMessages/alert/History/AlertsHistory.json',
 }
 
 SESSION_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (compatible; red-alert/4.0; Homebridge)',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
     'Referer': 'https://www.oref.org.il/',
     'X-Requested-With': 'XMLHttpRequest',
     'Accept': 'application/json',
@@ -172,7 +172,7 @@ def create_app(config: dict | None = None) -> web.Application:
     """Create the aiohttp web application."""
     cfg = {**DEFAULT_CONFIG, **(config or {})}
 
-    http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
+    http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0, follow_redirects=True)
 
     api_client = HomeFrontCommandApiClient(http_client, API_URLS, logger)
     monitor = AlertMonitor(api_client, areas_of_interest=cfg.get('areas_of_interest'), hold_seconds=cfg.get('hold_seconds'), logger=logger)

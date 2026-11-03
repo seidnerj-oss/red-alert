@@ -20,12 +20,12 @@ from red_alert.integrations.inputs.hfc.input import HfcInput
 logger = logging.getLogger('red_alert')
 
 API_URLS = {
-    'live': 'https://www.oref.org.il/WarningMessages/alert/alerts.json',
-    'history': 'https://www.oref.org.il/WarningMessages/alert/History/AlertsHistory.json',
+    'live': 'https://www.oref.org.il/warningMessages/alert/Alerts.json',
+    'history': 'https://www.oref.org.il/warningMessages/alert/History/AlertsHistory.json',
 }
 
 SESSION_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (compatible; red-alert/4.0)',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
     'Referer': 'https://www.oref.org.il/',
     'X-Requested-With': 'XMLHttpRequest',
     'Accept': 'application/json',
@@ -134,7 +134,7 @@ def _validate_config(config: dict) -> None:
 async def run(config: dict) -> None:
     _validate_config(config)
 
-    http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
+    http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0, follow_redirects=True)
     api_client = HomeFrontCommandApiClient(http_client, API_URLS, logger)
 
     try:
