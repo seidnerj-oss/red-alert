@@ -13,8 +13,8 @@ red-alert polls the Israeli Home Front Command (Pikud Ha-Oref) website API for l
 
 The HFC uses three domains:
 
-- **`www.oref.org.il`** - the main website (Angular app), hosts the live alerts, 24h history, and metadata endpoints (categories, translations, display config)
-- **`alerts-history.oref.org.il`** - the alerts history site, hosts the extended history, district data, and static assets (alarm sound)
+- **`www.oref.org.il`** - the main website (Angular app), hosts the live alerts, 24h and extended history, and metadata endpoints (categories, translations, display config)
+- **`alerts-history.oref.org.il`** - the former alerts history site; since November 2026 its pages redirect to `www.oref.org.il/heb/alerts-history`
 - **`api.oref.org.il`** - the API gateway, hosts global configuration
 
 All endpoints require HTTPS and specific headers (see [Required HTTP Headers](#required-http-headers)).
@@ -53,26 +53,35 @@ Returns the currently active alert as a JSON object, or an empty response (`\r\n
 #### Extended History (primary history source, used on startup)
 
 ```
-GET https://alerts-history.oref.org.il/Shared/Ajax/GetAlarmsHistory.aspx?lang=he&fromDate=DD.MM.YYYY&toDate=DD.MM.YYYY&mode=0
+GET https://www.oref.org.il/api/v1/AlertHistory/heb?period=lastDay&cities=
 ```
 
-Used by `HomeFrontCommandApiClient.get_alert_history()` as the primary history source. Returns an array of alerts for the specified date range with richer metadata than the 24h endpoint.
+Used by `HomeFrontCommandApiClient.get_alert_history()` as the primary history source, and by `get_recent_alerts_from_history()` to catch alerts the live poll missed. `period` is one of `lastDay`, `lastWeek` or `lastMonth`; the client picks the smallest one that covers the requested hours. This replaced `alerts-history.oref.org.il/Shared/Ajax/GetAlarmsHistory.aspx`, which now redirects to an HTML page.
 
 **Response format:**
 ```json
 {
-    "data": "כפר סבא",
-    "date": "14.03.2026",
-    "time": "02:30:30",
-    "alertDate": "2026-03-14T02:30:00",
-    "category": 14,
-    "category_desc": "בדקות הקרובות צפויות להתקבל התרעות באזורך",
-    "matrix_id": 10,
-    "rid": 479300
+    "alarmsGroupedByDate": [
+        {
+            "key": "19.10.2026",
+            "value": [
+                {
+                    "data": "אביתר",
+                    "date": "19.10.2026",
+                    "time": "20:31:16",
+                    "dateTime": "2026-10-19T20:31:00",
+                    "category": 13,
+                    "category_Desc": "האירוע הסתיים",
+                    "matrixId": 0,
+                    "rid": 706608
+                }
+            ]
+        }
+    ]
 }
 ```
 
-Note: `data` is a single city name string (not an array like in the live endpoint). Uses `category_desc` instead of `title`. The `HistoryManager` handles both field names for backward compatibility.
+The client flattens this into one dict per city with `alertDate` (rebuilt from `date` + `time`, since `dateTime` is cut to the minute), `category`, `category_desc`, `data` and `rid`. `data` is a single city name string (not an array like in the live endpoint). `category` uses the ids from `/alerts/alertCategories.json`, not live codes, and `matrixId` is always 0, so `HISTORY_CATEGORY_TO_LIVE` in `core/constants.py` converts it.
 
 #### District Data (primary city data source, fetched on startup)
 

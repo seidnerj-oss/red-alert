@@ -213,7 +213,7 @@ class TestGetHistoryAttributes:
 
 
 class TestLoadInitialHistoryExtendedFormat:
-    """Tests for loading history from the extended endpoint (GetAlarmsHistory.aspx)
+    """Tests for loading history from the extended endpoint (AlertHistory API)
     which uses 'category_desc' instead of 'title' and ISO date format."""
 
     @pytest.mark.asyncio

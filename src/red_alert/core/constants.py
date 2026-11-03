@@ -28,60 +28,52 @@ CLEAN_NAME_REGEX = re.compile(r'[\(\)\'"]+')
 #
 # Drills: category >= 100 (100 + threat code, e.g. 101 = missile drill)
 #
-# === History endpoint (GetAlarmsHistory.aspx) ===
-# Uses 'category' field with a DIFFERENT numbering scheme (1-26).
-# Also includes 'matrix_id' which maps to the live category codes above.
-# Use HISTORY_CATEGORY_TO_LIVE to convert history categories to live equivalents.
+# === History endpoint (www.oref.org.il/api/v1/AlertHistory/heb) ===
+# Uses 'category' field with a DIFFERENT numbering scheme: the ids from the site's own
+# /alerts/alertCategories.json (1-28). It also sends 'matrixId', but always as 0, so the
+# live category is derived from 'category' with HISTORY_CATEGORY_TO_LIVE.
 #
-#   History  Live(matrix_id)  Description
-#   1        1                ירי רקטות וטילים (Missiles)
-#   2        2                חדירת כלי טיס עוין (Hostile aircraft)
-#   3        3                רעידת אדמה (Earthquake)
-#   4        4                אירוע רדיולוגי (Radiological)
-#   5        5                צונאמי (Tsunami)
-#   6        6                חדירת כלי טיס עוין (Hostile aircraft alt)
-#   7        7                חומרים מסוכנים (Hazmat)
-#   8        10               התרעה מהירה (Flash alert)
-#   9        13               האירוע הסתיים (All-clear)
-#   10       14               בדקות הקרובות (Pre-alert)
-#   11-26    101+             Drill variants (101=missile drill, etc.)
+# alertCategories.json pairs each id with a matrix_id, but that pairing does not match the
+# live codes used here (it gives terrorist infiltration matrix_id 13, our all-clear code), so
+# the table below is set by category name. Update (13) and flash (14) carry both pre-alerts
+# ("בדקות הקרובות", "עדכון") and all-clears ("האירוע הסתיים"); they map to 0 so the title
+# phrase rules in state.py decide. Memorial day sirens (5, 6) are not threats and map to 0.
 #
 # Related API endpoints:
 #   GetDistricts.aspx?lang=he - City list with areaid, areaname, migun_time (shelter time in seconds)
 #   GetCities.aspx?lang=he    - City list with areaid, mixname, color
-#   GetAlarmsHistory.aspx      - Extended history with category, category_desc, matrix_id, alertDate
+#   AlertHistory/heb?period=  - Extended history (lastDay, lastWeek or lastMonth)
 
-# Maps history endpoint 'category' values to equivalent live endpoint 'cat' values.
-# History categories use a sequential 1-26 scheme; live uses non-sequential 1-14.
-# The history endpoint also provides 'matrix_id' which directly equals the live cat,
-# so prefer matrix_id when available. This mapping is a fallback for when matrix_id is absent.
+# Maps history endpoint 'category' values (alertCategories.json ids) to live endpoint 'cat' values.
 HISTORY_CATEGORY_TO_LIVE: dict[int, int] = {
     1: 1,  # Missiles
-    2: 2,  # Hostile aircraft
-    3: 3,  # Earthquake
-    4: 4,  # Radiological
-    5: 5,  # Tsunami
-    6: 6,  # Hostile aircraft (alt)
-    7: 7,  # Hazmat
-    8: 10,  # Flash alert
-    9: 13,  # All-clear
-    10: 14,  # Pre-alert
-    11: 101,  # Missile drill
-    12: 102,  # Hostile aircraft drill
-    13: 103,  # Earthquake drill
-    14: 104,  # Radiological drill
-    15: 105,  # Tsunami drill
-    16: 106,  # Hostile aircraft drill (alt)
-    17: 107,  # Hazmat drill
-    18: 110,  # Flash alert drill
-    19: 113,  # All-clear drill
-    20: 114,  # Pre-alert drill
-    21: 101,  # Non-conventional missile drill
-    22: 102,  # Non-conventional hostile aircraft drill
-    23: 103,  # Non-conventional earthquake drill
-    24: 104,  # Non-conventional radiological drill
-    25: 105,  # Non-conventional tsunami drill
-    26: 107,  # Non-conventional hazmat drill
+    2: 6,  # Hostile aircraft intrusion
+    3: 2,  # Non-conventional
+    4: 2,  # Generic alert
+    5: 0,  # Memorial day siren 1
+    6: 0,  # Memorial day siren 2
+    7: 3,  # Earthquake 1
+    8: 3,  # Earthquake 2
+    9: 4,  # Radiological
+    10: 10,  # Terrorist infiltration
+    11: 5,  # Tsunami
+    12: 7,  # Hazardous materials
+    13: 0,  # Update (title decides: pre-alert or all-clear)
+    14: 0,  # Flash (title decides: pre-alert or all-clear)
+    15: 101,  # Missile drill
+    16: 106,  # Hostile aircraft drill
+    17: 102,  # Non-conventional drill
+    18: 102,  # Alert drill
+    19: 102,  # Memorial day drill 1
+    20: 102,  # Memorial day drill 2
+    21: 103,  # Earthquake drill 1
+    22: 103,  # Earthquake drill 2
+    23: 104,  # Radiological drill
+    24: 113,  # Terrorist infiltration drill
+    25: 105,  # Tsunami drill
+    26: 107,  # Hazardous materials drill
+    27: 110,  # Update drill
+    28: 110,  # Flash drill
 }
 
 ICONS_AND_EMOJIS = {
