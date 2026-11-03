@@ -35,7 +35,7 @@ async def main():
         'X-Requested-With': 'XMLHttpRequest',
     }) as client:
         api = HomeFrontCommandApiClient(client, {
-            'live': 'https://www.oref.org.il/WarningMessages/alert/alerts.json',
+            'live': 'https://www.oref.org.il/warningMessages/alert/Alerts.json',
         }, print)
         alerts = await api.get_live_alerts()
         print(alerts)

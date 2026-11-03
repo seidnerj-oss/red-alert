@@ -24,7 +24,7 @@ All endpoints require HTTPS and specific headers (see [Required HTTP Headers](#r
 #### Live Alerts (polled once/second by all output integrations)
 
 ```
-GET https://www.oref.org.il/WarningMessages/alert/alerts.json
+GET https://www.oref.org.il/warningMessages/alert/Alerts.json
 ```
 
 Returns the currently active alert as a JSON object, or an empty response (`\r\n`) when no alert is active.
@@ -119,15 +119,15 @@ The HFC area groupings (33 areas with names like "דן", "חוף הכרמל") di
 
 **City name coverage (verified against real alert data from March 2026):**
 
-| | GetDistricts | ICBS |
+| | Districts file | ICBS |
 |---|---|---|
 | Total unique city names | 1,486 | 1,453 |
 | Coverage of live alert city names (688 tested) | **100%** (688/688) | 93.3% (642/688) |
 | Overlap between the two sources | 1,330 names in common ||
 
-The 46 alert city names missing from ICBS are farms (חוות), merged alert zones (e.g., "דור, נחשולים"), and newer settlements. GetDistricts is a perfect superset of all city names that appear in live alerts.
+The 46 alert city names missing from ICBS are farms (חוות), merged alert zones (e.g., "דור, נחשולים"), and newer settlements. The districts file is a perfect superset of all city names that appear in live alerts.
 
-**Coordinate gap:** GetDistricts does not include lat/long coordinates. The ICBS file provides coordinates for ~1,330 of 1,486 GetDistricts cities (matched by standardized name). The remaining 156 cities have no coordinates and are skipped by the GeoJSON map feature. See [GitHub issue #3](https://github.com/seidnerj-oss/red-alert/issues/3) for plans to close this gap.
+**Coordinate gap:** The districts file does not include lat/long coordinates. The ICBS file provides coordinates for ~1,330 of 1,486 districts-file cities (matched by standardized name). The remaining 156 cities have no coordinates and are skipped by the GeoJSON map feature. See [GitHub issue #3](https://github.com/seidnerj-oss/red-alert/issues/3) for plans to close this gap.
 
 #### 24-Hour History (unreliable, used as fallback only)
 
@@ -382,7 +382,7 @@ Similarly, pre-alerts are detected by both category 14 and Hebrew title phrases 
 
 ## Alert Areas
 
-33 geographic areas (from the GetDistricts endpoint), each containing multiple cities:
+33 geographic areas (from the districts file), each containing multiple cities:
 
 | areaid | Area Name |
 |--------|-----------|
@@ -422,7 +422,7 @@ Similarly, pre-alerts are detected by both category 14 and Hebrew title phrases 
 
 ## Shelter Times (migun_time)
 
-Fetched from the GetDistricts endpoint on startup and stored per-city in the `CityDataManager`. The `migun_time` field indicates how many seconds residents have to reach shelter after an alert sounds, based on proximity to threat sources:
+Fetched from the districts file on startup and stored per-city in the `CityDataManager`. The `migun_time` field indicates how many seconds residents have to reach shelter after an alert sounds, based on proximity to threat sources:
 
 | Seconds | Description | Example Areas |
 |---------|-------------|---------------|
