@@ -14,6 +14,9 @@ class TestClassifyForEvent:
     def test_empty_dict(self):
         assert _classify_for_event({}) == AlertState.ROUTINE
 
+    def test_threat_removed_title_is_all_clear(self):
+        assert _classify_for_event({'cat': '0', 'title': 'הוסר החשש לחדירת מחבלים', 'data': ['City']}) == AlertState.ALL_CLEAR
+
     def test_not_dict(self):
         assert _classify_for_event('string') == AlertState.ROUTINE
 

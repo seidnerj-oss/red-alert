@@ -235,6 +235,13 @@ class TestAllClear:
         result = tracker.update({'cat': '10', 'data': ['City A'], 'title': 'האירוע הסתיים'})
         assert result == AlertState.ALL_CLEAR
 
+    def test_all_clear_by_title_threat_removed(self):
+        """'הוסר החשש' (threat removed), sent when a terrorist infiltration ends, triggers ALL_CLEAR."""
+        tracker = AlertStateTracker()
+        tracker.update({'cat': '10', 'data': ['City A'], 'title': 'חדירת מחבלים'})
+        result = tracker.update({'cat': '0', 'data': ['City A'], 'title': 'הוסר החשש לחדירת מחבלים'})
+        assert result == AlertState.ALL_CLEAR
+
     def test_all_clear_by_title_with_active_category(self):
         """Title-based all-clear overrides active alert category."""
         tracker = AlertStateTracker()

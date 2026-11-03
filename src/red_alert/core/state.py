@@ -5,7 +5,7 @@ Four states:
     ROUTINE    - No active alerts for configured areas
     PRE_ALERT  - Category 14 or title phrases ("בדקות הקרובות", "עדכון", etc.)
     ALERT      - Active alert (categories 1-7, 10) for configured areas
-    ALL_CLEAR  - Category 13 or title phrase ("האירוע הסתיים")
+    ALL_CLEAR  - Category 13 or title phrase ("האירוע הסתיים", "הוסר החשש")
 
 Classification: ALL_CLEAR title/category takes priority over category-based alert
 classification. All states (including ALL_CLEAR) are filtered by areas of interest
@@ -35,7 +35,7 @@ DRILL_CATEGORY_MIN = 100  # Drills use 100 + threat code (e.g. 101 = missile dri
 PRE_ALERT_TITLE_PHRASES = ('בדקות הקרובות', 'עדכון', 'שהייה בסמיכות למרחב מוגן')
 
 # Hebrew title phrases that indicate all-clear regardless of category code
-ALL_CLEAR_TITLE_PHRASES = ('האירוע הסתיים',)
+ALL_CLEAR_TITLE_PHRASES = ('האירוע הסתיים', 'הוסר החשש')
 
 
 class AlertState(enum.Enum):

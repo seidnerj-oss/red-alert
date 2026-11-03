@@ -14,7 +14,14 @@ import time
 from collections.abc import Awaitable, Callable
 
 from red_alert.core.orchestrator import AlertEvent, AlertInput
-from red_alert.core.state import AlertState, ACTIVE_ALERT_CATEGORIES, PRE_ALERT_CATEGORY, ALL_CLEAR_CATEGORY
+from red_alert.core.state import (
+    ACTIVE_ALERT_CATEGORIES,
+    ALL_CLEAR_CATEGORY,
+    ALL_CLEAR_TITLE_PHRASES,
+    PRE_ALERT_CATEGORY,
+    PRE_ALERT_TITLE_PHRASES,
+    AlertState,
+)
 from red_alert.integrations.inputs.hfc.api_client import HomeFrontCommandApiClient
 
 logger = logging.getLogger('red_alert.input.hfc')
@@ -39,9 +46,9 @@ def _classify_for_event(data: dict | None) -> AlertState:
 
     title = data.get('title', '')
 
-    if cat == ALL_CLEAR_CATEGORY or (isinstance(title, str) and 'האירוע הסתיים' in title):
+    if cat == ALL_CLEAR_CATEGORY or (isinstance(title, str) and any(p in title for p in ALL_CLEAR_TITLE_PHRASES)):
         return AlertState.ALL_CLEAR
-    if cat == PRE_ALERT_CATEGORY or (isinstance(title, str) and any(p in title for p in ('בדקות הקרובות', 'עדכון', 'שהייה בסמיכות למרחב מוגן'))):
+    if cat == PRE_ALERT_CATEGORY or (isinstance(title, str) and any(p in title for p in PRE_ALERT_TITLE_PHRASES)):
         return AlertState.PRE_ALERT
     if cat in ACTIVE_ALERT_CATEGORIES:
         return AlertState.ALERT
