@@ -89,7 +89,7 @@ class UnifiOutput(AlertOutput):
         self._monitors = []
         self._all_raw_monitors = []
 
-        self._http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0)
+        self._http_client = httpx.AsyncClient(headers=SESSION_HEADERS, timeout=15.0, follow_redirects=True)
         self._api_client = HomeFrontCommandApiClient(self._http_client, API_URLS, logger)
 
         try:

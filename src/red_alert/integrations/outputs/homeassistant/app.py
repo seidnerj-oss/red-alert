@@ -147,7 +147,7 @@ class RedAlert(Hass):
 
         # --- HTTP Session Setup ---
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36 AppDaemon/red-alert',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
             'Referer': 'https://www.oref.org.il/',
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json',
@@ -157,11 +157,11 @@ class RedAlert(Hass):
             'Pragma': 'no-cache',
             'Cache-Control': 'no-cache',
         }
-        self.session = httpx.AsyncClient(headers=headers, timeout=15.0)
+        self.session = httpx.AsyncClient(headers=headers, timeout=15.0, follow_redirects=True)
 
         api_urls = {
-            'live': 'https://www.oref.org.il/WarningMessages/alert/alerts.json',
-            'history': 'https://www.oref.org.il/WarningMessages/alert/History/AlertsHistory.json',
+            'live': 'https://www.oref.org.il/warningMessages/alert/Alerts.json',
+            'history': 'https://www.oref.org.il/warningMessages/alert/History/AlertsHistory.json',
             'city_data_github': None,
         }
         self.api_client = HomeFrontCommandApiClient(self.session, api_urls, self.log)
