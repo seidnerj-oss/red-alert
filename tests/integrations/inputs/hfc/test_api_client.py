@@ -392,7 +392,7 @@ class TestGetDistricts:
 
         await api.get_districts()
         call_kwargs = client.get.call_args
-        assert call_kwargs.kwargs.get('headers', {}).get('Referer') == 'https://alerts-history.oref.org.il/'
+        assert call_kwargs.kwargs.get('headers', {}).get('Referer') == 'https://www.oref.org.il/'
 
     @pytest.mark.asyncio
     async def test_supports_lang_parameter(self, api_urls, mock_logger):
@@ -402,7 +402,16 @@ class TestGetDistricts:
 
         await api.get_districts(lang='en')
         call_url = client.get.call_args.args[0]
-        assert 'lang=en' in call_url
+        assert call_url == 'https://www.oref.org.il/districts/districts_eng.json'
+
+    @pytest.mark.asyncio
+    async def test_defaults_to_hebrew_districts_file(self, api_urls, mock_logger):
+        resp = _make_response(json.dumps([]).encode('utf-8'))
+        client = _make_mock_client(resp)
+        api = HomeFrontCommandApiClient(client, api_urls, mock_logger)
+
+        await api.get_districts()
+        assert client.get.call_args.args[0] == 'https://www.oref.org.il/districts/districts_heb.json'
 
     @pytest.mark.asyncio
     async def test_returns_none_on_http_error(self, api_urls, mock_logger):

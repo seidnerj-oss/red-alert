@@ -86,10 +86,10 @@ The client flattens this into one dict per city with `alertDate` (rebuilt from `
 #### District Data (primary city data source, fetched on startup)
 
 ```
-GET https://alerts-history.oref.org.il/Shared/Ajax/GetDistricts.aspx?lang=he
+GET https://www.oref.org.il/districts/districts_heb.json
 ```
 
-Used by `CityDataManager.load_data()` as the primary city-to-area mapping source. Returns all 1526 cities/districts with the HFC's own area groupings and shelter times (`migun_time`). Supports `lang` parameter: `he`, `en`, `ar`, `ru`.
+Used by `CityDataManager.load_data()` as the primary city-to-area mapping source. Returns all cities/districts (1492 in November 2026) with the HFC's own area groupings and shelter times (`migun_time`). Other languages use `districts_eng.json`, `districts_arb.json` and `districts_rus.json`; `get_districts(lang=...)` takes `he`, `en`, `ar` or `ru`. This replaced `alerts-history.oref.org.il/Shared/Ajax/GetDistricts.aspx`, which now redirects.
 
 ```json
 {
@@ -333,10 +333,10 @@ Note: Our integrations poll every 1 second (not 10) because we prioritize alert 
 #### City Data
 
 ```
-GET https://alerts-history.oref.org.il/Shared/Ajax/GetCities.aspx?lang=he
+GET https://www.oref.org.il/districts/cities_heb.json
 ```
 
-Similar city list with `areaid`, `mixname` (HTML-formatted label with area in `<span>` tag), and `color` fields. Less useful than GetDistricts since it lacks `migun_time` and `areaname`.
+Similar city list with `areaid`, `parent_label` and `color` fields. Less useful than the districts file since it lacks `migun_time` and `areaname`.
 
 #### Leftovers (purpose unclear)
 
@@ -482,7 +482,6 @@ The API requires specific headers to return data:
 
 The `Referer` and `X-Requested-With` headers are mandatory. Without them, the API may return empty or blocked responses.
 
-For the `alerts-history.oref.org.il` endpoints, use `Referer: https://alerts-history.oref.org.il/` instead.
 
 ## Encoding
 
